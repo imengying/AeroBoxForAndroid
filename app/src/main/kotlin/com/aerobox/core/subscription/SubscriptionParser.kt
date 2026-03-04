@@ -19,7 +19,20 @@ object SubscriptionParser {
                 return@runCatching emptyList()
             }
 
+            // Check for Clash/ClashMeta YAML format first
+            if (ClashParser.isClashYaml(normalized)) {
+                return@runCatching ClashParser.parseClashYaml(normalized)
+                    .distinctBy { "${it.type}:${it.server}:${it.port}:${it.name}" }
+            }
+
             val base64Decoded = tryBase64Decode(normalized)
+
+            // Also check if Base64-decoded content is Clash YAML
+            if (base64Decoded != normalized && ClashParser.isClashYaml(base64Decoded)) {
+                return@runCatching ClashParser.parseClashYaml(base64Decoded)
+                    .distinctBy { "${it.type}:${it.server}:${it.port}:${it.name}" }
+            }
+
             val targetContent = when {
                 normalized.startsWith("{") || normalized.startsWith("[") -> normalized
                 normalized.contains("://") -> normalized
@@ -56,6 +69,9 @@ object SubscriptionParser {
                 uri.startsWith("trojan://", ignoreCase = true) -> parseTrojanUri(uri)
                 uri.startsWith("hysteria2://", ignoreCase = true) || uri.startsWith("hy2://", ignoreCase = true) -> parseHysteria2Uri(uri)
                 uri.startsWith("tuic://", ignoreCase = true) -> parseTuicUri(uri)
+                uri.startsWith("socks://", ignoreCase = true) || uri.startsWith("socks5://", ignoreCase = true) -> parseSocksUri(uri)
+                uri.startsWith("http://", ignoreCase = true) && uri.contains("@") -> parseHttpProxyUri(uri)
+                uri.startsWith("https://", ignoreCase = true) && uri.contains("@") -> parseHttpProxyUri(uri)
                 else -> null
             }
         }.getOrNull()
@@ -235,6 +251,9 @@ object SubscriptionParser {
                 typeRaw.contains("trojan") -> ProxyType.TROJAN
                 typeRaw.contains("hysteria2") || typeRaw == "hy2" -> ProxyType.HYSTERIA2
                 typeRaw.contains("tuic") -> ProxyType.TUIC
+                typeRaw.contains("wireguard") || typeRaw == "wg" -> ProxyType.WIREGUARD
+                typeRaw == "socks" || typeRaw == "socks5" -> ProxyType.SOCKS
+                typeRaw == "http" || typeRaw == "https" -> ProxyType.HTTP
                 else -> continue
             }
 
@@ -258,10 +277,55 @@ object SubscriptionParser {
                 alpn = obj.optString("alpn", "").ifBlank { null },
                 fingerprint = obj.optString("fingerprint", obj.optString("fp", "")).ifBlank { null },
                 publicKey = obj.optString("public_key", obj.optString("pbk", "")).ifBlank { null },
-                shortId = obj.optString("short_id", obj.optString("sid", "")).ifBlank { null }
+                shortId = obj.optString("short_id", obj.optString("sid", "")).ifBlank { null },
+                username = obj.optString("username", "").ifBlank { null },
+                privateKey = obj.optString("private_key", "").ifBlank { null },
+                localAddress = obj.optString("local_address", "").ifBlank { null },
+                peerPublicKey = obj.optString("peer_public_key", "").ifBlank { null },
+                preSharedKey = obj.optString("pre_shared_key", "").ifBlank { null },
+                reserved = obj.optString("reserved", "").ifBlank { null },
+                mtu = obj.optInt("mtu", 0).takeIf { it > 0 }
             )
         }
         return result
+    }
+    private fun parseSocksUri(uri: String): ProxyNode? {
+        val normalized = uri.replaceFirst(Regex("^socks5?://", RegexOption.IGNORE_CASE), "socks://")
+        val parsed = Uri.parse(normalized)
+        val server = parsed.host ?: return null
+        val port = parsed.port.takeIf { it > 0 } ?: return null
+        val userInfo = extractUserInfo(parsed)
+        val username = userInfo?.substringBefore(':', userInfo)
+        val password = userInfo?.substringAfter(':', "")?.ifBlank { null }
+
+        return ProxyNode(
+            name = decodeName(parsed.fragment ?: "SOCKS5"),
+            type = ProxyType.SOCKS,
+            server = server,
+            port = port,
+            username = username,
+            password = password
+        )
+    }
+
+    private fun parseHttpProxyUri(uri: String): ProxyNode? {
+        val parsed = Uri.parse(uri)
+        val server = parsed.host ?: return null
+        val port = parsed.port.takeIf { it > 0 } ?: return null
+        val userInfo = extractUserInfo(parsed)
+        val username = userInfo?.substringBefore(':', userInfo)
+        val password = userInfo?.substringAfter(':', "")?.ifBlank { null }
+        val useTls = uri.startsWith("https://", ignoreCase = true)
+
+        return ProxyNode(
+            name = decodeName(parsed.fragment ?: "HTTP"),
+            type = ProxyType.HTTP,
+            server = server,
+            port = port,
+            username = username,
+            password = password,
+            tls = useTls
+        )
     }
 
     fun parseUriParams(query: String?): Map<String, String> {

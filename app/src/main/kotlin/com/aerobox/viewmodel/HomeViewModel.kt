@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.aerobox.AeroBoxApplication
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.data.model.ProxyNode
+import com.aerobox.data.model.RoutingMode
 import com.aerobox.data.model.TrafficStats
 import com.aerobox.data.model.VpnState
 import com.aerobox.data.repository.SubscriptionRepository
@@ -44,6 +45,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val trafficStats: StateFlow<TrafficStats> = vpnState
         .map { it.toTrafficStats() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrafficStats())
+
+    val allNodes: StateFlow<List<ProxyNode>> = nodeDao.getAllNodes()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _selectedNode = MutableStateFlow<ProxyNode?>(null)
     val selectedNode: StateFlow<ProxyNode?> = _selectedNode.asStateFlow()
@@ -146,17 +150,41 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        runCatching {
-            val config = ConfigGenerator.generateSingBoxConfig(node)
-            if (!vpnRepository.testConfig(config)) {
+        viewModelScope.launch {
+            runCatching {
+                // Read routing/DNS settings
+                val routingMode = PreferenceManager.routingModeFlow(appContext)
+                    .stateIn(viewModelScope, SharingStarted.Eagerly, RoutingMode.RULE_BASED).value
+                val remoteDns = PreferenceManager.remoteDnsFlow(appContext)
+                    .stateIn(viewModelScope, SharingStarted.Eagerly, "tls://8.8.8.8").value
+                val localDns = PreferenceManager.localDnsFlow(appContext)
+                    .stateIn(viewModelScope, SharingStarted.Eagerly, "223.5.5.5").value
+                val enableDoh = PreferenceManager.enableDohFlow(appContext)
+                    .stateIn(viewModelScope, SharingStarted.Eagerly, true).value
+                val enableSocksInbound = PreferenceManager.enableSocksInboundFlow(appContext)
+                    .stateIn(viewModelScope, SharingStarted.Eagerly, false).value
+                val enableHttpInbound = PreferenceManager.enableHttpInboundFlow(appContext)
+                    .stateIn(viewModelScope, SharingStarted.Eagerly, false).value
+
+                val config = ConfigGenerator.generateSingBoxConfig(
+                    node = node,
+                    routingMode = routingMode,
+                    remoteDns = remoteDns,
+                    localDns = localDns,
+                    enableDoh = enableDoh,
+                    enableSocksInbound = enableSocksInbound,
+                    enableHttpInbound = enableHttpInbound
+                )
+                if (!vpnRepository.testConfig(config)) {
+                    context.showToast(context.getString(com.aerobox.R.string.operation_failed))
+                    return@launch
+                }
+                VpnStateManager.updateConnectionState(true, node)
+                vpnRepository.startVpn(config)
+            }.onFailure {
+                VpnStateManager.updateConnectionState(false, null)
                 context.showToast(context.getString(com.aerobox.R.string.operation_failed))
-                return
             }
-            VpnStateManager.updateConnectionState(true, node)
-            vpnRepository.startVpn(config)
-        }.onFailure {
-            VpnStateManager.updateConnectionState(false, null)
-            context.showToast(context.getString(com.aerobox.R.string.operation_failed))
         }
     }
 
@@ -186,6 +214,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val subscriptions = subscriptionRepository.getAllSubscriptions().first()
             subscriptionRepository.refreshAllSubscriptions(subscriptions)
+        }
+    }
+
+    fun testAllNodesLatency() {
+        viewModelScope.launch {
+            allNodes.value.forEach { node ->
+                launch {
+                    val latency = com.aerobox.utils.NetworkUtils.pingTcp(node.server, node.port)
+                    subscriptionRepository.updateNodeLatency(node.id, latency)
+                }
+            }
         }
     }
 }

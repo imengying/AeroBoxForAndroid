@@ -5,25 +5,27 @@ import com.aerobox.AeroBoxApplication
 import com.aerobox.core.subscription.SubscriptionParser
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.android.Android
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.get
-import io.ktor.client.statement.bodyAsText
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 class SubscriptionRepository(context: Context) {
     private val database = AeroBoxApplication.database
     private val subscriptionDao = database.subscriptionDao()
     private val proxyNodeDao = database.proxyNodeDao()
 
-    private val client = HttpClient(Android) {
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
-        }
-    }
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
 
     fun getAllSubscriptions(): Flow<List<Subscription>> = subscriptionDao.getAllSubscriptions()
 
@@ -95,7 +97,24 @@ class SubscriptionRepository(context: Context) {
 
     suspend fun getNodeById(nodeId: Long): ProxyNode? = proxyNodeDao.getNodeById(nodeId)
 
-    private suspend fun fetchSubscriptionContent(url: String): String {
-        return client.get(url).bodyAsText()
-    }
+    private suspend fun fetchSubscriptionContent(url: String): String =
+        suspendCancellableCoroutine { cont ->
+            val request = Request.Builder().url(url).build()
+            val call = client.newCall(request)
+            cont.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (!it.isSuccessful) {
+                            cont.resumeWithException(IOException("HTTP ${it.code}"))
+                        } else {
+                            cont.resume(it.body?.string() ?: "")
+                        }
+                    }
+                }
+                override fun onFailure(call: Call, e: IOException) {
+                    cont.resumeWithException(e)
+                }
+            })
+        }
 }

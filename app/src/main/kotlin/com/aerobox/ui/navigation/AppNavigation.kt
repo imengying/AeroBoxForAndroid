@@ -1,14 +1,16 @@
 package com.aerobox.ui.navigation
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -18,56 +20,96 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aerobox.R
 import com.aerobox.ui.screens.HomeScreen
-import com.aerobox.ui.screens.ProfilesScreen
+import com.aerobox.ui.screens.LogScreen
+import com.aerobox.ui.screens.PerAppProxyScreen
 import com.aerobox.ui.screens.SettingsScreen
+import com.aerobox.ui.screens.SubscriptionScreen
 import com.aerobox.ui.theme.SingBoxVPNTheme
+import kotlinx.coroutines.launch
 
 private data class BottomNavItem(
-    val route: String,
     val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
     val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
     val label: Int
 )
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 fun AppNavigation() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = navBackStackEntry?.destination
+    val currentRoute = navBackStackEntry?.destination?.route
 
+    // Show main scaffold only on Home/Settings, not on sub-pages
+    val isMainRoute = currentRoute == null || currentRoute == "main"
+
+    NavHost(
+        navController = navController,
+        startDestination = "main"
+    ) {
+        composable("main") {
+        MainScreen(
+                onNavigateToSubscriptions = {
+                    navController.navigate("subscriptions")
+                },
+                onNavigateToPerAppProxy = {
+                    navController.navigate("per_app_proxy")
+                },
+                onNavigateToLog = {
+                    navController.navigate("log")
+                }
+            )
+        }
+        composable("subscriptions") {
+            SubscriptionScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("per_app_proxy") {
+            PerAppProxyScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("log") {
+            LogScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun MainScreen(
+    onNavigateToSubscriptions: () -> Unit,
+    onNavigateToPerAppProxy: () -> Unit,
+    onNavigateToLog: () -> Unit
+) {
     val items = listOf(
         BottomNavItem(
-            route = "home",
             selectedIcon = Icons.Filled.Home,
             unselectedIcon = Icons.Outlined.Home,
             label = R.string.home
         ),
         BottomNavItem(
-            route = "profiles",
-            selectedIcon = Icons.Filled.List,
-            unselectedIcon = Icons.Outlined.List,
-            label = R.string.profiles
-        ),
-        BottomNavItem(
-            route = "settings",
             selectedIcon = Icons.Filled.Settings,
             unselectedIcon = Icons.Outlined.Settings,
             label = R.string.settings
         )
     )
+
+    val pagerState = rememberPagerState(pageCount = { items.size })
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -81,17 +123,13 @@ fun AppNavigation() {
         containerColor = MaterialTheme.colorScheme.surface,
         bottomBar = {
             NavigationBar {
-                items.forEach { item ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
+                items.forEachIndexed { index, item ->
+                    val selected = pagerState.currentPage == index
                     NavigationBarItem(
                         selected = selected,
                         onClick = {
-                            navController.navigate(item.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(index)
                             }
                         },
                         icon = {
@@ -108,14 +146,19 @@ fun AppNavigation() {
             }
         }
     ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = "home",
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable("home") { HomeScreen() }
-            composable("profiles") { ProfilesScreen() }
-            composable("settings") { SettingsScreen() }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.padding(innerPadding),
+            userScrollEnabled = true
+        ) { page ->
+            when (page) {
+                0 -> HomeScreen()
+                1 -> SettingsScreen(
+                    onNavigateToSubscriptions = onNavigateToSubscriptions,
+                    onNavigateToPerAppProxy = onNavigateToPerAppProxy,
+                    onNavigateToLog = onNavigateToLog
+                )
+            }
         }
     }
 }

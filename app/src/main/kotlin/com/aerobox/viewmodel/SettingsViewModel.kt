@@ -3,6 +3,7 @@ package com.aerobox.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.aerobox.data.model.RoutingMode
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,34 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val showNotification: StateFlow<Boolean> = PreferenceManager.showNotificationFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
+    // Phase 2
+    val routingMode: StateFlow<RoutingMode> = PreferenceManager.routingModeFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.RULE_BASED)
+
+    val remoteDns: StateFlow<String> = PreferenceManager.remoteDnsFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "tls://8.8.8.8")
+
+    val localDns: StateFlow<String> = PreferenceManager.localDnsFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "223.5.5.5")
+
+    val enableDoh: StateFlow<Boolean> = PreferenceManager.enableDohFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val perAppProxyEnabled: StateFlow<Boolean> = PreferenceManager.perAppProxyEnabledFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val perAppProxyMode: StateFlow<String> = PreferenceManager.perAppProxyModeFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "blacklist")
+
+    val perAppProxyPackages: StateFlow<Set<String>> = PreferenceManager.perAppProxyPackagesFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    val enableSocksInbound: StateFlow<Boolean> = PreferenceManager.enableSocksInboundFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val enableHttpInbound: StateFlow<Boolean> = PreferenceManager.enableHttpInboundFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     suspend fun setDarkMode(enabled: Boolean) {
         PreferenceManager.setDarkMode(appContext, enabled)
     }
@@ -45,5 +74,42 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setShowNotification(enabled: Boolean) {
         PreferenceManager.setShowNotification(appContext, enabled)
+    }
+
+    // Phase 2 setters
+    suspend fun setRoutingMode(mode: RoutingMode) {
+        PreferenceManager.setRoutingMode(appContext, mode)
+    }
+
+    suspend fun setRemoteDns(dns: String) {
+        PreferenceManager.setRemoteDns(appContext, dns)
+    }
+
+    suspend fun setLocalDns(dns: String) {
+        PreferenceManager.setLocalDns(appContext, dns)
+    }
+
+    suspend fun setEnableDoh(enabled: Boolean) {
+        PreferenceManager.setEnableDoh(appContext, enabled)
+    }
+
+    suspend fun setPerAppProxyEnabled(enabled: Boolean) {
+        PreferenceManager.setPerAppProxyEnabled(appContext, enabled)
+    }
+
+    suspend fun setPerAppProxyMode(mode: String) {
+        PreferenceManager.setPerAppProxyMode(appContext, mode)
+    }
+
+    suspend fun setPerAppProxyPackages(packages: Set<String>) {
+        PreferenceManager.setPerAppProxyPackages(appContext, packages)
+    }
+
+    suspend fun setEnableSocksInbound(enabled: Boolean) {
+        PreferenceManager.setEnableSocksInbound(appContext, enabled)
+    }
+
+    suspend fun setEnableHttpInbound(enabled: Boolean) {
+        PreferenceManager.setEnableHttpInbound(appContext, enabled)
     }
 }

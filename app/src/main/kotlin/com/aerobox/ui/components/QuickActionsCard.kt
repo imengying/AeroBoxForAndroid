@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Speed
+import com.aerobox.ui.icons.AppIcons
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -53,7 +53,7 @@ fun QuickActionsCard(
                     title = stringResource(R.string.latency_test),
                     icon = {
                         Icon(
-                            imageVector = Icons.Filled.Speed,
+                            imageVector = AppIcons.Speed,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)

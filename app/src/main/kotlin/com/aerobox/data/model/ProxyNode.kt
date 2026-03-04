@@ -11,7 +11,9 @@ enum class ProxyType {
     TROJAN,
     HYSTERIA2,
     TUIC,
-    WIREGUARD
+    WIREGUARD,
+    SOCKS,
+    HTTP
 }
 
 @Entity(tableName = "proxy_nodes")
@@ -35,5 +37,14 @@ data class ProxyNode(
     val shortId: String? = null,
     val subscriptionId: Long = 0,
     val latency: Int = -1,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    // SOCKS/HTTP auth
+    val username: String? = null,
+    // WireGuard specific
+    val privateKey: String? = null,
+    val localAddress: String? = null,
+    val peerPublicKey: String? = null,
+    val preSharedKey: String? = null,
+    val reserved: String? = null,
+    val mtu: Int? = null
 )

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,9 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
+import com.aerobox.ui.icons.AppIcons
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -44,6 +44,7 @@ fun ConnectionCard(
     nodeAddress: String,
     connectionDuration: String,
     onToggleConnection: () -> Unit,
+    onNodeNameClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -88,7 +89,7 @@ fun ConnectionCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (isConnected) Icons.Filled.CheckCircle else Icons.Filled.Circle,
+                        imageVector = if (isConnected) Icons.Filled.CheckCircle else AppIcons.Circle,
                         contentDescription = null,
                         tint = if (isConnected) {
                             MaterialTheme.colorScheme.primary
@@ -108,7 +109,9 @@ fun ConnectionCard(
                 Text(
                     text = nodeName,
                     style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .clickable(onClick = onNodeNameClick)
                 )
                 Text(
                     text = nodeAddress,
@@ -140,7 +143,7 @@ fun ConnectionCard(
                 )
             ) {
                 Icon(
-                    imageVector = if (isConnected) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                    imageVector = if (isConnected) AppIcons.Stop else Icons.Filled.PlayArrow,
                     contentDescription = null
                 )
                 Text(

@@ -14,12 +14,19 @@ import com.aerobox.R
 import com.aerobox.core.native.SingBoxNative
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import com.aerobox.utils.PreferenceManager
+import com.aerobox.utils.NetworkUtils
 
 class AeroBoxVpnService : VpnService() {
 
@@ -35,6 +42,7 @@ class AeroBoxVpnService : VpnService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var vpnInterface: ParcelFileDescriptor? = null
+    private var speedTickerJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
@@ -62,13 +70,36 @@ class AeroBoxVpnService : VpnService() {
                 )
 
                 vpnInterface?.close()
-                vpnInterface = Builder()
+                val builder = Builder()
                     .setSession("AeroBox VPN")
                     .addAddress("172.19.0.1", 30)
                     .addRoute("0.0.0.0", 0)
                     .addDnsServer("8.8.8.8")
                     .setMtu(9000)
-                    .establish()
+
+                // Per-app proxy
+                val perAppEnabled = runBlocking {
+                    PreferenceManager.perAppProxyEnabledFlow(applicationContext).first()
+                }
+                if (perAppEnabled) {
+                    val mode = runBlocking {
+                        PreferenceManager.perAppProxyModeFlow(applicationContext).first()
+                    }
+                    val packages = runBlocking {
+                        PreferenceManager.perAppProxyPackagesFlow(applicationContext).first()
+                    }
+                    packages.forEach { pkg ->
+                        runCatching {
+                            if (mode == "whitelist") {
+                                builder.addAllowedApplication(pkg)
+                            } else {
+                                builder.addDisallowedApplication(pkg)
+                            }
+                        }
+                    }
+                }
+
+                vpnInterface = builder.establish()
 
                 val fd = vpnInterface?.fd ?: -1
                 if (fd < 0) {
@@ -85,6 +116,9 @@ class AeroBoxVpnService : VpnService() {
                     NOTIFICATION_ID,
                     buildNotification(getString(R.string.notification_connected))
                 )
+
+                // Start speed ticker for notification
+                startSpeedTicker()
             }.onFailure {
                 stopVpn()
             }
@@ -92,6 +126,8 @@ class AeroBoxVpnService : VpnService() {
     }
 
     private fun stopVpn() {
+        speedTickerJob?.cancel()
+        speedTickerJob = null
         runCatching {
             SingBoxNative.stopService()
             vpnInterface?.close()
@@ -122,7 +158,24 @@ class AeroBoxVpnService : VpnService() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setSilent(true)
             .build()
+    }
+
+    private fun startSpeedTicker() {
+        speedTickerJob?.cancel()
+        speedTickerJob = serviceScope.launch {
+            while (isActive) {
+                delay(2000)
+                val stats = VpnStateManager.trafficStats.value
+                val upSpeed = NetworkUtils.formatBytes(stats.uploadSpeed) + "/s"
+                val downSpeed = NetworkUtils.formatBytes(stats.downloadSpeed) + "/s"
+                val text = "↑ $upSpeed  ↓ $downSpeed"
+                val notification = buildNotification(text)
+                val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+                nm.notify(NOTIFICATION_ID, notification)
+            }
+        }
     }
 
     override fun onDestroy() {

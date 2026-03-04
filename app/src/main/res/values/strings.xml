@@ -51,4 +51,10 @@
     <string name="add_node_first">请先选择节点</string>
     <string name="test_result_prefix">延迟</string>
     <string name="android_12_plus">仅 Android 12+</string>
+    <string name="subscription_management">订阅管理</string>
+    <string name="select_node">选择节点</string>
+    <string name="node_list">节点列表</string>
+    <string name="test_all">全部测速</string>
+    <string name="no_nodes">暂无节点</string>
+    <string name="nodes_count">%d 个节点</string>
 </resources>
