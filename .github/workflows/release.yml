@@ -31,7 +31,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.x"
+          go-version: "1.25.x"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -50,14 +50,17 @@ jobs:
       - name: Build libbox.aar
         run: |
           set -euo pipefail
+          export ANDROID_NDK_HOME="${AEROBOX_ANDROID_NDK}"
+          export ANDROID_NDK_ROOT="${AEROBOX_ANDROID_NDK}"
+          export NDK="${AEROBOX_ANDROID_NDK}"
           go install golang.org/x/mobile/cmd/gomobile@latest
           go install golang.org/x/mobile/cmd/gobind@latest
           export PATH="$(go env GOPATH)/bin:${PATH}"
-          gomobile init
+          gomobile init -ndk "${AEROBOX_ANDROID_NDK}"
 
           git clone --depth 1 --branch "${SING_BOX_VERSION}" https://github.com/SagerNet/sing-box.git "${RUNNER_TEMP}/sing-box"
           pushd "${RUNNER_TEMP}/sing-box"
-          go run ./cmd/internal/build_libbox -target android -android-ndk "${AEROBOX_ANDROID_NDK}" 2>&1 | tee "${RUNNER_TEMP}/libbox-build.log"
+          go run ./cmd/internal/build_libbox -target android 2>&1 | tee "${RUNNER_TEMP}/libbox-build.log"
           AAR_PATH="$(find . -type f -name 'libbox.aar' | head -n 1)"
           if [ -z "${AAR_PATH}" ]; then
             echo "libbox.aar was not generated." >&2
