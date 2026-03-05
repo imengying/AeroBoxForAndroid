@@ -93,6 +93,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private var statsJob: Job? = null
     private var detectIpJob: Job? = null
+    private var connectWatchdogJob: Job? = null
 
     init {
         observeSelectedNode()
@@ -145,6 +146,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val uid = android.os.Process.myUid()
                 var prevTx = android.net.TrafficStats.getUidTxBytes(uid)
                 var prevRx = android.net.TrafficStats.getUidRxBytes(uid)
+
+                connectWatchdogJob?.cancel()
+                connectWatchdogJob = null
 
                 while (isActive && vpnRepository.isRunning.value) {
                     delay(1_000)
@@ -208,7 +212,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 vpnRepository.startVpn(config, node.id)
+                context.showToast(context.getString(com.aerobox.R.string.notification_connecting))
+                startConnectWatchdog(context)
             }.onFailure {
+                connectWatchdogJob?.cancel()
+                connectWatchdogJob = null
                 VpnStateManager.updateConnectionState(false, null)
                 val details = it.message?.takeIf { msg -> msg.isNotBlank() }
                 if (details != null) {
@@ -221,9 +229,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun stopConnection() {
+        connectWatchdogJob?.cancel()
+        connectWatchdogJob = null
         runCatching { vpnRepository.stopVpn() }
         VpnStateManager.updateConnectionState(false, null)
         VpnStateManager.resetStats()
+    }
+
+    private fun startConnectWatchdog(context: Context) {
+        connectWatchdogJob?.cancel()
+        connectWatchdogJob = viewModelScope.launch {
+            delay(12_000)
+            if (!vpnRepository.isRunning.value && !vpnState.value.isConnected) {
+                _connectionIssue.value = ConnectionIssue(
+                    title = "连接超时",
+                    message = "启动服务超时，请检查节点配置或切换节点后重试。",
+                    rawError = "service start timeout"
+                )
+                context.showToast("连接超时，请查看日志后重试")
+            }
+        }
     }
 
     fun selectNode(node: ProxyNode) {

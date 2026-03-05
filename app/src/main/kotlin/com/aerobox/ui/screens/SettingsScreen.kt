@@ -1,7 +1,6 @@
 package com.aerobox.ui.screens
 
 import android.os.Build
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,11 +19,9 @@ import androidx.compose.material.icons.filled.Refresh
 import com.aerobox.ui.icons.AppIcons
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -39,15 +36,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
-import com.aerobox.core.geo.GeoAssetManager
-import com.aerobox.data.model.RoutingMode
 import com.aerobox.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
@@ -56,6 +50,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     onNavigateToSubscriptions: () -> Unit = {},
     onNavigateToPerAppProxy: () -> Unit = {},
+    onNavigateToRouting: () -> Unit = {},
     onNavigateToLog: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel()
 ) {
@@ -74,16 +69,9 @@ fun SettingsScreen(
     val enableIPv6 by viewModel.enableIPv6.collectAsStateWithLifecycle()
     val autoReconnect by viewModel.autoReconnect.collectAsStateWithLifecycle()
     val enableGeoRules by viewModel.enableGeoRules.collectAsStateWithLifecycle()
-    val enableGeoCnDomainRule by viewModel.enableGeoCnDomainRule.collectAsStateWithLifecycle()
-    val enableGeoCnIpRule by viewModel.enableGeoCnIpRule.collectAsStateWithLifecycle()
-    val enableGeoAdsBlock by viewModel.enableGeoAdsBlock.collectAsStateWithLifecycle()
-    val enableGeoBlockQuic by viewModel.enableGeoBlockQuic.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     var showDnsDialog by remember { mutableStateOf(false) }
-    var showRoutingDialog by remember { mutableStateOf(false) }
-    var geoUpdating by remember { mutableStateOf(false) }
-    val context = LocalContext.current
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -151,116 +139,20 @@ fun SettingsScreen(
             }
         }
 
-        // ── Geo Assets ──
-        item { SectionHeader(title = "GeoIP / GeoSite 资源") }
+        // ── Routing ──
+        item { SectionHeader(title = "路由") }
         item {
             SettingItem(
+                modifier = Modifier.clickable { onNavigateToRouting() },
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
-                title = "启用 Geo 规则分流",
+                title = "路由",
                 supporting = if (enableGeoRules) {
-                    "已启用（需要本地 GeoIP/GeoSite 数据库）"
+                    "${routingMode.displayName} · 规则已开启"
                 } else {
-                    "默认关闭，兼容性更高"
+                    "${routingMode.displayName} · 规则默认关闭"
                 },
-                trailing = {
-                    Switch(
-                        checked = enableGeoRules,
-                        onCheckedChange = { scope.launch { viewModel.setEnableGeoRules(it) } }
-                    )
-                }
+                trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
             )
-        }
-        if (enableGeoRules) {
-            item {
-                SettingItem(
-                    icon = { Icon(AppIcons.Security, contentDescription = null) },
-                    title = "屏蔽 QUIC",
-                    supporting = "network: udp + port: 443",
-                    trailing = {
-                        Switch(
-                            checked = enableGeoBlockQuic,
-                            onCheckedChange = { scope.launch { viewModel.setEnableGeoBlockQuic(it) } }
-                        )
-                    }
-                )
-            }
-            item {
-                SettingItem(
-                    icon = { Icon(AppIcons.Security, contentDescription = null) },
-                    title = "中国域名规则（Geo）",
-                    supporting = "geosite:cn",
-                    trailing = {
-                        Switch(
-                            checked = enableGeoCnDomainRule,
-                            onCheckedChange = { scope.launch { viewModel.setEnableGeoCnDomainRule(it) } }
-                        )
-                    }
-                )
-            }
-            item {
-                SettingItem(
-                    icon = { Icon(AppIcons.Security, contentDescription = null) },
-                    title = "中国 IP 规则（Geo）",
-                    supporting = "geoip:cn",
-                    trailing = {
-                        Switch(
-                            checked = enableGeoCnIpRule,
-                            onCheckedChange = { scope.launch { viewModel.setEnableGeoCnIpRule(it) } }
-                        )
-                    }
-                )
-            }
-            item {
-                SettingItem(
-                    icon = { Icon(AppIcons.Security, contentDescription = null) },
-                    title = "屏蔽广告（Geo）",
-                    supporting = "geosite:category-ads-all",
-                    trailing = {
-                        Switch(
-                            checked = enableGeoAdsBlock,
-                            onCheckedChange = { scope.launch { viewModel.setEnableGeoAdsBlock(it) } }
-                        )
-                    }
-                )
-            }
-            item {
-                val hasFiles = GeoAssetManager.hasLocalFiles(context)
-                val geoIpSize = GeoAssetManager.getGeoIpSize(context)
-                val geoSiteSize = GeoAssetManager.getGeoSiteSize(context)
-                SettingItem(
-                    modifier = Modifier.clickable {
-                        if (!geoUpdating) {
-                            geoUpdating = true
-                            scope.launch {
-                                val ok = GeoAssetManager.updateAll(context)
-                                geoUpdating = false
-                                Toast.makeText(
-                                    context,
-                                    if (ok) "资源更新完成" else "更新失败，请检查网络",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                    },
-                    icon = { Icon(AppIcons.Security, contentDescription = null) },
-                    title = if (hasFiles) "更新规则数据库" else "下载规则数据库",
-                    supporting = if (hasFiles) {
-                        "GeoIP: $geoIpSize · GeoSite: $geoSiteSize（官方源 SagerNet）"
-                    } else {
-                        "规则分流需要此资源（仅官方源 SagerNet）"
-                    },
-                    trailing = {
-                        if (geoUpdating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.padding(4.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Filled.Refresh, contentDescription = null)
-                        }
-                    }
-                )
-            }
         }
 
         // ── Inbound Proxy ──
@@ -311,9 +203,9 @@ fun SettingsScreen(
                 icon = { Icon(AppIcons.DarkMode, contentDescription = null) },
                 title = stringResource(R.string.dark_mode),
                 supporting = when (darkMode) {
-                    "on" -> "始终开启"
-                    "off" -> "始终关闭"
-                    else -> "跟随系统"
+                    "on" -> "深色"
+                    "off" -> "浅色"
+                    else -> "系统"
                 },
                 trailing = {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -325,12 +217,12 @@ fun SettingsScreen(
                         FilterChip(
                             selected = darkMode == "on",
                             onClick = { scope.launch { viewModel.setDarkMode("on") } },
-                            label = { Text("开") }
+                            label = { Text("深色") }
                         )
                         FilterChip(
                             selected = darkMode == "off",
                             onClick = { scope.launch { viewModel.setDarkMode("off") } },
-                            label = { Text("关") }
+                            label = { Text("浅色") }
                         )
                     }
                 }
@@ -437,61 +329,6 @@ fun SettingsScreen(
             }
         )
     }
-
-    // Routing mode dialog
-    if (showRoutingDialog) {
-        RoutingModeDialog(
-            currentMode = routingMode,
-            onDismiss = { showRoutingDialog = false },
-            onModeSelected = { mode ->
-                scope.launch { viewModel.setRoutingMode(mode) }
-            }
-        )
-    }
-}
-
-@Composable
-private fun RoutingModeDialog(
-    currentMode: RoutingMode,
-    onDismiss: () -> Unit,
-    onModeSelected: (RoutingMode) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("路由模式") },
-        text = {
-            Column {
-                RoutingMode.entries.forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onModeSelected(mode)
-                                onDismiss()
-                            }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = mode == currentMode,
-                            onClick = {
-                                onModeSelected(mode)
-                                onDismiss()
-                            }
-                        )
-                        Text(
-                            text = mode.displayName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        }
-    )
 }
 
 @Composable

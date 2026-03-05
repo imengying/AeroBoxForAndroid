@@ -19,7 +19,7 @@
     <string name="delete_subscription">删除订阅</string>
     <string name="latency_test">延迟测试</string>
     <string name="appearance">外观</string>
-    <string name="dark_mode">深色模式</string>
+    <string name="dark_mode">主题</string>
     <string name="dynamic_color">动态配色</string>
     <string name="connection_settings">连接设置</string>
     <string name="auto_connect">自动连接</string>

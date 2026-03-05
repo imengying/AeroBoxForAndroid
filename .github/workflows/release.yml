@@ -123,12 +123,26 @@ jobs:
           PY
           grep -n "sharedTags" "${BUILD_LIBBOX_MAIN}" | head -n 4 || true
           grep -n "tailscale\\|ts_omit" "${BUILD_LIBBOX_MAIN}" || true
+          if grep -Eq "with_tailscale|ts_omit_" "${BUILD_LIBBOX_MAIN}"; then
+            echo "tailscale tags are still present after patch; refusing to continue." >&2
+            exit 1
+          fi
 
           # Strip debug symbols from Go binary to reduce .so size by ~20-30%
           export CGO_LDFLAGS="-s -w"
           export GOFLAGS="-ldflags=-s -ldflags=-w"
 
+          set +e
           go run ./cmd/internal/build_libbox -target android 2>&1 | tee "${RUNNER_TEMP}/libbox-build.log"
+          BUILD_STATUS=${PIPESTATUS[0]}
+          set -e
+          if grep -q "with_tailscale" "${RUNNER_TEMP}/libbox-build.log"; then
+            echo "Detected with_tailscale in libbox build tags. Keep tailscale disabled for slim profile." >&2
+            exit 1
+          fi
+          if [ "${BUILD_STATUS}" -ne 0 ]; then
+            exit "${BUILD_STATUS}"
+          fi
           AAR_PATH="$(find . -type f -name 'libbox.aar' | head -n 1)"
           if [ -z "${AAR_PATH}" ]; then
             echo "libbox.aar was not generated." >&2

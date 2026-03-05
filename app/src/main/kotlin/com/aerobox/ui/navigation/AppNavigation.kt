@@ -32,6 +32,7 @@ import com.aerobox.R
 import com.aerobox.ui.screens.HomeScreen
 import com.aerobox.ui.screens.LogScreen
 import com.aerobox.ui.screens.PerAppProxyScreen
+import com.aerobox.ui.screens.RoutingSettingsScreen
 import com.aerobox.ui.screens.SettingsScreen
 import com.aerobox.ui.screens.SubscriptionScreen
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -104,6 +105,9 @@ fun AppNavigation() {
                     onNavigateToPerAppProxy = {
                         navController.navigate("per_app_proxy")
                     },
+                    onNavigateToRouting = {
+                        navController.navigate("routing")
+                    },
                     onNavigateToLog = {
                         navController.navigate("log")
                     }
@@ -124,6 +128,11 @@ fun AppNavigation() {
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
+            composable("routing") {
+                RoutingSettingsScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }
@@ -133,6 +142,7 @@ fun AppNavigation() {
 private fun MainScreen(
     onNavigateToSubscriptions: () -> Unit,
     onNavigateToPerAppProxy: () -> Unit,
+    onNavigateToRouting: () -> Unit,
     onNavigateToLog: () -> Unit
 ) {
     val items = listOf(
@@ -188,6 +198,7 @@ private fun MainScreen(
                 1 -> SettingsScreen(
                     onNavigateToSubscriptions = onNavigateToSubscriptions,
                     onNavigateToPerAppProxy = onNavigateToPerAppProxy,
+                    onNavigateToRouting = onNavigateToRouting,
                     onNavigateToLog = onNavigateToLog
                 )
             }

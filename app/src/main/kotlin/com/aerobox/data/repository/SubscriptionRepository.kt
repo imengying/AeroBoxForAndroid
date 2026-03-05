@@ -17,6 +17,12 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+data class SubscriptionImportResult(
+    val subscriptionId: Long,
+    val nodeCount: Int,
+    val error: Throwable? = null
+)
+
 class SubscriptionRepository(context: Context) {
     private val database = AeroBoxApplication.database
     private val subscriptionDao = database.subscriptionDao()
@@ -40,7 +46,7 @@ class SubscriptionRepository(context: Context) {
         url: String,
         autoUpdate: Boolean = false,
         updateInterval: Long = DEFAULT_UPDATE_INTERVAL_MS
-    ): Long {
+    ): SubscriptionImportResult {
         val normalizedInterval = normalizeUpdateInterval(updateInterval)
         val subscription = Subscription(
             name = name,
@@ -50,12 +56,19 @@ class SubscriptionRepository(context: Context) {
             createdAt = System.currentTimeMillis()
         )
         val subscriptionId = subscriptionDao.insert(subscription)
-        runCatching {
+        val importResult = runCatching {
             val content = fetchSubscriptionContent(url)
             val parsedNodes = SubscriptionParser.parseSubscription(content)
             val nodes = parsedNodes.map { it.copy(subscriptionId = subscriptionId) }
+
             if (nodes.isNotEmpty()) {
                 proxyNodeDao.insertAll(nodes)
+            }
+
+            val noNodesError = if (nodes.isEmpty()) {
+                IllegalStateException(NO_VALID_NODES_ERROR)
+            } else {
+                null
             }
             subscriptionDao.update(
                 subscription.copy(
@@ -64,10 +77,20 @@ class SubscriptionRepository(context: Context) {
                     nodeCount = nodes.size
                 )
             )
-        }.onFailure {
+            SubscriptionImportResult(
+                subscriptionId = subscriptionId,
+                nodeCount = nodes.size,
+                error = noNodesError
+            )
+        }.getOrElse { error ->
             subscriptionDao.update(subscription.copy(id = subscriptionId))
+            SubscriptionImportResult(
+                subscriptionId = subscriptionId,
+                nodeCount = 0,
+                error = error
+            )
         }
-        return subscriptionId
+        return importResult
     }
 
     suspend fun deleteSubscription(subscription: Subscription) {
@@ -153,5 +176,6 @@ class SubscriptionRepository(context: Context) {
     companion object {
         const val MIN_UPDATE_INTERVAL_MS = 15 * 60 * 1000L
         const val DEFAULT_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000L
+        const val NO_VALID_NODES_ERROR = "NO_VALID_NODES"
     }
 }

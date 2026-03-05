@@ -101,16 +101,16 @@ object PreferenceManager {
         context.dataStore.data.map { it[ENABLE_GEO_RULES] ?: false }
 
     fun enableGeoCnDomainRuleFlow(context: Context): Flow<Boolean> =
-        context.dataStore.data.map { it[ENABLE_GEO_CN_DOMAIN_RULE] ?: true }
+        context.dataStore.data.map { it[ENABLE_GEO_CN_DOMAIN_RULE] ?: false }
 
     fun enableGeoCnIpRuleFlow(context: Context): Flow<Boolean> =
-        context.dataStore.data.map { it[ENABLE_GEO_CN_IP_RULE] ?: true }
+        context.dataStore.data.map { it[ENABLE_GEO_CN_IP_RULE] ?: false }
 
     fun enableGeoAdsBlockFlow(context: Context): Flow<Boolean> =
-        context.dataStore.data.map { it[ENABLE_GEO_ADS_BLOCK] ?: true }
+        context.dataStore.data.map { it[ENABLE_GEO_ADS_BLOCK] ?: false }
 
     fun enableGeoBlockQuicFlow(context: Context): Flow<Boolean> =
-        context.dataStore.data.map { it[ENABLE_GEO_BLOCK_QUIC] ?: true }
+        context.dataStore.data.map { it[ENABLE_GEO_BLOCK_QUIC] ?: false }
 
     // ── Setters ──
 

@@ -78,42 +78,38 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         contentPadding = PaddingValues(top = 64.dp, bottom = 24.dp, start = 16.dp, end = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
             ConnectionCard(
                 isConnected = vpnState.isConnected,
                 nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
                 nodeAddress = selectedNode?.type?.name ?: "--",
                 connectionDuration = connectionDuration,
+                networkInfo = detectedIp,
                 onToggleConnection = {
                     val permissionIntent = viewModel.toggleConnection(context)
                     if (permissionIntent != null) {
                         permissionLauncher.launch(permissionIntent)
                     }
                 },
-                onNodeNameClick = { showNodeList = true }
-            )
-        }
-
-        item {
-            NetworkDetectCard(
-                ip = detectedIp,
-                onClick = { viewModel.refreshNetworkInfo() }
+                onNodeNameClick = { showNodeList = true },
+                onTestNetwork = { viewModel.refreshNetworkInfo() }
             )
         }
 
         item {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 RoutingModeColumn(
                     selected = routingMode,
                     onSelect = { viewModel.setRoutingMode(it) },
-                    modifier = Modifier.weight(0.35f)
+                    modifier = Modifier.weight(0.35f).fillMaxHeight()
                 )
                 TrafficStatsCard(
                     stats = trafficStats,
-                    modifier = Modifier.weight(0.65f)
+                    modifier = Modifier.weight(0.65f).fillMaxHeight()
                 )
             }
         }
@@ -248,7 +244,7 @@ private fun RoutingModeColumn(
         )
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.padding(8.dp).fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             modes.forEach { (mode, label) ->
@@ -266,11 +262,12 @@ private fun RoutingModeColumn(
 
                 Box(
                     modifier = Modifier
+                        .weight(1f)
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(bgColor)
                         .clickable { onSelect(mode) }
-                        .padding(vertical = 12.dp, horizontal = 6.dp),
+                        .padding(horizontal = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
