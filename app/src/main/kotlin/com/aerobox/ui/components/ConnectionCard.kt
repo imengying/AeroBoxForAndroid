@@ -66,18 +66,18 @@ fun ConnectionCard(
 
     val buttonColor by animateColorAsState(
         targetValue = if (isConnected) {
-            MaterialTheme.colorScheme.primary
+            Color(0xFFE3F2FD) // Light blue background when connected
         } else {
-            MaterialTheme.colorScheme.surfaceVariant
+            Color.White // White background when disconnected
         },
         label = "button_color"
     )
 
     val iconTint by animateColorAsState(
         targetValue = if (isConnected) {
-            MaterialTheme.colorScheme.onPrimary
+            MaterialTheme.colorScheme.primary // Blue airplane when connected
         } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
+            Color(0xFF808080) // Gray airplane when disconnected
         },
         label = "icon_tint"
     )
@@ -95,24 +95,20 @@ fun ConnectionCard(
                 .scale(pulseScale)
                 .clip(CircleShape)
                 .background(buttonColor)
-                .then(
-                    if (isConnected) {
-                        Modifier.border(
-                            width = 3.dp,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                            shape = CircleShape
-                        )
-                    } else Modifier
+                .border(
+                    width = 2.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = if(isConnected) 0.5f else 0.2f),
+                    shape = CircleShape
                 )
                 .clickable(onClick = onToggleConnection),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (isConnected) AppIcons.Stop else Icons.Filled.PlayArrow,
+                imageVector = AppIcons.Flight,
                 contentDescription = if (isConnected) stringResource(R.string.disconnect)
                     else stringResource(R.string.connect),
                 tint = iconTint,
-                modifier = Modifier.size(64.dp)
+                modifier = Modifier.size(72.dp)
             )
         }
 

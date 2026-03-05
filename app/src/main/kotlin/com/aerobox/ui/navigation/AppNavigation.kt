@@ -59,54 +59,71 @@ fun AppNavigation() {
 
     val slideDuration = 300
 
-    NavHost(
-        navController = navController,
-        startDestination = "main",
-        enterTransition = {
-            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(slideDuration))
-        },
-        exitTransition = {
-            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(slideDuration))
-        },
-        popEnterTransition = {
-            slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(slideDuration))
-        },
-        popExitTransition = {
-            slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(slideDuration))
-        }
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
-        composable(
-            "main",
-            enterTransition = { fadeIn(tween(200)) },
-            exitTransition = { fadeOut(tween(200)) },
-            popEnterTransition = { fadeIn(tween(200)) }
+        NavHost(
+            navController = navController,
+            startDestination = "main",
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Start, 
+                    tween(slideDuration)
+                ) + fadeIn(tween(slideDuration))
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Start, 
+                    tween(slideDuration)
+                ) + fadeOut(tween(slideDuration))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.End, 
+                    tween(slideDuration)
+                ) + fadeIn(tween(slideDuration))
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.End, 
+                    tween(slideDuration)
+                ) + fadeOut(tween(slideDuration))
+            }
         ) {
-            MainScreen(
-                onNavigateToSubscriptions = {
-                    navController.navigate("subscriptions")
-                },
-                onNavigateToPerAppProxy = {
-                    navController.navigate("per_app_proxy")
-                },
-                onNavigateToLog = {
-                    navController.navigate("log")
-                }
-            )
-        }
-        composable("subscriptions") {
-            SubscriptionScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable("per_app_proxy") {
-            PerAppProxyScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable("log") {
-            LogScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+            composable(
+                "main",
+                enterTransition = { fadeIn(tween(500)) },
+                exitTransition = { fadeOut(tween(500)) },
+                popEnterTransition = { fadeIn(tween(500)) }
+            ) {
+                MainScreen(
+                    onNavigateToSubscriptions = {
+                        navController.navigate("subscriptions")
+                    },
+                    onNavigateToPerAppProxy = {
+                        navController.navigate("per_app_proxy")
+                    },
+                    onNavigateToLog = {
+                        navController.navigate("log")
+                    }
+                )
+            }
+            composable("subscriptions") {
+                SubscriptionScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable("per_app_proxy") {
+                PerAppProxyScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable("log") {
+                LogScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }

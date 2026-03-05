@@ -123,11 +123,11 @@ private fun NodeItem(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
+            containerColor = if (isSelected) androidx.compose.ui.graphics.Color(0xFFE3F2FD) else androidx.compose.ui.graphics.Color.White
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         )
     ) {
         Row(

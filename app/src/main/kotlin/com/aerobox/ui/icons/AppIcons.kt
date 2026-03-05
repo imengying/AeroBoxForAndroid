@@ -153,6 +153,33 @@ object AppIcons {
         }.build()
     }
 
+    val Flight: ImageVector by lazy {
+        ImageVector.Builder("Flight", 24.dp, 24.dp, 24f, 24f).apply {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(21f, 16f)
+                verticalLineToRelative(-2f)
+                lineToRelative(-8f, -5f)
+                verticalLineTo(3.5f)
+                curveToRelative(0f, -0.83f, -0.67f, -1.5f, -1.5f, -1.5f)
+                reflectiveCurveTo(10f, 2.67f, 10f, 3.5f)
+                verticalLineTo(9f)
+                lineToRelative(-8f, 5f)
+                verticalLineToRelative(2f)
+                lineToRelative(8f, -2.5f)
+                verticalLineTo(19f)
+                lineToRelative(-2f, 1.5f)
+                verticalLineTo(22f)
+                lineToRelative(3.5f, -1f)
+                lineToRelative(3.5f, 1f)
+                verticalLineToRelative(-1.5f)
+                lineTo(13f, 19f)
+                verticalLineToRelative(-5.5f)
+                lineTo(21f, 16f)
+                close()
+            }
+        }.build()
+    }
+
     val Stop: ImageVector by lazy {
         ImageVector.Builder("Stop", 24.dp, 24.dp, 24f, 24f).apply {
             path(fill = SolidColor(Color.Black)) {
