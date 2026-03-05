@@ -68,26 +68,7 @@ jobs:
             echo "Cannot find ${BUILD_LIBBOX_MAIN}" >&2
             exit 1
           fi
-          python3 - "${BUILD_LIBBOX_MAIN}" "${LIBBOX_BUILD_TAGS}" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-tags = [tag.strip() for tag in sys.argv[2].split(",") if tag.strip()]
-source = path.read_text(encoding="utf-8")
-replacement = "sharedTags = append(sharedTags, " + ", ".join(f'"{tag}"' for tag in tags) + ")"
-patched, count = re.subn(
-    r"sharedTags\s*=\s*append\(\s*sharedTags\s*,\s*[^)]*\)",
-    replacement,
-    source,
-    count=1,
-)
-if count != 1:
-    raise SystemExit(f"Failed to patch sharedTags in {path}")
-path.write_text(patched, encoding="utf-8")
-print(replacement)
-PY
+          python3 -c 'import re,sys;from pathlib import Path;path=Path(sys.argv[1]);tags=[t.strip() for t in sys.argv[2].split(",") if t.strip()];source=path.read_text(encoding="utf-8");replacement="sharedTags = append(sharedTags, " + ", ".join(f"\"{t}\"" for t in tags) + ")";patched,count=re.subn(r"sharedTags\\s*=\\s*append\\(\\s*sharedTags\\s*,\\s*[^)]*\\)",replacement,source,count=1);assert count==1, f"Failed to patch sharedTags in {path}";path.write_text(patched,encoding="utf-8");print(replacement)' "${BUILD_LIBBOX_MAIN}" "${LIBBOX_BUILD_TAGS}"
           grep -n "sharedTags = append" "${BUILD_LIBBOX_MAIN}" | head -n 1
 
           # Strip debug symbols from Go binary to reduce .so size by ~20-30%
