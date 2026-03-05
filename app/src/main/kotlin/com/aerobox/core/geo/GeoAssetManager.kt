@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Manages GeoIP and GeoSite database files used by sing-box for rule-based routing.
  * Strategy:
- * 1) Prefer bundled assets in APK (assets/sing-box/*.db.xz + *.version.txt)
+ * 1) Prefer bundled assets in APK (assets/sing-box/<name>.db.xz + <name>.version.txt)
  * 2) Extract/update bundled files based on version
  * 3) Allow manual online update from GitHub releases
  */
