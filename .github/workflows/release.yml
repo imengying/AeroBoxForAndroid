@@ -106,13 +106,23 @@ jobs:
                   patched = True
                   break
 
+          # Tailscale currently depends on gVisor symbols in this sing-box version.
+          # When using slim profile without gvisor, force-remove tailscale-related tags.
+          source = re.sub(r'"with_tailscale"\s*,?', "", source)
+          source = re.sub(r'"ts_omit_[^"]+"\s*,?', "", source)
+          source = re.sub(r",\s*,", ",", source)
+          source = re.sub(r"\[\s*,", "[", source)
+          source = re.sub(r",\s*]", "]", source)
+
           if patched:
               path.write_text(source, encoding="utf-8")
               print(f"Patched sharedTags in {path}")
           else:
               print(f"No sharedTags pattern found in {path}, keeping upstream defaults.")
+              path.write_text(source, encoding="utf-8")
           PY
           grep -n "sharedTags" "${BUILD_LIBBOX_MAIN}" | head -n 4 || true
+          grep -n "tailscale\\|ts_omit" "${BUILD_LIBBOX_MAIN}" || true
 
           # Strip debug symbols from Go binary to reduce .so size by ~20-30%
           export CGO_LDFLAGS="-s -w"
