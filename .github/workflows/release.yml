@@ -181,6 +181,7 @@ jobs:
       - name: Derive version from tag
         run: |
           set -euo pipefail
+          echo "AEROBOX_TAG=${GITHUB_REF_NAME}" >> "${GITHUB_ENV}"
           VERSION_NAME="${GITHUB_REF_NAME#v}"
           if [ -z "${VERSION_NAME}" ] || [ "${VERSION_NAME}" = "${GITHUB_REF_NAME}" ]; then
             echo "Invalid tag format: ${GITHUB_REF_NAME}. Expected v1 / v1.2 / v1.2.3 (optional -suffix/+meta)." >&2
@@ -349,7 +350,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ env.AEROBOX_VERSION_NAME }}
+          name: ${{ env.AEROBOX_TAG || github.ref_name }}
           generate_release_notes: true
           files: |
             app/build/outputs/apk/release/dist/*.apk
