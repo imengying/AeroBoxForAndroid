@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.aerobox.AeroBoxApplication
-import com.aerobox.core.config.ConfigGenerator
+import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.PreferenceManager
@@ -29,7 +29,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 if (nodeId <= 0L) return@runCatching
 
                 val node = AeroBoxApplication.database.proxyNodeDao().getNodeById(nodeId) ?: return@runCatching
-                val config = ConfigGenerator.generateSingBoxConfig(node)
+
+                val vpnRepository = VpnRepository(context)
+                val config = vpnRepository.buildConfig(node)
                 VpnStateManager.updateConnectionState(true, node)
 
                 val startIntent = Intent(context, AeroBoxVpnService::class.java).apply {
@@ -42,3 +44,4 @@ class BootCompletedReceiver : BroadcastReceiver() {
         }
     }
 }
+

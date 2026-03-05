@@ -15,7 +15,10 @@ object ConfigGenerator {
         localDns: String = "223.5.5.5",
         enableDoh: Boolean = true,
         enableSocksInbound: Boolean = false,
-        enableHttpInbound: Boolean = false
+        enableHttpInbound: Boolean = false,
+        enableIPv6: Boolean = true,
+        geoipPath: String? = null,
+        geositePath: String? = null
     ): String {
         val config = JSONObject()
 
@@ -27,7 +30,7 @@ object ConfigGenerator {
         )
 
         config.put("dns", buildDns(remoteDns, localDns, enableDoh, routingMode))
-        config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound))
+        config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, enableIPv6))
 
         val proxyOutbound = buildProxyOutbound(node).put("tag", "proxy")
         config.put(
@@ -39,7 +42,7 @@ object ConfigGenerator {
                 .put(JSONObject().put("type", "dns").put("tag", "dns-out"))
         )
 
-        config.put("route", buildRoute(routingMode))
+        config.put("route", buildRoute(routingMode, geoipPath, geositePath))
 
         return config.toString(2)
     }
@@ -92,22 +95,27 @@ object ConfigGenerator {
 
     private fun buildInbounds(
         enableSocks: Boolean,
-        enableHttp: Boolean
+        enableHttp: Boolean,
+        enableIPv6: Boolean = true
     ): JSONArray {
         val inbounds = JSONArray()
 
         // TUN (always present)
-        inbounds.put(
-            JSONObject()
-                .put("type", "tun")
-                .put("interface_name", "tun0")
-                .put("inet4_address", JSONArray().put("172.19.0.1/30"))
-                .put("mtu", 9000)
-                .put("auto_route", true)
-                .put("strict_route", true)
-                .put("stack", "mixed")
-                .put("sniff", true)
-        )
+        val tunInbound = JSONObject()
+            .put("type", "tun")
+            .put("interface_name", "tun0")
+            .put("inet4_address", JSONArray().put("172.19.0.1/30"))
+            .put("mtu", 9000)
+            .put("auto_route", true)
+            .put("strict_route", true)
+            .put("stack", "mixed")
+            .put("sniff", true)
+
+        if (enableIPv6) {
+            tunInbound.put("inet6_address", JSONArray().put("fdfe:dcba:9876::1/126"))
+        }
+
+        inbounds.put(tunInbound)
 
         // Optional SOCKS5 inbound (for Phase 6)
         if (enableSocks) {
@@ -136,9 +144,21 @@ object ConfigGenerator {
 
     // ── Route ────────────────────────────────────────────────────────
 
-    private fun buildRoute(routingMode: RoutingMode): JSONObject {
+    private fun buildRoute(
+        routingMode: RoutingMode,
+        geoipPath: String? = null,
+        geositePath: String? = null
+    ): JSONObject {
         val route = JSONObject()
             .put("auto_detect_interface", true)
+
+        // Set geo database paths so sing-box can locate the local .db files
+        if (!geoipPath.isNullOrBlank()) {
+            route.put("geoip", JSONObject().put("path", geoipPath))
+        }
+        if (!geositePath.isNullOrBlank()) {
+            route.put("geosite", JSONObject().put("path", geositePath))
+        }
 
         when (routingMode) {
             RoutingMode.GLOBAL_PROXY -> {
@@ -308,7 +328,11 @@ object ConfigGenerator {
             }
         }
 
-        node.network?.let { outbound.put("network", it) }
+        node.network?.let { network ->
+            if (network != "tcp" && network.isNotBlank()) {
+                outbound.put("transport", buildTransport(node))
+            }
+        }
         return outbound
     }
 
@@ -316,6 +340,14 @@ object ConfigGenerator {
         val tls = JSONObject()
             .put("enabled", node.tls)
         node.sni?.let { tls.put("server_name", it) }
+
+        if (!node.alpn.isNullOrBlank()) {
+            val alpnArray = JSONArray()
+            node.alpn!!.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { alpnArray.put(it) }
+            if (alpnArray.length() > 0) {
+                tls.put("alpn", alpnArray)
+            }
+        }
 
         if (includeReality && !node.publicKey.isNullOrBlank()) {
             tls.put(
@@ -337,5 +369,32 @@ object ConfigGenerator {
         }
 
         return tls
+    }
+
+    // ── Transport ───────────────────────────────────────────────────
+
+    private fun buildTransport(node: ProxyNode): JSONObject {
+        val transport = JSONObject()
+        when (node.network?.lowercase()) {
+            "ws", "websocket" -> {
+                transport.put("type", "ws")
+                // Use sni as host fallback if no explicit host
+                node.sni?.let { transport.put("headers", JSONObject().put("Host", it)) }
+            }
+            "grpc" -> {
+                transport.put("type", "grpc")
+            }
+            "h2", "http" -> {
+                transport.put("type", "http")
+                node.sni?.let {
+                    transport.put("host", JSONArray().put(it))
+                }
+            }
+            "httpupgrade" -> {
+                transport.put("type", "httpupgrade")
+                node.sni?.let { transport.put("host", it) }
+            }
+        }
+        return transport
     }
 }

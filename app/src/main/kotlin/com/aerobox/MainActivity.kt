@@ -20,11 +20,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             val context = LocalContext.current
             val darkMode by PreferenceManager.darkModeFlow(context)
-                .collectAsStateWithLifecycle(initialValue = false)
+                .collectAsStateWithLifecycle(initialValue = "system")
             val dynamicColor by PreferenceManager.dynamicColorFlow(context)
                 .collectAsStateWithLifecycle(initialValue = true)
 
-            val useDarkTheme = if (darkMode) true else isSystemInDarkTheme()
+            val useDarkTheme = when (darkMode) {
+                "on" -> true
+                "off" -> false
+                else -> isSystemInDarkTheme()
+            }
 
             SingBoxVPNTheme(
                 darkTheme = useDarkTheme,

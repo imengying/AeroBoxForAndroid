@@ -26,6 +26,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -77,6 +78,8 @@ fun SettingsScreen(
     val perAppProxyEnabled by viewModel.perAppProxyEnabled.collectAsStateWithLifecycle()
     val enableSocksInbound by viewModel.enableSocksInbound.collectAsStateWithLifecycle()
     val enableHttpInbound by viewModel.enableHttpInbound.collectAsStateWithLifecycle()
+    val enableIPv6 by viewModel.enableIPv6.collectAsStateWithLifecycle()
+    val autoReconnect by viewModel.autoReconnect.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     var showDnsDialog by remember { mutableStateOf(false) }
@@ -115,18 +118,6 @@ fun SettingsScreen(
                 icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                 title = "订阅管理",
                 supporting = "添加、更新和管理代理订阅",
-                trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
-            )
-        }
-
-        // ── Routing ──
-        item { SectionHeader(title = "路由设置") }
-        item {
-            SettingItem(
-                modifier = Modifier.clickable { showRoutingDialog = true },
-                icon = { Icon(AppIcons.Security, contentDescription = null) },
-                title = "路由模式",
-                supporting = routingMode.displayName,
                 trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
@@ -319,9 +310,29 @@ fun SettingsScreen(
             SettingItem(
                 icon = { Icon(AppIcons.DarkMode, contentDescription = null) },
                 title = stringResource(R.string.dark_mode),
-                supporting = stringResource(R.string.appearance),
+                supporting = when (darkMode) {
+                    "on" -> "始终开启"
+                    "off" -> "始终关闭"
+                    else -> "跟随系统"
+                },
                 trailing = {
-                    Switch(checked = darkMode, onCheckedChange = { scope.launch { viewModel.setDarkMode(it) } })
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(
+                            selected = darkMode == "system",
+                            onClick = { scope.launch { viewModel.setDarkMode("system") } },
+                            label = { Text("系统") }
+                        )
+                        FilterChip(
+                            selected = darkMode == "on",
+                            onClick = { scope.launch { viewModel.setDarkMode("on") } },
+                            label = { Text("开") }
+                        )
+                        FilterChip(
+                            selected = darkMode == "off",
+                            onClick = { scope.launch { viewModel.setDarkMode("off") } },
+                            label = { Text("关") }
+                        )
+                    }
                 }
             )
         }
@@ -361,6 +372,26 @@ fun SettingsScreen(
                 }
             )
         }
+        item {
+            SettingItem(
+                icon = { Icon(AppIcons.Speed, contentDescription = null) },
+                title = stringResource(R.string.enable_ipv6),
+                supporting = "启用 IPv6 网络支持",
+                trailing = {
+                    Switch(checked = enableIPv6, onCheckedChange = { scope.launch { viewModel.setEnableIPv6(it) } })
+                }
+            )
+        }
+        item {
+            SettingItem(
+                icon = { Icon(AppIcons.Power, contentDescription = null) },
+                title = "断线自动重连",
+                supporting = "VPN 意外断开时自动重新连接",
+                trailing = {
+                    Switch(checked = autoReconnect, onCheckedChange = { scope.launch { viewModel.setAutoReconnect(it) } })
+                }
+            )
+        }
 
         // ── About ──
         item { SectionHeader(title = stringResource(R.string.about)) }
@@ -377,7 +408,7 @@ fun SettingsScreen(
             SettingItem(
                 icon = { Icon(Icons.Filled.Info, contentDescription = null) },
                 title = stringResource(R.string.version),
-                supporting = "1.0.0 (基于 sing-box 1.13.0)",
+                supporting = "${com.aerobox.BuildConfig.VERSION_NAME} (sing-box ${com.aerobox.core.native.SingBoxNative.getVersion()})",
                 trailing = {}
             )
         }
@@ -515,8 +546,8 @@ private fun SectionHeader(title: String) {
         text = title,
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(vertical = 8.dp)
+        fontWeight = FontWeight.Black,
+        modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 8.dp)
     )
 }
 
@@ -528,12 +559,33 @@ private fun SettingItem(
     trailing: @Composable () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(modifier = modifier.fillMaxWidth()) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
         ListItem(
             leadingContent = icon,
-            headlineContent = { Text(title) },
-            supportingContent = { Text(supporting) },
-            trailingContent = trailing
+            headlineContent = { 
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                ) 
+            },
+            supportingContent = { 
+                Text(
+                    text = supporting,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                ) 
+            },
+            trailingContent = trailing,
+            colors = androidx.compose.material3.ListItemDefaults.colors(
+                containerColor = androidx.compose.ui.graphics.Color.Transparent
+            )
         )
     }
 }

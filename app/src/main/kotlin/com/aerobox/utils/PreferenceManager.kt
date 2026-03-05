@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.map
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
 object PreferenceManager {
-    private val DARK_MODE = booleanPreferencesKey("dark_mode")
+    private val DARK_MODE = stringPreferencesKey("dark_mode")
     private val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
     private val AUTO_CONNECT = booleanPreferencesKey("auto_connect")
     private val AUTO_UPDATE_SUBSCRIPTION = booleanPreferencesKey("auto_update_subscription")
@@ -32,11 +32,13 @@ object PreferenceManager {
     private val PER_APP_PROXY_PACKAGES = stringSetPreferencesKey("per_app_proxy_packages")
     private val ENABLE_SOCKS_INBOUND = booleanPreferencesKey("enable_socks_inbound")
     private val ENABLE_HTTP_INBOUND = booleanPreferencesKey("enable_http_inbound")
+    private val ENABLE_IPV6 = booleanPreferencesKey("enable_ipv6")
+    private val AUTO_RECONNECT = booleanPreferencesKey("auto_reconnect")
 
     // ── Existing settings ──
 
-    fun darkModeFlow(context: Context): Flow<Boolean> =
-        context.dataStore.data.map { it[DARK_MODE] ?: false }
+    fun darkModeFlow(context: Context): Flow<String> =
+        context.dataStore.data.map { it[DARK_MODE] ?: "system" }
 
     fun dynamicColorFlow(context: Context): Flow<Boolean> =
         context.dataStore.data.map { it[DYNAMIC_COLOR] ?: true }
@@ -84,10 +86,16 @@ object PreferenceManager {
     fun enableHttpInboundFlow(context: Context): Flow<Boolean> =
         context.dataStore.data.map { it[ENABLE_HTTP_INBOUND] ?: false }
 
+    fun enableIPv6Flow(context: Context): Flow<Boolean> =
+        context.dataStore.data.map { it[ENABLE_IPV6] ?: true }
+
+    fun autoReconnectFlow(context: Context): Flow<Boolean> =
+        context.dataStore.data.map { it[AUTO_RECONNECT] ?: true }
+
     // ── Setters ──
 
-    suspend fun setDarkMode(context: Context, enabled: Boolean) {
-        context.dataStore.edit { it[DARK_MODE] = enabled }
+    suspend fun setDarkMode(context: Context, mode: String) {
+        context.dataStore.edit { it[DARK_MODE] = mode }
     }
 
     suspend fun setDynamicColor(context: Context, enabled: Boolean) {
@@ -146,5 +154,13 @@ object PreferenceManager {
 
     suspend fun setEnableHttpInbound(context: Context, enabled: Boolean) {
         context.dataStore.edit { it[ENABLE_HTTP_INBOUND] = enabled }
+    }
+
+    suspend fun setEnableIPv6(context: Context, enabled: Boolean) {
+        context.dataStore.edit { it[ENABLE_IPV6] = enabled }
+    }
+
+    suspend fun setAutoReconnect(context: Context, enabled: Boolean) {
+        context.dataStore.edit { it[AUTO_RECONNECT] = enabled }
     }
 }

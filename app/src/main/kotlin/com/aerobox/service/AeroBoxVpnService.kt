@@ -62,6 +62,12 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     private var commandServer: CommandServer? = null
     private var receiverRegistered = false
 
+    // Auto-reconnect state
+    private var lastConfig: String? = null
+    private var userRequestedStop = false
+    private var reconnectAttempts = 0
+    private val maxReconnectAttempts = 3
+
     private val closeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == ACTION_STOP) {
@@ -76,9 +82,13 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         when (intent?.action) {
             ACTION_START -> {
                 val config = intent.getStringExtra(EXTRA_CONFIG).orEmpty()
+                userRequestedStop = false
+                reconnectAttempts = 0
+                lastConfig = config
                 startVpn(config)
             }
             ACTION_STOP -> {
+                userRequestedStop = true
                 stopService()
                 stopSelf()
             }
@@ -190,10 +200,16 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     // ─── CommandServerHandler callbacks ───
 
     override fun serviceStop() {
-        // Called by libbox when the service should stop
+        // Called by libbox when the service stops (may be unexpected)
         vpnInterface?.close()
         vpnInterface = null
-        stopService()
+
+        if (!userRequestedStop) {
+            // Unexpected disconnect — try auto-reconnect
+            attemptReconnect()
+        } else {
+            stopService()
+        }
     }
 
     override fun serviceReload() {
@@ -316,7 +332,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         return NotificationCompat.Builder(this, AeroBoxApplication.NOTIFICATION_CHANNEL_ID)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setSilent(true)
@@ -340,8 +356,37 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
 
     override fun onDestroy() {
+        userRequestedStop = true
         stopService()
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    // ─── Auto-Reconnect ───
+
+    private fun attemptReconnect() {
+        val config = lastConfig ?: return
+        serviceScope.launch {
+            val autoReconnect = runBlocking {
+                PreferenceManager.autoReconnectFlow(applicationContext).first()
+            }
+            if (!autoReconnect) {
+                stopService()
+                return@launch
+            }
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                Log.w(TAG, "Max reconnect attempts reached, giving up")
+                stopService()
+                return@launch
+            }
+
+            reconnectAttempts++
+            val backoffMs = 1000L * (1L shl (reconnectAttempts - 1).coerceAtMost(4))
+            Log.i(TAG, "Auto-reconnect attempt $reconnectAttempts/$maxReconnectAttempts in ${backoffMs}ms")
+            delay(backoffMs)
+
+            if (userRequestedStop) return@launch
+            startVpn(config)
+        }
     }
 }

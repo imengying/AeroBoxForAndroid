@@ -49,7 +49,7 @@ class AeroBoxApplication : Application() {
                 _appInstance,
                 AppDatabase::class.java,
                 "aerobox.db"
-            ).fallbackToDestructiveMigration().build()
+            ).fallbackToDestructiveMigrationOnDowngrade().build()
         }
     }
 }

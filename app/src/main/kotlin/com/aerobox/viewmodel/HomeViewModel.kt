@@ -7,9 +7,7 @@ import android.net.VpnService
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aerobox.AeroBoxApplication
-import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.data.model.ProxyNode
-import com.aerobox.data.model.RoutingMode
 import com.aerobox.data.model.TrafficStats
 import com.aerobox.data.model.VpnState
 import com.aerobox.data.repository.SubscriptionRepository
@@ -33,6 +31,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+import com.aerobox.data.model.RoutingMode
+
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
     private val nodeDao = AeroBoxApplication.database.proxyNodeDao()
@@ -42,12 +42,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val vpnState: StateFlow<VpnState> = VpnStateManager.vpnState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VpnState())
 
+    val routingMode: StateFlow<RoutingMode> = PreferenceManager.routingModeFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.RULE_BASED)
+
+    fun setRoutingMode(mode: RoutingMode) {
+        viewModelScope.launch {
+            PreferenceManager.setRoutingMode(appContext, mode)
+        }
+    }
+
     val trafficStats: StateFlow<TrafficStats> = vpnState
         .map { it.toTrafficStats() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrafficStats())
 
     val allNodes: StateFlow<List<ProxyNode>> = nodeDao.getAllNodes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val subscriptionNames: StateFlow<Map<Long, String>> = subscriptionRepository
+        .getAllSubscriptions()
+        .map { subs -> subs.associate { it.id to it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private val _selectedNode = MutableStateFlow<ProxyNode?>(null)
     val selectedNode: StateFlow<ProxyNode?> = _selectedNode.asStateFlow()
@@ -155,29 +169,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             runCatching {
-                // Read routing/DNS settings
-                val routingMode = PreferenceManager.routingModeFlow(appContext)
-                    .stateIn(viewModelScope, SharingStarted.Eagerly, RoutingMode.RULE_BASED).value
-                val remoteDns = PreferenceManager.remoteDnsFlow(appContext)
-                    .stateIn(viewModelScope, SharingStarted.Eagerly, "tls://8.8.8.8").value
-                val localDns = PreferenceManager.localDnsFlow(appContext)
-                    .stateIn(viewModelScope, SharingStarted.Eagerly, "223.5.5.5").value
-                val enableDoh = PreferenceManager.enableDohFlow(appContext)
-                    .stateIn(viewModelScope, SharingStarted.Eagerly, true).value
-                val enableSocksInbound = PreferenceManager.enableSocksInboundFlow(appContext)
-                    .stateIn(viewModelScope, SharingStarted.Eagerly, false).value
-                val enableHttpInbound = PreferenceManager.enableHttpInboundFlow(appContext)
-                    .stateIn(viewModelScope, SharingStarted.Eagerly, false).value
-
-                val config = ConfigGenerator.generateSingBoxConfig(
-                    node = node,
-                    routingMode = routingMode,
-                    remoteDns = remoteDns,
-                    localDns = localDns,
-                    enableDoh = enableDoh,
-                    enableSocksInbound = enableSocksInbound,
-                    enableHttpInbound = enableHttpInbound
-                )
+                val config = vpnRepository.buildConfig(node)
                 val configError = vpnRepository.checkConfig(config)
                 if (configError != null) {
                     context.showToast("${context.getString(com.aerobox.R.string.operation_failed)}: $configError")
@@ -223,11 +215,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun testAllNodesLatency() {
         viewModelScope.launch {
-            allNodes.value.forEach { node ->
+            val jobs = allNodes.value.map { node ->
                 launch {
                     val latency = com.aerobox.utils.NetworkUtils.pingTcp(node.server, node.port)
                     subscriptionRepository.updateNodeLatency(node.id, latency)
                 }
+            }
+            jobs.forEach { it.join() }
+
+            // Auto-select best (lowest latency) node after all tests complete
+            val updatedNodes = nodeDao.getAllNodes().first()
+            val bestNode = updatedNodes
+                .filter { it.latency > 0 }
+                .minByOrNull { it.latency }
+            if (bestNode != null) {
+                selectNode(bestNode)
             }
         }
     }

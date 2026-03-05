@@ -5,6 +5,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.PlayArrow
 import com.aerobox.ui.icons.AppIcons
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -59,7 +59,7 @@ fun ConnectionCard(
         initialValue = 1f,
         targetValue = if (isConnected) 1.06f else 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200),
+            animation = tween(durationMillis = 1500),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_scale"
@@ -67,18 +67,18 @@ fun ConnectionCard(
 
     val buttonColor by animateColorAsState(
         targetValue = if (isConnected) {
-            Color(0xFFE3F2FD) // Light blue background when connected
+            MaterialTheme.colorScheme.primaryContainer
         } else {
-            Color.White // White background when disconnected
+            MaterialTheme.colorScheme.surface
         },
         label = "button_color"
     )
 
     val iconTint by animateColorAsState(
         targetValue = if (isConnected) {
-            MaterialTheme.colorScheme.primary // Blue airplane when connected
+            MaterialTheme.colorScheme.primary
         } else {
-            Color(0xFF808080) // Gray airplane when disconnected
+            MaterialTheme.colorScheme.onSurfaceVariant
         },
         label = "icon_tint"
     )
@@ -136,20 +136,22 @@ fun ConnectionCard(
 
         Spacer(Modifier.height(12.dp))
 
-        // ── Node selector row ──
+        // ── Node selector pill ──
         Row(
             modifier = Modifier
-                .clip(MaterialTheme.shapes.medium)
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .clickable(onClick = onNodeNameClick)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = nodeName,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

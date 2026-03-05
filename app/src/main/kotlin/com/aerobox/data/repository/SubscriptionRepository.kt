@@ -99,7 +99,10 @@ class SubscriptionRepository(context: Context) {
 
     private suspend fun fetchSubscriptionContent(url: String): String =
         suspendCancellableCoroutine { cont ->
-            val request = Request.Builder().url(url).build()
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "ClashForAndroid/2.5.12")
+                .build()
             val call = client.newCall(request)
             cont.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {

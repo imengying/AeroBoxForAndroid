@@ -12,8 +12,8 @@ import kotlinx.coroutines.flow.stateIn
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
 
-    val darkMode: StateFlow<Boolean> = PreferenceManager.darkModeFlow(appContext)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val darkMode: StateFlow<String> = PreferenceManager.darkModeFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "system")
 
     val dynamicColor: StateFlow<Boolean> = PreferenceManager.dynamicColorFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
@@ -56,8 +56,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val enableHttpInbound: StateFlow<Boolean> = PreferenceManager.enableHttpInboundFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    suspend fun setDarkMode(enabled: Boolean) {
-        PreferenceManager.setDarkMode(appContext, enabled)
+    val enableIPv6: StateFlow<Boolean> = PreferenceManager.enableIPv6Flow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val autoReconnect: StateFlow<Boolean> = PreferenceManager.autoReconnectFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    suspend fun setDarkMode(mode: String) {
+        PreferenceManager.setDarkMode(appContext, mode)
     }
 
     suspend fun setDynamicColor(enabled: Boolean) {
@@ -111,5 +117,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setEnableHttpInbound(enabled: Boolean) {
         PreferenceManager.setEnableHttpInbound(appContext, enabled)
+    }
+
+    suspend fun setEnableIPv6(enabled: Boolean) {
+        PreferenceManager.setEnableIPv6(appContext, enabled)
+    }
+
+    suspend fun setAutoReconnect(enabled: Boolean) {
+        PreferenceManager.setAutoReconnect(appContext, enabled)
     }
 }

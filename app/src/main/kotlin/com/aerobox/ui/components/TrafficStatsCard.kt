@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -30,12 +31,9 @@ fun TrafficStatsCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = androidx.compose.ui.graphics.Color.White
-        ),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )
     ) {
         Column(
@@ -78,15 +76,16 @@ private fun SpeedItem(label: String, value: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Black,
+            color = MaterialTheme.colorScheme.tertiary
         )
         Spacer(Modifier.width(6.dp))
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
