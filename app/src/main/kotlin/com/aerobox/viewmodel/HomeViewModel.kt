@@ -253,6 +253,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectNode(node: ProxyNode) {
         _selectedNode.value = node
+        refreshNetworkInfo()
         viewModelScope.launch {
             PreferenceManager.setLastSelectedNodeId(appContext, node.id)
         }

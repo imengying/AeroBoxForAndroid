@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -88,15 +87,20 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
                 nodeAddress = selectedNode?.type?.name ?: "--",
                 connectionDuration = connectionDuration,
-                networkInfo = detectedIp,
                 onToggleConnection = {
                     val permissionIntent = viewModel.toggleConnection(context)
                     if (permissionIntent != null) {
                         permissionLauncher.launch(permissionIntent)
                     }
                 },
-                onNodeNameClick = { showNodeList = true },
-                onTestNetwork = { viewModel.refreshNetworkInfo() }
+                onNodeNameClick = { showNodeList = true }
+            )
+        }
+
+        item {
+            NetworkDetectCard(
+                ip = detectedIp,
+                onClick = { viewModel.refreshNetworkInfo() }
             )
         }
 

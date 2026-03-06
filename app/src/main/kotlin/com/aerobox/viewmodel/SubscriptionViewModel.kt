@@ -177,6 +177,12 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
 
     private fun toFriendlyError(error: Throwable): String {
         return when (error) {
+            is IllegalStateException ->
+                if (error.message == SubscriptionRepository.NO_VALID_NODES_ERROR) {
+                    "未解析到可用节点，请检查订阅格式"
+                } else {
+                    error.message?.takeIf { it.isNotBlank() } ?: "配置异常"
+                }
             is UnknownHostException -> "无法连接订阅服务器，请检查网络或链接"
             is SocketTimeoutException -> "连接超时，请稍后重试"
             is SSLException -> "TLS/证书校验失败，请检查订阅链接"

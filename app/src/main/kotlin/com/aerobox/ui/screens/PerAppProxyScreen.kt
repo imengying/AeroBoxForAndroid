@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -72,9 +72,9 @@ fun PerAppProxyScreen(
 
     // Load installed apps
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
+        val installed = withContext(Dispatchers.IO) {
             val pm = context.packageManager
-            val installed = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            pm.getInstalledApplications(PackageManager.GET_META_DATA)
                 .filter { it.packageName != context.packageName }
                 .map { info ->
                     AppInfo(
@@ -85,8 +85,8 @@ fun PerAppProxyScreen(
                     )
                 }
                 .sortedWith(compareBy<AppInfo> { it.isSystem }.thenBy { it.label })
-            apps = installed
         }
+        apps = installed
     }
 
     val filteredApps = apps.filter { if (showSystem) true else !it.isSystem }
@@ -185,7 +185,7 @@ fun PerAppProxyScreen(
                                     contentDescription = null,
                                     modifier = Modifier.size(40.dp)
                                 )
-                                Spacer(androidx.compose.foundation.layout.Modifier.width(12.dp))
+                                Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = app.label,

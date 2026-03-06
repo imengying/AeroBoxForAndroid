@@ -19,14 +19,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.aerobox.R
 import com.aerobox.ui.screens.HomeScreen
@@ -50,15 +49,23 @@ private data class BottomNavItem(
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    initialMainPage: Int = 0,
+    openMainRouteToken: Int = 0
+) {
     val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
-
-    // Show main scaffold only on Home/Settings, not on sub-pages
-    val isMainRoute = currentRoute == null || currentRoute == "main"
 
     val slideDuration = 300
+
+    LaunchedEffect(openMainRouteToken) {
+        if (openMainRouteToken <= 0) return@LaunchedEffect
+        navController.navigate("main") {
+            launchSingleTop = true
+            popUpTo(navController.graph.startDestinationId) {
+                inclusive = false
+            }
+        }
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -99,6 +106,7 @@ fun AppNavigation() {
                 popEnterTransition = { fadeIn(tween(500)) }
             ) {
                 MainScreen(
+                    initialPage = initialMainPage,
                     onNavigateToSubscriptions = {
                         navController.navigate("subscriptions")
                     },
@@ -140,6 +148,7 @@ fun AppNavigation() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun MainScreen(
+    initialPage: Int,
     onNavigateToSubscriptions: () -> Unit,
     onNavigateToPerAppProxy: () -> Unit,
     onNavigateToRouting: () -> Unit,
@@ -158,8 +167,18 @@ private fun MainScreen(
         )
     )
 
-    val pagerState = rememberPagerState(pageCount = { items.size })
+    val pagerState = rememberPagerState(
+        initialPage = initialPage.coerceIn(0, items.lastIndex),
+        pageCount = { items.size }
+    )
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(initialPage) {
+        val targetPage = initialPage.coerceIn(0, items.lastIndex)
+        if (pagerState.currentPage != targetPage) {
+            pagerState.scrollToPage(targetPage)
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,

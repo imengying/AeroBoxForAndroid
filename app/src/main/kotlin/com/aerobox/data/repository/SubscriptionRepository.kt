@@ -61,15 +61,11 @@ class SubscriptionRepository(context: Context) {
             val parsedNodes = SubscriptionParser.parseSubscription(content)
             val nodes = parsedNodes.map { it.copy(subscriptionId = subscriptionId) }
 
-            if (nodes.isNotEmpty()) {
-                proxyNodeDao.insertAll(nodes)
+            if (nodes.isEmpty()) {
+                throw IllegalStateException(NO_VALID_NODES_ERROR)
             }
 
-            val noNodesError = if (nodes.isEmpty()) {
-                IllegalStateException(NO_VALID_NODES_ERROR)
-            } else {
-                null
-            }
+            proxyNodeDao.insertAll(nodes)
             subscriptionDao.update(
                 subscription.copy(
                     id = subscriptionId,
@@ -80,10 +76,11 @@ class SubscriptionRepository(context: Context) {
             SubscriptionImportResult(
                 subscriptionId = subscriptionId,
                 nodeCount = nodes.size,
-                error = noNodesError
+                error = null
             )
         }.getOrElse { error ->
-            subscriptionDao.update(subscription.copy(id = subscriptionId))
+            proxyNodeDao.deleteBySubscription(subscriptionId)
+            subscriptionDao.deleteById(subscriptionId)
             SubscriptionImportResult(
                 subscriptionId = subscriptionId,
                 nodeCount = 0,
@@ -103,10 +100,12 @@ class SubscriptionRepository(context: Context) {
         val parsedNodes = SubscriptionParser.parseSubscription(content)
         val nodes = parsedNodes.map { it.copy(subscriptionId = subscription.id) }
 
-        proxyNodeDao.deleteBySubscription(subscription.id)
-        if (nodes.isNotEmpty()) {
-            proxyNodeDao.insertAll(nodes)
+        if (nodes.isEmpty()) {
+            throw IllegalStateException(NO_VALID_NODES_ERROR)
         }
+
+        proxyNodeDao.deleteBySubscription(subscription.id)
+        proxyNodeDao.insertAll(nodes)
 
         subscriptionDao.update(
             subscription.copy(

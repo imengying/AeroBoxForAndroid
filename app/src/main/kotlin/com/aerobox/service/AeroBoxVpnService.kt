@@ -101,7 +101,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 if (nodeId > 0L) {
                     lastNodeId = nodeId
                 }
-                startVpn(config, if (nodeId > 0L) nodeId else null)
+                startVpn(config)
             }
             ACTION_STOP -> {
                 userRequestedStop = true
@@ -117,7 +117,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     // ─── VPN Lifecycle ───
 
-    private fun startVpn(config: String, nodeId: Long? = null) {
+    private fun startVpn(config: String) {
         serviceScope.launch {
             runCatching {
                 startForeground(
@@ -149,18 +149,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 val overrides = buildOverrideOptions()
 
                 server.startOrReloadService(config, overrides)
-
-                val connectedNode = resolveCurrentNode(nodeId)
-                if (connectedNode != null) {
-                    lastNodeId = connectedNode.id
-                }
-                VpnStateManager.updateConnectionState(true, connectedNode)
-                _isRunning.value = true
-                startForeground(
-                    NOTIFICATION_ID,
-                    buildNotification(connected = true)
-                )
-                startSpeedTicker()
 
             }.onFailure { e ->
                 Log.e(TAG, "startVpn failed", e)
@@ -201,7 +189,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 reconnectAttempts = 0
                 lastNodeId = nextNode.id
                 lastConfig = nextConfig
-                startVpn(nextConfig, nextNode.id)
+                startVpn(nextConfig)
             }.onFailure { e ->
                 Log.e(TAG, "switchNodeFromNotification failed", e)
             }
@@ -401,6 +389,15 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         val pfd = builder.establish()
             ?: error("android: failed to establish VPN interface")
         vpnInterface = pfd
+        val connectedNode = runBlocking {
+            resolveCurrentNode(null)
+        }
+        VpnStateManager.updateConnectionState(true, connectedNode)
+        _isRunning.value = true
+        val notification = buildNotification(connected = true)
+        val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+        nm.notify(NOTIFICATION_ID, notification)
+        startSpeedTicker()
         return pfd.fd
     }
 
@@ -526,7 +523,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             delay(backoffMs)
 
             if (userRequestedStop) return@launch
-            startVpn(config, if (lastNodeId > 0L) lastNodeId else null)
+            startVpn(config)
         }
     }
 }

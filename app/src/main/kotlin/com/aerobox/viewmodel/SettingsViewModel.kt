@@ -33,7 +33,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.RULE_BASED)
 
     val remoteDns: StateFlow<String> = PreferenceManager.remoteDnsFlow(appContext)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "tls://8.8.8.8")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "8.8.8.8")
 
     val localDns: StateFlow<String> = PreferenceManager.localDnsFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "223.5.5.5")

@@ -5,13 +5,14 @@ import com.aerobox.data.model.ProxyType
 import com.aerobox.data.model.RoutingMode
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URI
 
 object ConfigGenerator {
 
     fun generateSingBoxConfig(
         node: ProxyNode,
         routingMode: RoutingMode = RoutingMode.RULE_BASED,
-        remoteDns: String = "tls://8.8.8.8",
+        remoteDns: String = "8.8.8.8",
         localDns: String = "223.5.5.5",
         enableDoh: Boolean = true,
         enableSocksInbound: Boolean = false,
@@ -94,11 +95,7 @@ object ConfigGenerator {
                 .put("final", "local")
         }
 
-        val remoteAddress = if (enableDoh && !remoteDns.startsWith("tls://") && !remoteDns.startsWith("https://")) {
-            "tls://$remoteDns"
-        } else {
-            remoteDns
-        }
+        val remoteAddress = normalizeRemoteDnsAddress(remoteDns, enableDoh)
 
         val servers = JSONArray()
             .put(
@@ -129,6 +126,32 @@ object ConfigGenerator {
         }
 
         return dns
+    }
+
+    private fun normalizeRemoteDnsAddress(remoteDns: String, enableDoh: Boolean): String {
+        val trimmed = remoteDns.trim()
+        if (trimmed.isBlank()) {
+            return if (enableDoh) "tls://8.8.8.8" else "8.8.8.8"
+        }
+
+        if (enableDoh) {
+            return if (trimmed.startsWith("tls://") || trimmed.startsWith("https://")) {
+                trimmed
+            } else {
+                "tls://$trimmed"
+            }
+        }
+
+        return when {
+            trimmed.startsWith("tls://") -> trimmed.removePrefix("tls://")
+            trimmed.startsWith("https://") -> {
+                runCatching { URI(trimmed).host }
+                    .getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: trimmed.removePrefix("https://").substringBefore('/')
+            }
+            else -> trimmed
+        }
     }
 
     // ── Inbounds ─────────────────────────────────────────────────────

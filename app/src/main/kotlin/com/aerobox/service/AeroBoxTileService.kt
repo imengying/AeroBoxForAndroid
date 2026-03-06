@@ -123,9 +123,9 @@ class AeroBoxTileService : TileService() {
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = if (active) {
-                getString(R.string.tile_action_close)
-            } else {
                 getString(R.string.tile_action_open)
+            } else {
+                getString(R.string.tile_action_close)
             }
         }
         tile.updateTile()

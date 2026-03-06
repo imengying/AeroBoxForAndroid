@@ -14,7 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import com.aerobox.ui.icons.AppIcons
 import androidx.compose.material3.AlertDialog
@@ -58,7 +57,6 @@ fun SettingsScreen(
     val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
     val autoConnect by viewModel.autoConnect.collectAsStateWithLifecycle()
     val autoUpdateSubscription by viewModel.autoUpdateSubscription.collectAsStateWithLifecycle()
-    val showNotification by viewModel.showNotification.collectAsStateWithLifecycle()
     val routingMode by viewModel.routingMode.collectAsStateWithLifecycle()
     val remoteDns by viewModel.remoteDns.collectAsStateWithLifecycle()
     val localDns by viewModel.localDns.collectAsStateWithLifecycle()
@@ -251,16 +249,6 @@ fun SettingsScreen(
                         checked = autoUpdateSubscription,
                         onCheckedChange = { scope.launch { viewModel.setAutoUpdateSubscription(it) } }
                     )
-                }
-            )
-        }
-        item {
-            SettingItem(
-                icon = { Icon(Icons.Filled.Notifications, contentDescription = null) },
-                title = stringResource(R.string.show_notification),
-                supporting = "连接时在通知栏显示状态",
-                trailing = {
-                    Switch(checked = showNotification, onCheckedChange = { scope.launch { viewModel.setShowNotification(it) } })
                 }
             )
         }
