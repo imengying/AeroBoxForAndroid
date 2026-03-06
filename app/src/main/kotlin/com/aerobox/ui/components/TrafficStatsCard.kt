@@ -1,12 +1,13 @@
 package com.aerobox.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -38,51 +39,54 @@ fun TrafficStatsCard(
             containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.78f)
         )
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
         ) {
-            // Speed row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                SpeedItem(
-                    label = "↑",
-                    value = NetworkUtils.formatSpeed(stats.uploadSpeed),
-                    modifier = Modifier.weight(1f)
-                )
-                SpeedItem(
-                    label = "↓",
-                    value = NetworkUtils.formatSpeed(stats.downloadSpeed),
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SpeedItem(
+                        label = "↑",
+                        value = NetworkUtils.formatSpeed(stats.uploadSpeed),
+                        modifier = Modifier.weight(1f)
+                    )
+                    SpeedItem(
+                        label = "↓",
+                        value = NetworkUtils.formatSpeed(stats.downloadSpeed),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
-            // Totals row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "总上传 ${NetworkUtils.formatBytes(stats.totalUpload)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f),
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "总下载 ${NetworkUtils.formatBytes(stats.totalDownload)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f),
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "总上传 ${NetworkUtils.formatBytes(stats.totalUpload)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f),
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "总下载 ${NetworkUtils.formatBytes(stats.totalDownload)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f),
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

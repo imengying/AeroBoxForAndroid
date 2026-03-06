@@ -170,26 +170,68 @@ object ConfigGenerator {
     private fun normalizeRemoteDnsAddress(remoteDns: String, enableDoh: Boolean): String {
         val trimmed = remoteDns.trim()
         if (trimmed.isBlank()) {
-            return if (enableDoh) "tls://8.8.8.8" else "8.8.8.8"
+            return if (enableDoh) "https://dns.google/dns-query" else "8.8.8.8"
         }
 
         if (enableDoh) {
-            return if (trimmed.startsWith("tls://") || trimmed.startsWith("https://")) {
-                trimmed
-            } else {
-                "tls://$trimmed"
+            return when {
+                trimmed.startsWith("https://") -> normalizeEncryptedDnsEndpoint(trimmed, "https")
+                trimmed.startsWith("tls://") -> normalizeEncryptedDnsEndpoint(trimmed, "tls")
+                trimmed.startsWith("quic://") -> normalizeEncryptedDnsEndpoint(trimmed, "quic")
+                isIpLiteral(trimmed) -> knownEncryptedDnsEndpoint(trimmed) ?: trimmed
+                else -> "tls://$trimmed"
             }
         }
 
         return when {
-            trimmed.startsWith("tls://") -> trimmed.removePrefix("tls://")
+            trimmed.startsWith("tls://") -> {
+                val host = trimmed.removePrefix("tls://")
+                parseHostAndPort(host, 853).first
+            }
             trimmed.startsWith("https://") -> {
                 runCatching { URI(trimmed).host }
                     .getOrNull()
                     ?.takeIf { it.isNotBlank() }
                     ?: trimmed.removePrefix("https://").substringBefore('/')
             }
+            trimmed.startsWith("quic://") -> {
+                val host = trimmed.removePrefix("quic://")
+                parseHostAndPort(host, 853).first
+            }
             else -> trimmed
+        }
+    }
+
+    private fun normalizeEncryptedDnsEndpoint(value: String, scheme: String): String {
+        return when (scheme) {
+            "https" -> {
+                val uri = URI(value)
+                val mappedHost = uri.host?.let { knownEncryptedDnsHost(it) }
+                if (mappedHost == null) {
+                    value
+                } else {
+                    val portPart = if (uri.port > 0 && uri.port != 443) ":${uri.port}" else ""
+                    val path = uri.rawPath?.takeIf { it.isNotBlank() } ?: "/dns-query"
+                    "https://$mappedHost$portPart$path"
+                }
+            }
+
+            "tls", "quic" -> {
+                val rawHost = value.removePrefix("$scheme://")
+                val (host, port) = parseHostAndPort(rawHost, 853)
+                val mappedHost = knownEncryptedDnsHost(host)
+                when {
+                    mappedHost != null -> {
+                        val portPart = if (port != 853) ":$port" else ""
+                        "$scheme://$mappedHost$portPart"
+                    }
+
+                    isIpLiteral(host) -> host
+                    else -> value
+                }
+            }
+
+            else -> value
         }
     }
 
@@ -273,6 +315,29 @@ object ConfigGenerator {
             normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
     }
 
+    private fun knownEncryptedDnsEndpoint(value: String): String? {
+        val host = knownEncryptedDnsHost(value) ?: return null
+        return when (host) {
+            "dns.google" -> "https://dns.google/dns-query"
+            "cloudflare-dns.com" -> "https://cloudflare-dns.com/dns-query"
+            "dns.quad9.net" -> "https://dns.quad9.net/dns-query"
+            "dns.alidns.com" -> "https://dns.alidns.com/dns-query"
+            "doh.pub" -> "https://doh.pub/dns-query"
+            else -> null
+        }
+    }
+
+    private fun knownEncryptedDnsHost(value: String): String? {
+        return when (value.removePrefix("[").removeSuffix("]").lowercase()) {
+            "8.8.8.8", "8.8.4.4", "dns.google" -> "dns.google"
+            "1.1.1.1", "1.0.0.1", "cloudflare-dns.com", "one.one.one.one" -> "cloudflare-dns.com"
+            "9.9.9.9", "149.112.112.112", "dns.quad9.net" -> "dns.quad9.net"
+            "223.5.5.5", "223.6.6.6", "dns.alidns.com" -> "dns.alidns.com"
+            "119.29.29.29", "182.254.116.116", "doh.pub" -> "doh.pub"
+            else -> null
+        }
+    }
+
     // ── Inbounds ─────────────────────────────────────────────────────
 
     private fun buildInbounds(
@@ -339,6 +404,7 @@ object ConfigGenerator {
     ): JSONObject {
         val route = JSONObject()
             .put("auto_detect_interface", true)
+            .put("default_domain_resolver", "local")
 
         val ruleSets = JSONArray()
         if (!geoIpCnRuleSetPath.isNullOrBlank()) {

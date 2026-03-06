@@ -1,6 +1,10 @@
 package com.aerobox.ui.screens
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.net.VpnService
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -15,7 +19,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
@@ -64,11 +68,23 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val connectionIssue by viewModel.connectionIssue.collectAsStateWithLifecycle()
     var showNodeList by remember { mutableStateOf(false) }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            context.showToast(context.getString(R.string.notification_permission_hint))
+        }
+        viewModel.onVpnPermissionGranted(context)
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            viewModel.onVpnPermissionGranted(context)
+            ensureNotificationPermissionThenStart(
+                context = context,
+                onContinue = { viewModel.onVpnPermissionGranted(context) },
+                onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
+            )
         } else {
             context.showToast(context.getString(R.string.permission_required))
         }
@@ -88,9 +104,19 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 nodeAddress = selectedNode?.type?.displayName() ?: "--",
                 connectionDuration = connectionDuration,
                 onToggleConnection = {
-                    val permissionIntent = viewModel.toggleConnection(context)
-                    if (permissionIntent != null) {
-                        permissionLauncher.launch(permissionIntent)
+                    if (vpnState.isConnected) {
+                        viewModel.toggleConnection(context)
+                    } else {
+                        val permissionIntent = VpnService.prepare(context)
+                        if (permissionIntent != null) {
+                            permissionLauncher.launch(permissionIntent)
+                        } else {
+                            ensureNotificationPermissionThenStart(
+                                context = context,
+                                onContinue = { viewModel.onVpnPermissionGranted(context) },
+                                onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
+                            )
+                        }
                     }
                 },
                 onNodeNameClick = { showNodeList = true },
@@ -116,12 +142,12 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                         nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
                         nodeAddress = selectedNode?.type?.displayName() ?: "--",
                         onClick = { showNodeList = true },
-                        modifier = Modifier.heightIn(min = 88.dp)
+                        modifier = Modifier.height(88.dp)
                     )
                     NetworkDetectCard(
                         ip = detectedIp,
                         onClick = { viewModel.refreshNetworkInfo() },
-                        modifier = Modifier.heightIn(min = 100.dp)
+                        modifier = Modifier.height(100.dp)
                     )
                 }
                 Column(
@@ -131,11 +157,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     RoutingModeRow(
                         selected = routingMode,
                         onSelect = { viewModel.setRoutingMode(it) },
-                        modifier = Modifier.heightIn(min = 88.dp)
+                        modifier = Modifier.height(88.dp)
                     )
                     TrafficStatsCard(
                         stats = trafficStats,
-                        modifier = Modifier.heightIn(min = 100.dp)
+                        modifier = Modifier.height(100.dp)
                     )
                 }
             }
@@ -213,6 +239,24 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     }
 }
 
+private fun ensureNotificationPermissionThenStart(
+    context: android.content.Context,
+    onContinue: () -> Unit,
+    onRequest: (String) -> Unit
+) {
+    val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED
+
+    if (needsPermission) {
+        onRequest(Manifest.permission.POST_NOTIFICATIONS)
+    } else {
+        onContinue()
+    }
+}
+
 @Composable
 private fun NetworkDetectCard(
     ip: String,
@@ -228,23 +272,30 @@ private fun NetworkDetectCard(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            contentAlignment = Alignment.CenterStart
         ) {
-            Text(
-                text = "网络检测",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = ip,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            Column(
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "网络检测",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = ip,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }
@@ -265,25 +316,31 @@ private fun NodeSelectorCard(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.Center
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            contentAlignment = Alignment.CenterStart
         ) {
-            Text(
-                text = nodeName,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = nodeAddress,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            Column(
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = nodeName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = nodeAddress,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }
@@ -310,43 +367,49 @@ private fun RoutingModeRow(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .padding(8.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .fillMaxSize()
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
         ) {
-            modes.forEach { (mode, label) ->
-                val isSelected = selected == mode
-                val bgColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
-                    else MaterialTheme.colorScheme.surfaceContainerHighest,
-                    label = "modeBg"
-                )
-                val textColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    label = "modeText"
-                )
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(bgColor)
-                        .clickable { onSelect(mode) }
-                        .padding(horizontal = 2.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = textColor,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                modes.forEach { (mode, label) ->
+                    val isSelected = selected == mode
+                    val bgColor by animateColorAsState(
+                        targetValue = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        label = "modeBg"
                     )
+                    val textColor by animateColorAsState(
+                        targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        label = "modeText"
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(bgColor)
+                            .clickable { onSelect(mode) }
+                            .padding(horizontal = 2.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = textColor,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }

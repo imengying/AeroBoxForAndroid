@@ -1,13 +1,17 @@
 package com.aerobox
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Bundle
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
@@ -31,10 +35,18 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
-            startVpnFromIntent()
+            ensureNotificationPermissionThenStartVpn()
         } else {
             Toast.makeText(this, R.string.permission_required, Toast.LENGTH_SHORT).show()
         }
+    }
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            Toast.makeText(this, R.string.notification_permission_hint, Toast.LENGTH_SHORT).show()
+        }
+        startVpnFromIntent()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +104,20 @@ class MainActivity : ComponentActivity() {
         val permissionIntent = VpnService.prepare(this)
         if (permissionIntent != null) {
             vpnPermissionLauncher.launch(permissionIntent)
+        } else {
+            ensureNotificationPermissionThenStartVpn()
+        }
+    }
+
+    private fun ensureNotificationPermissionThenStartVpn() {
+        val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+
+        if (needsPermission) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             startVpnFromIntent()
         }

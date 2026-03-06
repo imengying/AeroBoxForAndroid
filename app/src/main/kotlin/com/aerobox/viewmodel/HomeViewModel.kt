@@ -35,6 +35,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URL
+import java.net.HttpURLConnection
 
 enum class ConnectionFixAction(val label: String) {
     UPDATE_GEO("更新路由资源"),
@@ -369,7 +370,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         for (group in endpointGroups) {
             for (endpoint in group) {
                 val ip = runCatching {
-                    URL(endpoint).openStream().bufferedReader().use { it.readText().trim() }
+                    val connection = URL(endpoint).openConnection() as HttpURLConnection
+                    connection.connectTimeout = 4000
+                    connection.readTimeout = 4000
+                    connection.instanceFollowRedirects = true
+                    connection.useCaches = false
+                    try {
+                        connection.inputStream.bufferedReader().use { it.readText().trim() }
+                    } finally {
+                        connection.disconnect()
+                    }
                 }.getOrNull()
                 if (!ip.isNullOrBlank() && isLikelyIpAddress(ip)) {
                     return@withContext ip
