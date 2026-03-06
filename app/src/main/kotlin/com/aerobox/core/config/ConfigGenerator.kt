@@ -98,7 +98,6 @@ object ConfigGenerator {
         val localServer = buildDnsServer(
             tag = "local",
             dns = normalizeLocalDnsAddress(localDns),
-            detour = "direct",
             resolverTag = "bootstrap"
         )
 

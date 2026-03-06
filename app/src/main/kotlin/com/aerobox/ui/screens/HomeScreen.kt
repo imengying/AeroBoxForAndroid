@@ -9,14 +9,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -106,40 +105,39 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         item {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                NodeSelectorCard(
-                    nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
-                    nodeAddress = selectedNode?.type?.displayName() ?: "--",
-                    onClick = { showNodeList = true },
-                    modifier = Modifier.weight(0.5f).fillMaxHeight()
-                )
-                NetworkDetectCard(
-                    ip = detectedIp,
-                    onClick = { viewModel.refreshNetworkInfo() },
-                    modifier = Modifier.weight(0.5f).fillMaxHeight()
-                )
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                RoutingModeColumn(
-                    selected = routingMode,
-                    onSelect = { viewModel.setRoutingMode(it) },
-                    modifier = Modifier.weight(0.5f).fillMaxHeight()
-                )
-                TrafficStatsCard(
-                    stats = trafficStats,
-                    modifier = Modifier.weight(0.5f).fillMaxHeight()
-                )
+                Column(
+                    modifier = Modifier.weight(0.46f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    NodeSelectorCard(
+                        nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
+                        nodeAddress = selectedNode?.type?.displayName() ?: "--",
+                        onClick = { showNodeList = true },
+                        modifier = Modifier.heightIn(min = 88.dp)
+                    )
+                    NetworkDetectCard(
+                        ip = detectedIp,
+                        onClick = { viewModel.refreshNetworkInfo() },
+                        modifier = Modifier.heightIn(min = 100.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(0.54f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    RoutingModeRow(
+                        selected = routingMode,
+                        onSelect = { viewModel.setRoutingMode(it) },
+                        modifier = Modifier.heightIn(min = 88.dp)
+                    )
+                    TrafficStatsCard(
+                        stats = trafficStats,
+                        modifier = Modifier.heightIn(min = 100.dp)
+                    )
+                }
             }
         }
 
@@ -291,10 +289,10 @@ private fun NodeSelectorCard(
 }
 
 /**
- * Vertical mode selector (规则 / 全局 / 直连).
+ * Horizontal mode selector (规则 / 全局 / 直连).
  */
 @Composable
-private fun RoutingModeColumn(
+private fun RoutingModeRow(
     selected: RoutingMode,
     onSelect: (RoutingMode) -> Unit,
     modifier: Modifier = Modifier
@@ -306,15 +304,17 @@ private fun RoutingModeColumn(
     )
 
     Card(
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
-        Column(
-            modifier = Modifier.padding(8.dp).fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier
+                .padding(8.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             modes.forEach { (mode, label) ->
                 val isSelected = selected == mode
@@ -332,11 +332,10 @@ private fun RoutingModeColumn(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(bgColor)
                         .clickable { onSelect(mode) }
-                        .padding(horizontal = 6.dp),
+                        .padding(horizontal = 2.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -344,7 +343,9 @@ private fun RoutingModeColumn(
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color = textColor,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

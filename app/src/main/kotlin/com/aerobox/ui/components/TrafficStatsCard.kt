@@ -71,7 +71,7 @@ fun TrafficStatsCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f),
                     modifier = Modifier.weight(1f),
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
@@ -80,7 +80,7 @@ fun TrafficStatsCard(
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f),
                     textAlign = TextAlign.End,
                     modifier = Modifier.weight(1f),
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
