@@ -38,15 +38,22 @@ import com.aerobox.R
 @Composable
 fun ConnectionCard(
     isConnected: Boolean,
+    isConnecting: Boolean,
     connectionDuration: String,
     onToggleConnection: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Pulse animation when connected
+    val isActive = isConnected || isConnecting
+
+    // Pulse animation when connected / connecting
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isConnected) 1.06f else 1f,
+        targetValue = when {
+            isConnected -> 1.06f
+            isConnecting -> 1.03f
+            else -> 1f
+        },
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1500),
             repeatMode = RepeatMode.Reverse
@@ -55,19 +62,19 @@ fun ConnectionCard(
     )
 
     val buttonColor by animateColorAsState(
-        targetValue = if (isConnected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surface
+        targetValue = when {
+            isConnected -> MaterialTheme.colorScheme.primaryContainer
+            isConnecting -> MaterialTheme.colorScheme.secondaryContainer
+            else -> MaterialTheme.colorScheme.surface
         },
         label = "button_color"
     )
 
     val iconTint by animateColorAsState(
-        targetValue = if (isConnected) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
+        targetValue = when {
+            isConnected -> MaterialTheme.colorScheme.primary
+            isConnecting -> MaterialTheme.colorScheme.secondary
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         },
         label = "icon_tint"
     )
@@ -87,7 +94,7 @@ fun ConnectionCard(
                 .background(buttonColor)
                 .border(
                     width = 2.dp,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = if(isConnected) 0.5f else 0.2f),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (isActive) 0.5f else 0.2f),
                     shape = CircleShape
                 )
                 .clickable(onClick = onToggleConnection),
@@ -95,7 +102,7 @@ fun ConnectionCard(
         ) {
             Icon(
                 imageVector = AppIcons.Flight,
-                contentDescription = if (isConnected) stringResource(R.string.disconnect)
+                contentDescription = if (isActive) stringResource(R.string.disconnect)
                     else stringResource(R.string.connect),
                 tint = iconTint,
                 modifier = Modifier.size(72.dp)
@@ -106,18 +113,28 @@ fun ConnectionCard(
 
         // ── Status text ──
         Text(
-            text = if (isConnected) stringResource(R.string.connected)
-                else stringResource(R.string.disconnected),
+            text = when {
+                isConnected -> stringResource(R.string.connected)
+                isConnecting -> stringResource(R.string.connecting)
+                else -> stringResource(R.string.disconnected)
+            },
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
-            color = if (isConnected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant
+            color = when {
+                isConnected -> MaterialTheme.colorScheme.primary
+                isConnecting -> MaterialTheme.colorScheme.secondary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
         )
 
         Text(
-            text = if (isConnected) connectionDuration else " ",
+            text = when {
+                isConnected -> connectionDuration
+                isConnecting -> stringResource(R.string.notification_connecting)
+                else -> " "
+            },
             style = MaterialTheme.typography.bodyMedium,
-            color = if (isConnected) {
+            color = if (isActive) {
                 MaterialTheme.colorScheme.onSurfaceVariant
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0f)

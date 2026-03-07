@@ -30,7 +30,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.data.model.ProxyNode
+import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnRepository
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.PreferenceManager
@@ -66,26 +68,21 @@ class NotificationSwitchActivity : ComponentActivity() {
 
     private fun switchToNode(node: ProxyNode) {
         lifecycleScope.launch {
-            runCatching {
-                PreferenceManager.setLastSelectedNodeId(applicationContext, node.id)
-                val vpnRepository = VpnRepository(applicationContext)
-                val config = vpnRepository.buildConfig(node)
-                val configError = vpnRepository.checkConfig(config)
-                if (configError != null) {
+            PreferenceManager.setLastSelectedNodeId(applicationContext, node.id)
+            when (val result = VpnRepository(applicationContext).switchToNode(node)) {
+                is VpnConnectionResult.Success -> Unit
+                VpnConnectionResult.NoNodeAvailable,
+                is VpnConnectionResult.InvalidConfig,
+                is VpnConnectionResult.Failure -> {
                     Toast.makeText(
                         this@NotificationSwitchActivity,
-                        getString(R.string.operation_failed),
+                        ConnectionDiagnostics.userFacingFailureMessage(
+                            result = result,
+                            operationFailedText = getString(R.string.operation_failed)
+                        ),
                         Toast.LENGTH_SHORT
                     ).show()
-                    return@launch
                 }
-                vpnRepository.switchNode(config, node.id)
-            }.onFailure {
-                Toast.makeText(
-                    this@NotificationSwitchActivity,
-                    getString(R.string.operation_failed),
-                    Toast.LENGTH_SHORT
-                ).show()
             }
             finish()
         }

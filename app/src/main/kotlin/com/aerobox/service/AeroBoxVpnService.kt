@@ -31,9 +31,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -57,8 +55,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         const val NOTIFICATION_ID = 1001
         private const val TAG = "AeroBoxVpnService"
 
-        private val _isRunning = MutableStateFlow(false)
-        val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
+        val isServiceActive: StateFlow<Boolean> = VpnStateManager.serviceActive
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -114,7 +111,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 reconnectAttempts = 0
                 pendingSwitchConfig = config
                 pendingSwitchNodeId = nodeId
-                if (commandServer != null && (_isRunning.value || vpnInterface != null)) {
+                if (commandServer != null && (VpnStateManager.serviceActive.value || vpnInterface != null)) {
                     RuntimeLogBuffer.append("info", "Switching node: restarting service")
                     runCatching { commandServer?.closeService() }
                         .onFailure {
@@ -154,6 +151,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     // ─── VPN Lifecycle ───
 
     private fun startVpn(config: String) {
+        VpnStateManager.updateServiceActive(true)
         serviceScope.launch {
             runCatching {
                 RuntimeLogBuffer.append("info", "Starting sing-box service")
@@ -260,7 +258,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             receiverRegistered = false
         }
 
-        _isRunning.value = false
+        VpnStateManager.updateServiceActive(false)
         VpnStateManager.updateConnectionState(false, null)
         VpnStateManager.resetStats()
 
@@ -277,7 +275,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             pendingSwitchNodeId = -1L
             vpnInterface?.close()
             vpnInterface = null
-            _isRunning.value = false
             VpnStateManager.updateConnectionState(false, null)
             RuntimeLogBuffer.append("info", "Service stopped for node switch")
             lastConfig = switchConfig
@@ -296,7 +293,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         // Called by libbox when the service stops (may be unexpected)
         vpnInterface?.close()
         vpnInterface = null
-        _isRunning.value = false
+        VpnStateManager.updateServiceActive(false)
         VpnStateManager.updateConnectionState(false, null)
 
         if (!userRequestedStop) {
@@ -414,7 +411,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         val connectedNode = runBlocking {
             resolveCurrentNode(null)
         }
-        _isRunning.value = true
         VpnStateManager.clearLastError()
         VpnStateManager.updateConnectionState(true, connectedNode)
         RuntimeLogBuffer.append(
@@ -534,13 +530,33 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     private fun startSpeedTicker() {
         speedTickerJob?.cancel()
+        val uid = applicationInfo.uid
+        val initialTx = android.net.TrafficStats.getUidTxBytes(uid).takeIf { it >= 0L } ?: 0L
+        val initialRx = android.net.TrafficStats.getUidRxBytes(uid).takeIf { it >= 0L } ?: 0L
         speedTickerJob = serviceScope.launch {
-            while (isActive) {
+            var prevTx = initialTx
+            var prevRx = initialRx
+
+            while (isActive && VpnStateManager.serviceActive.value) {
                 delay(1000)
-                val state = VpnStateManager.vpnState.value
-                val upSpeed = NetworkUtils.formatBytes(state.uploadSpeed) + "/s"
-                val downSpeed = NetworkUtils.formatBytes(state.downloadSpeed) + "/s"
-                val text = "↑ $upSpeed  ↓ $downSpeed"
+                val curTx = android.net.TrafficStats.getUidTxBytes(uid).takeIf { it >= 0L } ?: prevTx
+                val curRx = android.net.TrafficStats.getUidRxBytes(uid).takeIf { it >= 0L } ?: prevRx
+                val uploadSpeed = (curTx - prevTx).coerceAtLeast(0L)
+                val downloadSpeed = (curRx - prevRx).coerceAtLeast(0L)
+                val totalUpload = (curTx - initialTx).coerceAtLeast(0L)
+                val totalDownload = (curRx - initialRx).coerceAtLeast(0L)
+
+                VpnStateManager.updateTrafficStats(
+                    uploadSpeed = uploadSpeed,
+                    downloadSpeed = downloadSpeed,
+                    totalUpload = totalUpload,
+                    totalDownload = totalDownload
+                )
+
+                prevTx = curTx
+                prevRx = curRx
+
+                val text = "↑ ${NetworkUtils.formatBytes(uploadSpeed)}/s  ↓ ${NetworkUtils.formatBytes(downloadSpeed)}/s"
                 val notification = buildNotification(contentText = text, connected = true)
                 val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
                 nm.notify(NOTIFICATION_ID, notification)

@@ -3,20 +3,54 @@ package com.aerobox.data.repository
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import com.aerobox.AeroBoxApplication
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.ProxyNode
+import com.aerobox.service.AeroBoxTileService
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
+sealed interface VpnConnectionResult {
+    data class Success(val node: ProxyNode) : VpnConnectionResult
+    data object NoNodeAvailable : VpnConnectionResult
+    data class InvalidConfig(val error: String) : VpnConnectionResult
+    data class Failure(val throwable: Throwable) : VpnConnectionResult
+}
+
 class VpnRepository(private val context: Context) {
-    val isRunning: StateFlow<Boolean> = AeroBoxVpnService.isRunning
+    private val nodeDao = AeroBoxApplication.database.proxyNodeDao()
+    private val subscriptionRepository by lazy(LazyThreadSafetyMode.NONE) {
+        SubscriptionRepository(context)
+    }
+
+    suspend fun connectSelectedNode(refreshDueSubscriptions: Boolean = false): VpnConnectionResult {
+        val selectedId = PreferenceManager.lastSelectedNodeIdFlow(context).first()
+        val allNodes = nodeDao.getAllNodes().first()
+        val node = allNodes.firstOrNull { it.id == selectedId } ?: allNodes.firstOrNull()
+            ?: return VpnConnectionResult.NoNodeAvailable
+        return connectNode(node, refreshDueSubscriptions)
+    }
+
+    suspend fun connectNode(
+        node: ProxyNode,
+        refreshDueSubscriptions: Boolean = false
+    ): VpnConnectionResult {
+        return launchNodeAction(node, refreshDueSubscriptions) { config ->
+            startVpn(config, node.id)
+        }
+    }
+
+    suspend fun switchToNode(node: ProxyNode): VpnConnectionResult {
+        return launchNodeAction(node) { config ->
+            switchNode(config, node.id)
+        }
+    }
 
     fun startVpn(config: String, nodeId: Long? = null) {
         startServiceWithAction(AeroBoxVpnService.ACTION_START, config, nodeId)
@@ -24,6 +58,33 @@ class VpnRepository(private val context: Context) {
 
     fun switchNode(config: String, nodeId: Long? = null) {
         startServiceWithAction(AeroBoxVpnService.ACTION_SWITCH, config, nodeId)
+    }
+
+    private suspend fun launchNodeAction(
+        node: ProxyNode,
+        refreshDueSubscriptions: Boolean = false,
+        action: (String) -> Unit
+    ): VpnConnectionResult {
+        return runCatching {
+            if (refreshDueSubscriptions) {
+                val subscriptions = subscriptionRepository.getAllSubscriptions().first()
+                subscriptionRepository.refreshDueSubscriptions(subscriptions)
+            }
+
+            val config = buildConfig(node)
+            val configError = checkConfig(config)
+            if (configError != null) {
+                AeroBoxTileService.clearActiveHint()
+                VpnConnectionResult.InvalidConfig(configError)
+            } else {
+                action(config)
+                AeroBoxTileService.showActive(node.name)
+                VpnConnectionResult.Success(node)
+            }
+        }.getOrElse { error ->
+            AeroBoxTileService.clearActiveHint()
+            VpnConnectionResult.Failure(error)
+        }
     }
 
     private fun startServiceWithAction(action: String, config: String, nodeId: Long? = null) {
@@ -38,6 +99,7 @@ class VpnRepository(private val context: Context) {
     }
 
     fun stopVpn() {
+        AeroBoxTileService.clearActiveHint()
         RuntimeLogBuffer.append("info", "Sending ACTION_STOP to VPN service")
         val intent = Intent(context, AeroBoxVpnService::class.java).apply {
             action = AeroBoxVpnService.ACTION_STOP
@@ -45,9 +107,6 @@ class VpnRepository(private val context: Context) {
         context.startService(intent)
     }
 
-    /**
-     * Validate config via libbox. Returns null if valid, error message otherwise.
-     */
     fun checkConfig(config: String): String? {
         val error = SingBoxNative.checkConfig(config)
         if (error != null) {
@@ -56,10 +115,6 @@ class VpnRepository(private val context: Context) {
         return error
     }
 
-    /**
-     * Build a sing-box config JSON string for the given node,
-     * reading all user preferences (routing, DNS, IPv6, geo paths, etc.).
-     */
     suspend fun buildConfig(node: ProxyNode): String {
         RuntimeLogBuffer.append(
             "info",

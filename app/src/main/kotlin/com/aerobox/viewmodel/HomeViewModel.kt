@@ -7,12 +7,16 @@ import android.net.VpnService
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aerobox.AeroBoxApplication
+import com.aerobox.core.connection.ConnectionDiagnostics
+import com.aerobox.core.connection.ConnectionFixAction
+import com.aerobox.core.connection.ConnectionIssue
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.RoutingMode
 import com.aerobox.data.model.TrafficStats
 import com.aerobox.data.model.VpnState
 import com.aerobox.data.repository.SubscriptionRepository
+import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.PreferenceManager
@@ -27,6 +31,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -38,19 +44,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
-enum class ConnectionFixAction(val label: String) {
-    UPDATE_GEO("更新路由资源"),
-    SWITCH_GLOBAL_MODE("切换为全局模式"),
-    REFRESH_SUBSCRIPTIONS("重新拉取订阅")
-}
-
-data class ConnectionIssue(
-    val title: String,
-    val message: String,
-    val rawError: String,
-    val fixAction: ConnectionFixAction? = null
-)
-
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
     private val nodeDao = AeroBoxApplication.database.proxyNodeDao()
@@ -59,6 +52,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val vpnState: StateFlow<VpnState> = VpnStateManager.vpnState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VpnState())
+
+    val isServiceActive: StateFlow<Boolean> = VpnStateManager.serviceActive
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val isConnecting: StateFlow<Boolean> = combine(isServiceActive, vpnState) { serviceActive, state ->
+        serviceActive && !state.isConnected
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val routingMode: StateFlow<RoutingMode> = PreferenceManager.routingModeFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.GLOBAL_PROXY)
@@ -90,10 +90,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _detectedIp = MutableStateFlow("点击检测出口 IP")
     val detectedIp: StateFlow<String> = _detectedIp.asStateFlow()
 
+    private val _egressLatency = MutableStateFlow("未连接")
+    val egressLatency: StateFlow<String> = _egressLatency.asStateFlow()
+
     private val _connectionIssue = MutableStateFlow<ConnectionIssue?>(null)
     val connectionIssue: StateFlow<ConnectionIssue?> = _connectionIssue.asStateFlow()
 
-    private var statsJob: Job? = null
     private var detectIpJob: Job? = null
     private var connectWatchdogJob: Job? = null
     private val ipDetectClient = OkHttpClient.Builder()
@@ -105,7 +107,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         observeSelectedNode()
         observeConnectionDuration()
-        observeTrafficStats()
+        observeNetworkInfoTriggers()
         refreshNetworkInfo()
     }
 
@@ -138,49 +140,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun observeTrafficStats() {
-        statsJob?.cancel()
-        statsJob = viewModelScope.launch {
-            vpnRepository.isRunning.collect { running ->
-                if (!running) {
-                    VpnStateManager.resetStats()
-                    if (vpnState.value.isConnected) {
-                        VpnStateManager.updateConnectionState(false, null)
-                    }
-                    return@collect
+    private fun observeNetworkInfoTriggers() {
+        viewModelScope.launch {
+            vpnState
+                .map { state -> state.isConnected to state.currentNode?.id }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    refreshNetworkInfo()
                 }
-
-                val uid = android.os.Process.myUid()
-                val baseTx = android.net.TrafficStats.getUidTxBytes(uid)
-                val baseRx = android.net.TrafficStats.getUidRxBytes(uid)
-                var prevTx = baseTx
-                var prevRx = baseRx
-
-                connectWatchdogJob?.cancel()
-                connectWatchdogJob = null
-
-                while (isActive && vpnRepository.isRunning.value) {
-                    delay(1_000)
-                    val curTx = android.net.TrafficStats.getUidTxBytes(uid)
-                    val curRx = android.net.TrafficStats.getUidRxBytes(uid)
-                    val uploadSpeed = (curTx - prevTx).coerceAtLeast(0L)
-                    val downloadSpeed = (curRx - prevRx).coerceAtLeast(0L)
-
-                    VpnStateManager.updateTrafficStats(
-                        uploadSpeed = uploadSpeed,
-                        downloadSpeed = downloadSpeed,
-                        totalUpload = (curTx - baseTx).coerceAtLeast(0L),
-                        totalDownload = (curRx - baseRx).coerceAtLeast(0L)
-                    )
-                    prevTx = curTx
-                    prevRx = curRx
-                }
-            }
         }
     }
 
     fun toggleConnection(context: Context): Intent? {
-        if (!vpnState.value.isConnected) {
+        if (!isServiceActive.value) {
             val permissionIntent = VpnService.prepare(context)
             if (permissionIntent != null) {
                 return permissionIntent
@@ -205,29 +178,31 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            runCatching {
-                VpnStateManager.clearLastError()
-                val subscriptions = subscriptionRepository.getAllSubscriptions().first()
-                subscriptionRepository.refreshDueSubscriptions(subscriptions)
-
-                val config = vpnRepository.buildConfig(node)
-                val configError = vpnRepository.checkConfig(config)
-                if (configError != null) {
-                    handleConnectionFailure(context, configError)
-                    return@launch
+            VpnStateManager.clearLastError()
+            when (val result = vpnRepository.connectNode(node, refreshDueSubscriptions = true)) {
+                is VpnConnectionResult.Success -> {
+                    context.showToast(context.getString(com.aerobox.R.string.notification_connecting))
+                    startConnectWatchdog(context)
                 }
-                vpnRepository.startVpn(config, node.id)
-                context.showToast(context.getString(com.aerobox.R.string.notification_connecting))
-                startConnectWatchdog(context)
-            }.onFailure {
-                connectWatchdogJob?.cancel()
-                connectWatchdogJob = null
-                VpnStateManager.updateConnectionState(false, null)
-                val details = it.message?.takeIf { msg -> msg.isNotBlank() }
-                if (details != null) {
-                    handleConnectionFailure(context, details)
-                } else {
-                    context.showToast(context.getString(com.aerobox.R.string.operation_failed))
+
+                is VpnConnectionResult.InvalidConfig -> {
+                    handleConnectionFailure(context, result.error)
+                }
+
+                is VpnConnectionResult.Failure -> {
+                    connectWatchdogJob?.cancel()
+                    connectWatchdogJob = null
+                    _egressLatency.value = "未连接"
+                    val details = result.throwable.message?.takeIf { msg -> msg.isNotBlank() }
+                    if (details != null) {
+                        handleConnectionFailure(context, details)
+                    } else {
+                        context.showToast(context.getString(com.aerobox.R.string.operation_failed))
+                    }
+                }
+
+                VpnConnectionResult.NoNodeAvailable -> {
+                    context.showToast(context.getString(com.aerobox.R.string.add_node_first))
                 }
             }
         }
@@ -236,17 +211,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun stopConnection() {
         connectWatchdogJob?.cancel()
         connectWatchdogJob = null
+        _egressLatency.value = "未连接"
         runCatching { vpnRepository.stopVpn() }
         VpnStateManager.clearLastError()
-        VpnStateManager.updateConnectionState(false, null)
-        VpnStateManager.resetStats()
     }
 
     private fun startConnectWatchdog(context: Context) {
         connectWatchdogJob?.cancel()
         connectWatchdogJob = viewModelScope.launch {
             delay(12_000)
-            if (!vpnRepository.isRunning.value && !vpnState.value.isConnected) {
+            if (!vpnState.value.isConnected) {
                 val rawError = VpnStateManager.lastError.value ?: "service start timeout"
                 handleConnectionFailure(context, rawError)
             }
@@ -289,18 +263,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun testNodeLatency(node: ProxyNode): Int {
-        if (vpnState.value.isConnected) {
-            val urlLatency = com.aerobox.utils.NetworkUtils.urlTest()
-            if (urlLatency > 0) return urlLatency
-        }
         return com.aerobox.utils.NetworkUtils.pingTcp(node.server, node.port)
     }
 
     fun refreshNetworkInfo() {
         detectIpJob?.cancel()
         detectIpJob = viewModelScope.launch {
+            val networkNode = vpnState.value.currentNode ?: selectedNode.value
             _detectedIp.value = "检测中..."
-            _detectedIp.value = fetchPublicIp(selectedNode.value)
+            _egressLatency.value = if (vpnState.value.isConnected) "检测中..." else "未连接"
+            _detectedIp.value = fetchPublicIp(networkNode)
+            _egressLatency.value = fetchEgressLatency()
         }
     }
 
@@ -330,6 +303,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 context.showToast("修复失败，请检查网络后重试")
             }
             _connectionIssue.value = null
+        }
+    }
+
+    private suspend fun fetchEgressLatency(): String = withContext(Dispatchers.IO) {
+        if (!vpnState.value.isConnected) return@withContext "未连接"
+        val latency = com.aerobox.utils.NetworkUtils.urlTest()
+        when {
+            latency > 0 -> "${latency}ms"
+            else -> "检测失败"
         }
     }
 
@@ -395,58 +377,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleConnectionFailure(context: Context, rawError: String) {
-        val issue = classifyConnectionIssue(rawError)
+        val issue = ConnectionDiagnostics.classify(rawError)
         _connectionIssue.value = issue
         context.showToast("${context.getString(com.aerobox.R.string.operation_failed)}: ${issue.title}")
-    }
-
-    private fun classifyConnectionIssue(rawError: String): ConnectionIssue {
-        val msg = rawError.lowercase()
-
-        return when {
-            msg.contains("geosite") ||
-                    msg.contains("geoip") ||
-                    msg.contains("rule_set") ||
-                    msg.contains("rule-set") ||
-                    msg.contains(".srs") ||
-                    (msg.contains("router") && msg.contains("database")) -> {
-                ConnectionIssue(
-                    title = "路由资源异常",
-                    message = "检测到官方路由规则集不可用或格式不兼容。",
-                    rawError = rawError,
-                    fixAction = ConnectionFixAction.UPDATE_GEO
-                )
-            }
-
-            msg.contains("rule") ||
-                    (msg.contains("router") && msg.contains("parse")) -> {
-                ConnectionIssue(
-                    title = "路由规则异常",
-                    message = "当前规则模式可能与节点配置不兼容，建议先切换到全局模式。",
-                    rawError = rawError,
-                    fixAction = ConnectionFixAction.SWITCH_GLOBAL_MODE
-                )
-            }
-
-            msg.contains("outbound") ||
-                    msg.contains("node") ||
-                    msg.contains("subscription") ||
-                    msg.contains("proxy") -> {
-                ConnectionIssue(
-                    title = "节点或订阅可能失效",
-                    message = "节点参数可能已过期，建议重新拉取订阅后再连接。",
-                    rawError = rawError,
-                    fixAction = ConnectionFixAction.REFRESH_SUBSCRIPTIONS
-                )
-            }
-
-            else -> {
-                ConnectionIssue(
-                    title = "连接配置异常",
-                    message = "请检查节点、DNS、分流设置，必要时更新订阅后重试。",
-                    rawError = rawError
-                )
-            }
-        }
     }
 }

@@ -1,6 +1,7 @@
 package com.aerobox.data.repository
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.aerobox.AeroBoxApplication
 import com.aerobox.core.subscription.SubscriptionParser
 import com.aerobox.data.model.ProxyNode
@@ -63,72 +64,67 @@ class SubscriptionRepository(context: Context) {
             updateInterval = normalizedInterval,
             createdAt = System.currentTimeMillis()
         )
-        val subscriptionId = subscriptionDao.insert(subscription)
-        val importResult = runCatching {
-            val fetchResult = fetchSubscription(url)
-            val parsedNodes = SubscriptionParser.parseSubscription(fetchResult.content)
-            val nodes = parsedNodes.map { it.copy(subscriptionId = subscriptionId) }
 
-            if (nodes.isEmpty()) {
-                throw IllegalStateException(NO_VALID_NODES_ERROR)
-            }
-
-            proxyNodeDao.insertAll(nodes)
-            subscriptionDao.update(
-                subscription.copy(
-                    id = subscriptionId,
-                    updateTime = System.currentTimeMillis(),
-                    nodeCount = nodes.size,
-                    uploadBytes = fetchResult.uploadBytes,
-                    downloadBytes = fetchResult.downloadBytes,
-                    totalBytes = fetchResult.totalBytes,
-                    expireTimestamp = fetchResult.expireTimestamp
+        return runCatching {
+            val prepared = prepareSubscriptionNodes(url)
+            val updatedAt = System.currentTimeMillis()
+            val subscriptionId = database.withTransaction {
+                val insertedId = subscriptionDao.insert(subscription)
+                val nodes = prepared.nodes.map { it.copy(subscriptionId = insertedId) }
+                proxyNodeDao.insertAll(nodes)
+                subscriptionDao.update(
+                    subscription.copy(
+                        id = insertedId,
+                        updateTime = updatedAt,
+                        nodeCount = nodes.size,
+                        uploadBytes = prepared.fetchResult.uploadBytes,
+                        downloadBytes = prepared.fetchResult.downloadBytes,
+                        totalBytes = prepared.fetchResult.totalBytes,
+                        expireTimestamp = prepared.fetchResult.expireTimestamp
+                    )
                 )
-            )
+                insertedId
+            }
             SubscriptionImportResult(
                 subscriptionId = subscriptionId,
-                nodeCount = nodes.size,
+                nodeCount = prepared.nodes.size,
                 error = null
             )
         }.getOrElse { error ->
-            proxyNodeDao.deleteBySubscription(subscriptionId)
-            subscriptionDao.deleteById(subscriptionId)
             SubscriptionImportResult(
-                subscriptionId = subscriptionId,
+                subscriptionId = 0,
                 nodeCount = 0,
                 error = error
             )
         }
-        return importResult
     }
 
     suspend fun deleteSubscription(subscription: Subscription) {
-        proxyNodeDao.deleteBySubscription(subscription.id)
-        subscriptionDao.deleteById(subscription.id)
+        database.withTransaction {
+            proxyNodeDao.deleteBySubscription(subscription.id)
+            subscriptionDao.deleteById(subscription.id)
+        }
     }
 
     suspend fun updateSubscription(subscription: Subscription) {
-        val fetchResult = fetchSubscription(subscription.url)
-        val parsedNodes = SubscriptionParser.parseSubscription(fetchResult.content)
-        val nodes = parsedNodes.map { it.copy(subscriptionId = subscription.id) }
+        val prepared = prepareSubscriptionNodes(subscription.url)
+        val updatedAt = System.currentTimeMillis()
+        val nodes = prepared.nodes.map { it.copy(subscriptionId = subscription.id) }
 
-        if (nodes.isEmpty()) {
-            throw IllegalStateException(NO_VALID_NODES_ERROR)
-        }
-
-        proxyNodeDao.deleteBySubscription(subscription.id)
-        proxyNodeDao.insertAll(nodes)
-
-        subscriptionDao.update(
-            subscription.copy(
-                updateTime = System.currentTimeMillis(),
-                nodeCount = nodes.size,
-                uploadBytes = fetchResult.uploadBytes,
-                downloadBytes = fetchResult.downloadBytes,
-                totalBytes = fetchResult.totalBytes,
-                expireTimestamp = fetchResult.expireTimestamp
+        database.withTransaction {
+            proxyNodeDao.deleteBySubscription(subscription.id)
+            proxyNodeDao.insertAll(nodes)
+            subscriptionDao.update(
+                subscription.copy(
+                    updateTime = updatedAt,
+                    nodeCount = nodes.size,
+                    uploadBytes = prepared.fetchResult.uploadBytes,
+                    downloadBytes = prepared.fetchResult.downloadBytes,
+                    totalBytes = prepared.fetchResult.totalBytes,
+                    expireTimestamp = prepared.fetchResult.expireTimestamp
+                )
             )
-        )
+        }
     }
 
     suspend fun updateSubscriptionDetails(
@@ -169,6 +165,18 @@ class SubscriptionRepository(context: Context) {
     }
 
     suspend fun getNodeById(nodeId: Long): ProxyNode? = proxyNodeDao.getNodeById(nodeId)
+
+    private suspend fun prepareSubscriptionNodes(url: String): PreparedSubscriptionData {
+        val fetchResult = fetchSubscription(url)
+        val nodes = SubscriptionParser.parseSubscription(fetchResult.content)
+        if (nodes.isEmpty()) {
+            throw IllegalStateException(NO_VALID_NODES_ERROR)
+        }
+        return PreparedSubscriptionData(
+            fetchResult = fetchResult,
+            nodes = nodes
+        )
+    }
 
     private suspend fun fetchSubscription(url: String): SubscriptionFetchResult =
         suspendCancellableCoroutine { cont ->
@@ -227,6 +235,11 @@ class SubscriptionRepository(context: Context) {
     private fun normalizeUpdateInterval(interval: Long): Long {
         return interval.coerceAtLeast(MIN_UPDATE_INTERVAL_MS)
     }
+
+    private data class PreparedSubscriptionData(
+        val fetchResult: SubscriptionFetchResult,
+        val nodes: List<ProxyNode>
+    )
 
     companion object {
         const val MIN_UPDATE_INTERVAL_MS = 15 * 60 * 1000L

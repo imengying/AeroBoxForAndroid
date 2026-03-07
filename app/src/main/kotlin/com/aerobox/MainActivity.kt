@@ -17,12 +17,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aerobox.core.connection.ConnectionDiagnostics
+import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.ui.navigation.AppNavigation
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.PreferenceManager
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -92,7 +93,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleVpnFromIntent() {
-        if (AeroBoxVpnService.isRunning.value) {
+        if (AeroBoxVpnService.isServiceActive.value) {
             startService(
                 Intent(this, AeroBoxVpnService::class.java).apply {
                     this.action = AeroBoxVpnService.ACTION_STOP
@@ -125,39 +126,27 @@ class MainActivity : ComponentActivity() {
 
     private fun startVpnFromIntent() {
         lifecycleScope.launch {
-            runCatching {
-                val nodeId = PreferenceManager.lastSelectedNodeIdFlow(applicationContext).first()
-                val allNodes = AeroBoxApplication.database.proxyNodeDao().getAllNodes().first()
-                val node = allNodes.firstOrNull { it.id == nodeId } ?: allNodes.firstOrNull()
-
-                if (node == null) {
+            when (val result = VpnRepository(applicationContext).connectSelectedNode()) {
+                VpnConnectionResult.NoNodeAvailable -> {
                     Toast.makeText(
                         this@MainActivity,
                         R.string.add_node_first,
                         Toast.LENGTH_SHORT
                     ).show()
-                    return@launch
                 }
 
-                val vpnRepository = VpnRepository(applicationContext)
-                val config = vpnRepository.buildConfig(node)
-                val configError = vpnRepository.checkConfig(config)
-                if (configError != null) {
+                is VpnConnectionResult.Success -> Unit
+                is VpnConnectionResult.InvalidConfig,
+                is VpnConnectionResult.Failure -> {
                     Toast.makeText(
                         this@MainActivity,
-                        getString(R.string.operation_failed),
+                        ConnectionDiagnostics.userFacingFailureMessage(
+                            result = result,
+                            operationFailedText = getString(R.string.operation_failed)
+                        ),
                         Toast.LENGTH_SHORT
                     ).show()
-                    return@launch
                 }
-
-                vpnRepository.startVpn(config, node.id)
-            }.onFailure {
-                Toast.makeText(
-                    this@MainActivity,
-                    getString(R.string.operation_failed),
-                    Toast.LENGTH_SHORT
-                ).show()
             }
         }
     }

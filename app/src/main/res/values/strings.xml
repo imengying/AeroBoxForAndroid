@@ -6,6 +6,7 @@
     <string name="connect">连接</string>
     <string name="disconnect">断开连接</string>
     <string name="connected">已连接</string>
+    <string name="connecting">连接中</string>
     <string name="disconnected">未连接</string>
     <string name="upload">上传</string>
     <string name="download">下载</string>

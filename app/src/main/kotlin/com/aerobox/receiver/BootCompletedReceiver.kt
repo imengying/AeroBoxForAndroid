@@ -3,11 +3,11 @@ package com.aerobox.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat
+import android.util.Log
 import com.aerobox.AeroBoxApplication
-import com.aerobox.data.repository.SubscriptionRepository
+import com.aerobox.core.connection.ConnectionDiagnostics
+import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnRepository
-import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +15,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class BootCompletedReceiver : BroadcastReceiver() {
+    private companion object {
+        const val TAG = "BootCompletedReceiver"
+    }
+
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != Intent.ACTION_BOOT_COMPLETED) return
 
@@ -25,24 +29,25 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 if (!autoConnect) return@runCatching
                 if (android.net.VpnService.prepare(context) != null) return@runCatching
 
-                val subscriptionRepository = SubscriptionRepository(context)
-                val subscriptions = subscriptionRepository.getAllSubscriptions().first()
-                subscriptionRepository.refreshDueSubscriptions(subscriptions)
-
                 val nodeId = PreferenceManager.lastSelectedNodeIdFlow(context).first()
                 if (nodeId <= 0L) return@runCatching
 
                 val node = AeroBoxApplication.database.proxyNodeDao().getNodeById(nodeId) ?: return@runCatching
 
-                val vpnRepository = VpnRepository(context)
-                val config = vpnRepository.buildConfig(node)
-
-                val startIntent = Intent(context, AeroBoxVpnService::class.java).apply {
-                    action = AeroBoxVpnService.ACTION_START
-                    putExtra(AeroBoxVpnService.EXTRA_CONFIG, config)
-                    putExtra(AeroBoxVpnService.EXTRA_NODE_ID, node.id)
+                when (val result = VpnRepository(context).connectNode(node, refreshDueSubscriptions = true)) {
+                    is VpnConnectionResult.Success -> Unit
+                    VpnConnectionResult.NoNodeAvailable -> Unit
+                    is VpnConnectionResult.InvalidConfig,
+                    is VpnConnectionResult.Failure -> {
+                        Log.w(
+                            TAG,
+                            ConnectionDiagnostics.logFailureMessage(
+                                result,
+                                "Auto-connect failed after boot"
+                            )
+                        )
+                    }
                 }
-                ContextCompat.startForegroundService(context, startIntent)
             }
             pendingResult.finish()
         }

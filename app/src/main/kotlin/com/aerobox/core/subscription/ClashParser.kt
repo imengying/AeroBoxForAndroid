@@ -11,15 +11,25 @@ import org.yaml.snakeyaml.Yaml
 object ClashParser {
 
     fun parseClashYaml(content: String): List<ProxyNode> {
-        val root = runCatching { Yaml().load<Any?>(content) }.getOrNull() ?: return emptyList()
+        val root = loadYamlRoot(content) ?: return emptyList()
         val proxies = value(root, "proxies") as? List<*> ?: return emptyList()
         return proxies.mapNotNull { parseProxyItem(it as? Map<*, *>) }
     }
 
     fun isClashYaml(content: String): Boolean {
-        return content.contains("proxies:") &&
-                content.contains("- name:") &&
-                (content.contains("type:") || content.contains("server:"))
+        if (!content.contains("proxies:")) return false
+        val root = loadYamlRoot(content) ?: return false
+        val proxies = value(root, "proxies") as? List<*> ?: return false
+        return proxies.any { item ->
+            val proxy = item as? Map<*, *> ?: return@any false
+            stringValue(proxy, "name") != null &&
+                (stringValue(proxy, "type") != null || stringValue(proxy, "server") != null)
+        }
+    }
+
+
+    private fun loadYamlRoot(content: String): Any? {
+        return runCatching { Yaml().load<Any?>(content) }.getOrNull()
     }
 
     private fun parseProxyItem(map: Map<*, *>?): ProxyNode? {

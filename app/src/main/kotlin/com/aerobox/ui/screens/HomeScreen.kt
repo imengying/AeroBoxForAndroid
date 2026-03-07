@@ -51,8 +51,8 @@ import com.aerobox.data.model.RoutingMode
 import com.aerobox.ui.components.ConnectionCard
 import com.aerobox.ui.components.NodeListSheet
 import com.aerobox.ui.components.TrafficStatsCard
+import com.aerobox.core.connection.ConnectionFixAction
 import com.aerobox.utils.showToast
-import com.aerobox.viewmodel.ConnectionFixAction
 import com.aerobox.viewmodel.HomeViewModel
 
 @Composable
@@ -60,11 +60,13 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val context = LocalContext.current
     val vpnState by viewModel.vpnState.collectAsStateWithLifecycle()
     val trafficStats by viewModel.trafficStats.collectAsStateWithLifecycle()
+    val isConnecting by viewModel.isConnecting.collectAsStateWithLifecycle()
     val selectedNode by viewModel.selectedNode.collectAsStateWithLifecycle()
     val connectionDuration by viewModel.connectionDuration.collectAsStateWithLifecycle()
     val allNodes by viewModel.allNodes.collectAsStateWithLifecycle()
     val routingMode by viewModel.routingMode.collectAsStateWithLifecycle()
     val detectedIp by viewModel.detectedIp.collectAsStateWithLifecycle()
+    val egressLatency by viewModel.egressLatency.collectAsStateWithLifecycle()
     val connectionIssue by viewModel.connectionIssue.collectAsStateWithLifecycle()
     var showNodeList by remember { mutableStateOf(false) }
 
@@ -100,9 +102,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         item {
             ConnectionCard(
                 isConnected = vpnState.isConnected,
+                isConnecting = isConnecting,
                 connectionDuration = connectionDuration,
                 onToggleConnection = {
-                    if (vpnState.isConnected) {
+                    if (vpnState.isConnected || isConnecting) {
                         viewModel.toggleConnection(context)
                     } else {
                         val permissionIntent = VpnService.prepare(context)
@@ -121,7 +124,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         }
 
         item {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
         }
 
         item {
@@ -147,6 +150,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             ) {
                 NetworkDetectCard(
                     ip = detectedIp,
+                    egressLatency = egressLatency,
                     onClick = { viewModel.refreshNetworkInfo() },
                     modifier = Modifier.weight(0.5f).height(100.dp)
                 )
@@ -250,6 +254,7 @@ private fun ensureNotificationPermissionThenStart(
 @Composable
 private fun NetworkDetectCard(
     ip: String,
+    egressLatency: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -279,6 +284,14 @@ private fun NetworkDetectCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 4.dp)
+            )
+            Text(
+                text = "出口延迟：$egressLatency",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp)
             )
         }
     }
