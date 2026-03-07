@@ -580,7 +580,7 @@ object ConfigGenerator {
                 node.mtu?.let { outbound.put("mtu", it) }
                 if (!node.reserved.isNullOrBlank()) {
                     // reserved can be "1,2,3" or a base64 string
-                    val parts = node.reserved!!.split(",")
+                    val parts = node.reserved.split(",")
                     if (parts.size == 3 && parts.all { it.trim().toIntOrNull() != null }) {
                         val arr = JSONArray()
                         parts.forEach { arr.put(it.trim().toInt()) }
