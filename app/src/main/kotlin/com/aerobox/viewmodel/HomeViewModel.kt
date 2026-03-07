@@ -20,6 +20,7 @@ import com.aerobox.data.repository.SubscriptionRepository
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.VpnStateManager
+import com.aerobox.utils.NetworkUtils
 import com.aerobox.utils.PreferenceManager
 import com.aerobox.utils.formatDuration
 import com.aerobox.utils.showToast
