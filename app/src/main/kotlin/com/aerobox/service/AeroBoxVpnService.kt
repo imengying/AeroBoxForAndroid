@@ -278,7 +278,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     override fun autoDetectInterfaceControl(fd: Int) {
         if (!protect(fd)) {
-            RuntimeLogBuffer.append("warn", "protect($fd) failed")
+            RuntimeLogBuffer.append("warn", "protect(fd) failed")
         }
     }
 
@@ -330,7 +330,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             }
             RuntimeLogBuffer.append(
                 "debug",
-                "Tun DNS=${options.dnsServerAddress.value}, ipv4=${inet4Addresses.size}, ipv6=${inet6Addresses.size}, " +
+                "Tun prepared: ipv4=${inet4Addresses.size}, ipv6=${inet6Addresses.size}, " +
                     "forcedDefaultRoutes=true"
             )
         }

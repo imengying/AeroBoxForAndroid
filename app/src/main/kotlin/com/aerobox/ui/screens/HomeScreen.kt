@@ -100,8 +100,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         item {
             ConnectionCard(
                 isConnected = vpnState.isConnected,
-                nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
-                nodeAddress = selectedNode?.type?.displayName() ?: "--",
                 connectionDuration = connectionDuration,
                 onToggleConnection = {
                     if (vpnState.isConnected) {
@@ -119,13 +117,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                         }
                     }
                 },
-                onNodeNameClick = { showNodeList = true },
-                showNodeSelector = false
             )
         }
 
         item {
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         item {

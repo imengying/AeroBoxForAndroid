@@ -41,7 +41,7 @@ object ConfigGenerator {
         config.put(
             "log",
             JSONObject()
-                .put("level", "debug")
+                .put("level", "info")
                 .put("timestamp", true)
         )
 
@@ -570,33 +570,6 @@ object ConfigGenerator {
                 outbound.put("uuid", node.uuid ?: "")
                 outbound.put("password", node.password ?: "")
                 outbound.put("tls", buildTlsObject(node))
-            }
-
-            ProxyType.WIREGUARD -> {
-                outbound.put("type", "wireguard")
-                node.privateKey?.let { outbound.put("private_key", it) }
-                node.localAddress?.let {
-                    outbound.put("local_address", JSONArray().put(it))
-                }
-                node.mtu?.let { outbound.put("mtu", it) }
-                if (!node.reserved.isNullOrBlank()) {
-                    // reserved can be "1,2,3" or a base64 string
-                    val parts = node.reserved.split(",")
-                    if (parts.size == 3 && parts.all { it.trim().toIntOrNull() != null }) {
-                        val arr = JSONArray()
-                        parts.forEach { arr.put(it.trim().toInt()) }
-                        outbound.put("reserved", arr)
-                    }
-                }
-                // Peer configuration
-                val peer = JSONObject()
-                    .put("server", node.server)
-                    .put("server_port", node.port)
-                node.peerPublicKey?.let { peer.put("public_key", it) }
-                    ?: node.publicKey?.let { peer.put("public_key", it) }
-                node.preSharedKey?.let { peer.put("pre_shared_key", it) }
-                peer.put("allowed_ips", JSONArray().put("0.0.0.0/0").put("::/0"))
-                outbound.put("peers", JSONArray().put(peer))
             }
 
             ProxyType.SOCKS -> {

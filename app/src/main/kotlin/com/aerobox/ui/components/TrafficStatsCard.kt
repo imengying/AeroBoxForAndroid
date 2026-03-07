@@ -100,7 +100,7 @@ private fun SpeedMetric(
         ) {
             Text(
                 text = prefix,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -115,7 +115,7 @@ private fun SpeedMetric(
         }
         Text(
             text = speed,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,

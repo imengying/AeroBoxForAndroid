@@ -61,7 +61,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VpnState())
 
     val routingMode: StateFlow<RoutingMode> = PreferenceManager.routingModeFlow(appContext)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.RULE_BASED)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.GLOBAL_PROXY)
 
     fun setRoutingMode(mode: RoutingMode) {
         viewModelScope.launch {
@@ -261,22 +261,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun testSelectedNodeLatency(onResult: (Int) -> Unit = {}) {
-        val node = selectedNode.value ?: return
-        viewModelScope.launch {
-            val latency = testNodeLatency(node)
-            subscriptionRepository.updateNodeLatency(node.id, latency)
-            onResult(latency)
-        }
-    }
-
-    fun updateAllSubscriptions() {
-        viewModelScope.launch {
-            val subscriptions = subscriptionRepository.getAllSubscriptions().first()
-            subscriptionRepository.refreshAllSubscriptions(subscriptions)
-        }
-    }
-
     fun testAllNodesLatency() {
         viewModelScope.launch {
             val jobs = allNodes.value.map { node ->
@@ -350,21 +334,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun fetchPublicIp(node: ProxyNode?): String = withContext(Dispatchers.IO) {
-        val ipv4Endpoints = listOf(
+        val directIpv4Endpoints = listOf(
+            "https://4.ipw.cn",
+            "https://api.ip.sb/ip"
+        )
+        val directIpv6Endpoints = listOf(
+            "https://6.ipw.cn",
+            "https://api6.ipify.org"
+        )
+        val proxiedIpv4Endpoints = listOf(
             "https://api4.ipify.org",
             "https://v4.ident.me"
         )
-        val ipv6Endpoints = listOf(
+        val proxiedIpv6Endpoints = listOf(
             "https://api6.ipify.org",
             "https://v6.ident.me"
         )
 
         val preferIpv6Only = isIpv6Literal(node?.server.orEmpty())
-        val endpointGroups = if (preferIpv6Only) {
-            listOf(ipv6Endpoints)
-        } else {
-            listOf(ipv4Endpoints, ipv6Endpoints)
-        }
+        val useProxyFriendlyEndpoints = vpnState.value.isConnected
+        val ipv4Endpoints = if (useProxyFriendlyEndpoints) proxiedIpv4Endpoints else directIpv4Endpoints + proxiedIpv4Endpoints
+        val ipv6Endpoints = if (useProxyFriendlyEndpoints) proxiedIpv6Endpoints else directIpv6Endpoints + proxiedIpv6Endpoints
+        val endpointGroups = if (preferIpv6Only) listOf(ipv6Endpoints) else listOf(ipv4Endpoints, ipv6Endpoints)
 
         for (group in endpointGroups) {
             for (endpoint in group) {

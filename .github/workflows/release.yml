@@ -15,7 +15,7 @@ jobs:
     env:
       ANDROID_NDK_VERSION: 28.0.13004108
       GOMOBILE_VERSION: v0.1.12
-      LIBBOX_BUILD_TAGS: with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api
+      LIBBOX_BUILD_TAGS: with_quic,with_utls
 
     steps:
       - name: Checkout
@@ -112,17 +112,23 @@ jobs:
             popd
           fi
 
-      - name: Decode signing keystore (optional)
+      - name: Validate and decode signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
-            echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/release.jks"
-            echo "AEROBOX_KEYSTORE_PATH=${RUNNER_TEMP}/release.jks" >> "${GITHUB_ENV}"
-          else
-            echo "No signing keystore configured, will build unsigned release APK."
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ] || \
+             [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ] || \
+             [ -z "${ANDROID_KEY_ALIAS:-}" ] || \
+             [ -z "${ANDROID_KEY_PASSWORD:-}" ]; then
+            echo "::error::Missing Android release signing secrets"
+            exit 1
           fi
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/release.jks"
+          echo "AEROBOX_KEYSTORE_PATH=${RUNNER_TEMP}/release.jks" >> "${GITHUB_ENV}"
 
       - name: Derive version from tag
         run: |
@@ -212,15 +218,11 @@ jobs:
           EXTRA_ARGS=(
             "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}"
             "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}"
+            "-Pandroid.injected.signing.store.file=${KEYSTORE_PATH}"
+            "-Pandroid.injected.signing.store.password=${KEYSTORE_PASSWORD}"
+            "-Pandroid.injected.signing.key.alias=${KEY_ALIAS}"
+            "-Pandroid.injected.signing.key.password=${KEY_PASSWORD}"
           )
-          if [ -n "${KEYSTORE_PATH:-}" ]; then
-            EXTRA_ARGS+=(
-              "-Pandroid.injected.signing.store.file=${KEYSTORE_PATH}"
-              "-Pandroid.injected.signing.store.password=${KEYSTORE_PASSWORD}"
-              "-Pandroid.injected.signing.key.alias=${KEY_ALIAS}"
-              "-Pandroid.injected.signing.key.password=${KEY_PASSWORD}"
-            )
-          fi
           gradle --stacktrace :app:assembleRelease "${EXTRA_ARGS[@]}"
 
       - name: Rename APKs

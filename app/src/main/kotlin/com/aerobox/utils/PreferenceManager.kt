@@ -56,7 +56,7 @@ object PreferenceManager {
 
     fun routingModeFlow(context: Context): Flow<RoutingMode> =
         context.dataStore.data.map {
-            runCatching { RoutingMode.valueOf(it[ROUTING_MODE] ?: "") }.getOrDefault(RoutingMode.RULE_BASED)
+            runCatching { RoutingMode.valueOf(it[ROUTING_MODE] ?: "") }.getOrDefault(RoutingMode.GLOBAL_PROXY)
         }
 
     fun remoteDnsFlow(context: Context): Flow<String> =

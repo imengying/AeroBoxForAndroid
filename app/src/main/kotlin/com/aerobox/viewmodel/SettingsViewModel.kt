@@ -23,7 +23,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     // Phase 2
     val routingMode: StateFlow<RoutingMode> = PreferenceManager.routingModeFlow(appContext)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.RULE_BASED)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.GLOBAL_PROXY)
 
     val remoteDns: StateFlow<String> = PreferenceManager.remoteDnsFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "8.8.8.8")

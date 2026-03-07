@@ -321,7 +321,6 @@ object SubscriptionParser {
                 typeRaw.contains("trojan") -> ProxyType.TROJAN
                 typeRaw.contains("hysteria2") || typeRaw == "hy2" -> ProxyType.HYSTERIA2
                 typeRaw.contains("tuic") -> ProxyType.TUIC
-                typeRaw.contains("wireguard") || typeRaw == "wg" -> ProxyType.WIREGUARD
                 typeRaw == "socks" || typeRaw == "socks5" -> ProxyType.SOCKS
                 typeRaw == "http" || typeRaw == "https" -> ProxyType.HTTP
                 else -> continue
@@ -401,12 +400,6 @@ object SubscriptionParser {
                     transport?.optString("packetEncoding", "")?.ifBlank { null }
                 ),
                 username = obj.optString("username", "").ifBlank { null },
-                privateKey = obj.optString("private_key", "").ifBlank { null },
-                localAddress = obj.optString("local_address", "").ifBlank { null },
-                peerPublicKey = obj.optString("peer_public_key", "").ifBlank { null },
-                preSharedKey = obj.optString("pre_shared_key", "").ifBlank { null },
-                reserved = obj.optString("reserved", "").ifBlank { null },
-                mtu = obj.optInt("mtu", 0).takeIf { it > 0 },
                 allowInsecure = obj.optBoolean("allowInsecure", false)
                         || obj.optBoolean("allow_insecure", false)
                         || tlsObject?.optBoolean("insecure", false) == true

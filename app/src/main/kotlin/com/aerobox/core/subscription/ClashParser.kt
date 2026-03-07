@@ -43,7 +43,6 @@ object ClashParser {
             "trojan" -> ProxyType.TROJAN
             "hysteria2", "hy2" -> ProxyType.HYSTERIA2
             "tuic" -> ProxyType.TUIC
-            "wireguard", "wg" -> ProxyType.WIREGUARD
             "socks", "socks5" -> ProxyType.SOCKS
             "http", "https" -> ProxyType.HTTP
             else -> return null
@@ -162,12 +161,6 @@ object ClashParser {
                 stringValue(map, "packet_encoding")
             ),
             username = stringValue(map, "username"),
-            privateKey = stringValue(map, "private-key"),
-            localAddress = firstNonBlank(stringValue(map, "ip"), stringValue(map, "local-address")),
-            peerPublicKey = firstNonBlank(stringValue(map, "peer-public-key"), publicKey),
-            preSharedKey = firstNonBlank(stringValue(map, "pre-shared-key"), stringValue(map, "preshared-key")),
-            reserved = joinedValue(map, "reserved"),
-            mtu = intValue(map, "mtu"),
             allowInsecure = insecure
         )
     }
