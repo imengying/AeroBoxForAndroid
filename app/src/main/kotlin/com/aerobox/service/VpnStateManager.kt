@@ -35,6 +35,14 @@ object VpnStateManager {
         AeroBoxTileService.requestRefresh()
     }
 
+
+    fun updateCurrentNode(node: ProxyNode?) {
+        if (!_vpnState.value.isConnected) return
+        _vpnState.value = _vpnState.value.copy(currentNode = node)
+        AeroBoxTileService.showActive(node?.name)
+        AeroBoxTileService.requestRefresh()
+    }
+
     fun updateLastError(error: String?) {
         _lastError.value = error?.takeIf { it.isNotBlank() }
     }

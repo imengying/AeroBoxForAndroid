@@ -66,7 +66,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val allNodes by viewModel.allNodes.collectAsStateWithLifecycle()
     val routingMode by viewModel.routingMode.collectAsStateWithLifecycle()
     val detectedIp by viewModel.detectedIp.collectAsStateWithLifecycle()
-    val egressLatency by viewModel.egressLatency.collectAsStateWithLifecycle()
     val connectionIssue by viewModel.connectionIssue.collectAsStateWithLifecycle()
     var showNodeList by remember { mutableStateOf(false) }
 
@@ -100,39 +99,35 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            ConnectionCard(
-                isConnected = vpnState.isConnected,
-                isConnecting = isConnecting,
-                connectionDuration = connectionDuration,
-                onToggleConnection = {
-                    if (vpnState.isConnected || isConnecting) {
-                        viewModel.toggleConnection(context)
-                    } else {
-                        val permissionIntent = VpnService.prepare(context)
-                        if (permissionIntent != null) {
-                            permissionLauncher.launch(permissionIntent)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ConnectionCard(
+                    isConnected = vpnState.isConnected,
+                    isConnecting = isConnecting,
+                    connectionDuration = connectionDuration,
+                    onToggleConnection = {
+                        if (vpnState.isConnected || isConnecting) {
+                            viewModel.toggleConnection(context)
                         } else {
-                            ensureNotificationPermissionThenStart(
-                                context = context,
-                                onContinue = { viewModel.onVpnPermissionGranted(context) },
-                                onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
-                            )
+                            val permissionIntent = VpnService.prepare(context)
+                            if (permissionIntent != null) {
+                                permissionLauncher.launch(permissionIntent)
+                            } else {
+                                ensureNotificationPermissionThenStart(
+                                    context = context,
+                                    onContinue = { viewModel.onVpnPermissionGranted(context) },
+                                    onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
+                                )
+                            }
                         }
-                    }
-                },
-            )
-        }
+                    },
+                )
 
-        item {
-            Spacer(modifier = Modifier.height(6.dp))
-        }
-
-        item {
-            NodeSelectorCard(
-                nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
-                nodeAddress = selectedNode?.type?.displayName() ?: "--",
-                onClick = { showNodeList = true }
-            )
+                NodeSelectorCard(
+                    nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
+                    nodeAddress = selectedNode?.type?.displayName() ?: "--",
+                    onClick = { showNodeList = true }
+                )
+            }
         }
 
         item {
@@ -150,7 +145,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             ) {
                 NetworkDetectCard(
                     ip = detectedIp,
-                    egressLatency = egressLatency,
                     onClick = { viewModel.refreshNetworkInfo() },
                     modifier = Modifier.weight(0.5f).height(100.dp)
                 )
@@ -183,7 +177,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 viewModel.selectNode(node)
                 showNodeList = false
             },
-            onTestAll = { viewModel.testAllNodesLatency() },
+            onTestSubscription = { viewModel.testSubscriptionNodesLatency(it) },
             onTestNode = { node -> viewModel.testSingleNodeLatency(node) },
             onDismiss = { showNodeList = false }
         )
@@ -254,7 +248,6 @@ private fun ensureNotificationPermissionThenStart(
 @Composable
 private fun NetworkDetectCard(
     ip: String,
-    egressLatency: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -284,14 +277,6 @@ private fun NetworkDetectCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 4.dp)
-            )
-            Text(
-                text = "出口延迟：$egressLatency",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp)
             )
         }
     }

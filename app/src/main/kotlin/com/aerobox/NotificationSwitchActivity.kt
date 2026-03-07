@@ -36,6 +36,7 @@ import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnRepository
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.PreferenceManager
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class NotificationSwitchActivity : ComponentActivity() {
@@ -68,12 +69,14 @@ class NotificationSwitchActivity : ComponentActivity() {
 
     private fun switchToNode(node: ProxyNode) {
         lifecycleScope.launch {
+            val previousNodeId = PreferenceManager.lastSelectedNodeIdFlow(applicationContext).first()
             PreferenceManager.setLastSelectedNodeId(applicationContext, node.id)
             when (val result = VpnRepository(applicationContext).switchToNode(node)) {
                 is VpnConnectionResult.Success -> Unit
                 VpnConnectionResult.NoNodeAvailable,
                 is VpnConnectionResult.InvalidConfig,
                 is VpnConnectionResult.Failure -> {
+                    PreferenceManager.setLastSelectedNodeId(applicationContext, previousNodeId)
                     Toast.makeText(
                         this@NotificationSwitchActivity,
                         ConnectionDiagnostics.userFacingFailureMessage(

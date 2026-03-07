@@ -109,33 +109,14 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 }
                 userRequestedStop = false
                 reconnectAttempts = 0
-                pendingSwitchConfig = config
-                pendingSwitchNodeId = nodeId
-                if (commandServer != null && (VpnStateManager.serviceActive.value || vpnInterface != null)) {
-                    RuntimeLogBuffer.append("info", "Switching node: restarting service")
-                    runCatching { commandServer?.closeService() }
-                        .onFailure {
-                            RuntimeLogBuffer.append(
-                                "warn",
-                                "Switch restart failed, falling back to reload: ${it.message ?: it}"
-                            )
-                            pendingSwitchConfig = null
-                            pendingSwitchNodeId = -1L
-                            lastConfig = config
-                            if (nodeId > 0L) {
-                                lastNodeId = nodeId
-                            }
-                            startVpn(config)
-                        }
-                } else {
-                    lastConfig = config
-                    if (nodeId > 0L) {
-                        lastNodeId = nodeId
-                    }
-                    pendingSwitchConfig = null
-                    pendingSwitchNodeId = -1L
-                    startVpn(config)
+                pendingSwitchConfig = null
+                pendingSwitchNodeId = -1L
+                lastConfig = config
+                if (nodeId > 0L) {
+                    lastNodeId = nodeId
                 }
+                RuntimeLogBuffer.append("info", "Switching node: reloading service")
+                startVpn(config)
             }
             ACTION_STOP -> {
                 userRequestedStop = true
@@ -305,8 +286,22 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
 
     override fun serviceReload() {
-        // Called by libbox for hot-reload — not used in our simple flow
         RuntimeLogBuffer.append("info", "Service reloaded")
+        serviceScope.launch {
+            val currentNode = resolveCurrentNode(null)
+            VpnStateManager.updateCurrentNode(currentNode)
+            if (VpnStateManager.vpnState.value.isConnected) {
+                val state = VpnStateManager.vpnState.value
+                val upSpeed = NetworkUtils.formatBytes(state.uploadSpeed) + "/s"
+                val downSpeed = NetworkUtils.formatBytes(state.downloadSpeed) + "/s"
+                val notification = buildNotification(
+                    contentText = "↑ $upSpeed  ↓ $downSpeed",
+                    connected = true
+                )
+                val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+                nm.notify(NOTIFICATION_ID, notification)
+            }
+        }
     }
 
     override fun getSystemProxyStatus(): SystemProxyStatus {

@@ -91,9 +91,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _detectedIp = MutableStateFlow("点击检测出口 IP")
     val detectedIp: StateFlow<String> = _detectedIp.asStateFlow()
 
-    private val _egressLatency = MutableStateFlow("未连接")
-    val egressLatency: StateFlow<String> = _egressLatency.asStateFlow()
-
     private val _connectionIssue = MutableStateFlow<ConnectionIssue?>(null)
     val connectionIssue: StateFlow<ConnectionIssue?> = _connectionIssue.asStateFlow()
 
@@ -229,7 +226,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 is VpnConnectionResult.Failure -> {
                     connectWatchdogJob?.cancel()
                     connectWatchdogJob = null
-                    _egressLatency.value = "未连接"
                     val details = result.throwable.message?.takeIf { msg -> msg.isNotBlank() }
                     if (details != null) {
                         handleConnectionFailure(context, details)
@@ -248,7 +244,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun stopConnection() {
         connectWatchdogJob?.cancel()
         connectWatchdogJob = null
-        _egressLatency.value = "未连接"
         runCatching { vpnRepository.stopVpn() }
         VpnStateManager.clearLastError()
     }
@@ -265,11 +260,40 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectNode(node: ProxyNode) {
+        val previousNode = _selectedNode.value
         _selectedNode.value = node
-        refreshNetworkInfo()
+        if (!vpnState.value.isConnected) {
+            refreshNetworkInfo()
+        }
         viewModelScope.launch {
             PreferenceManager.setLastSelectedNodeId(appContext, node.id)
+            if (!vpnState.value.isConnected) {
+                return@launch
+            }
+            when (val result = vpnRepository.switchToNode(node)) {
+                is VpnConnectionResult.Success -> Unit
+                is VpnConnectionResult.InvalidConfig -> {
+                    restoreSelectedNode(previousNode)
+                    handleConnectionFailure(appContext, result.error)
+                }
+                is VpnConnectionResult.Failure -> {
+                    restoreSelectedNode(previousNode)
+                    val details = result.throwable.message?.takeIf { it.isNotBlank() }
+                    if (details != null) {
+                        handleConnectionFailure(appContext, details)
+                    } else {
+                        appContext.showToast(appContext.getString(com.aerobox.R.string.operation_failed))
+                    }
+                }
+                VpnConnectionResult.NoNodeAvailable -> restoreSelectedNode(previousNode)
+            }
         }
+    }
+
+    private suspend fun restoreSelectedNode(node: ProxyNode?) {
+        _selectedNode.value = node
+        PreferenceManager.setLastSelectedNodeId(appContext, node?.id ?: -1L)
+        refreshNetworkInfo()
     }
 
     fun testAllNodesLatency() {
@@ -284,6 +308,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
             val updatedNodes = nodeDao.getAllNodes().first()
             val bestNode = updatedNodes
+                .filter { it.latency > 0 }
+                .minByOrNull { it.latency }
+            if (bestNode != null) {
+                selectNode(bestNode)
+            }
+        }
+    }
+
+
+    fun testSubscriptionNodesLatency(nodes: List<ProxyNode>) {
+        viewModelScope.launch {
+            val jobs = nodes.map { node ->
+                launch {
+                    val latency = testNodeLatency(node)
+                    subscriptionRepository.updateNodeLatency(node.id, latency)
+                }
+            }
+            jobs.forEach { it.join() }
+
+            val updatedNodes = nodeDao.getAllNodes().first()
+            val bestNode = updatedNodes
+                .filter { candidate -> nodes.any { it.id == candidate.id } }
                 .filter { it.latency > 0 }
                 .minByOrNull { it.latency }
             if (bestNode != null) {
@@ -308,9 +354,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         detectIpJob = viewModelScope.launch {
             val networkNode = vpnState.value.currentNode ?: selectedNode.value
             _detectedIp.value = "检测中..."
-            _egressLatency.value = if (vpnState.value.isConnected) "检测中..." else "未连接"
             _detectedIp.value = fetchPublicIp(networkNode)
-            _egressLatency.value = fetchEgressLatency()
         }
     }
 
@@ -340,15 +384,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 context.showToast("修复失败，请检查网络后重试")
             }
             _connectionIssue.value = null
-        }
-    }
-
-    private suspend fun fetchEgressLatency(): String = withContext(Dispatchers.IO) {
-        if (!vpnState.value.isConnected) return@withContext "未连接"
-        val latency = com.aerobox.utils.NetworkUtils.urlTest()
-        when {
-            latency > 0 -> "${latency}ms"
-            else -> "检测失败"
         }
     }
 

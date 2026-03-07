@@ -13,30 +13,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,8 +45,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aerobox.data.model.ProxyNode
 
-private enum class SortMode { NAME, LATENCY }
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun NodeListSheet(
@@ -58,92 +52,29 @@ fun NodeListSheet(
     subscriptionNames: Map<Long, String> = emptyMap(),
     selectedNodeId: Long,
     onNodeSelected: (ProxyNode) -> Unit,
-    onTestAll: () -> Unit,
+    onTestSubscription: (List<ProxyNode>) -> Unit,
     onTestNode: (ProxyNode) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var searchQuery by remember { mutableStateOf("") }
-    var sortMode by remember { mutableStateOf(SortMode.LATENCY) }
-
-    val filteredNodes by remember(nodes, searchQuery) {
-        derivedStateOf {
-            if (searchQuery.isBlank()) nodes
-            else nodes.filter {
-                it.name.contains(searchQuery, ignoreCase = true) ||
-                    it.server.contains(searchQuery, ignoreCase = true) ||
-                    it.type.name.contains(searchQuery, ignoreCase = true)
-            }
-        }
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "节点列表 (${filteredNodes.size}/${nodes.size})",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                TextButton(onClick = onTestAll) {
-                    Icon(
-                        Icons.Filled.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+            if (nodes.isEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "节点列表",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(Modifier.width(4.dp))
-                    Text("全部测速")
                 }
-            }
-
-            // Search bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("搜索节点名称、服务器、类型") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Filled.Close, contentDescription = null)
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                )
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            // Sort chips
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = sortMode == SortMode.LATENCY,
-                    onClick = { sortMode = SortMode.LATENCY },
-                    label = { Text("按延迟") }
-                )
-                FilterChip(
-                    selected = sortMode == SortMode.NAME,
-                    onClick = { sortMode = SortMode.NAME },
-                    label = { Text("按名称") }
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            if (filteredNodes.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -151,48 +82,94 @@ fun NodeListSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (nodes.isEmpty()) "暂无节点，请先添加订阅" else "未找到匹配的节点",
+                        text = "暂无节点，请先添加订阅",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                val grouped = filteredNodes
-                    .groupBy { it.subscriptionId }
-                    .toList()
-                    .sortedBy { (subId, _) -> subscriptionNames[subId] ?: "未分组" }
+                val grouped = remember(nodes, subscriptionNames) {
+                    nodes
+                        .groupBy { it.subscriptionId }
+                        .filterValues { groupNodes -> groupNodes.isNotEmpty() }
+                        .toList()
+                        .sortedWith(
+                            compareBy<Pair<Long, List<ProxyNode>>> { (subId, _) ->
+                                if (subId == 0L || !subscriptionNames.containsKey(subId)) 1 else 0
+                            }.thenBy { (subId, _) -> subscriptionNames[subId] ?: "未分组" }
+                        )
+                }
+                var selectedSubscriptionId by remember { mutableStateOf<Long?>(null) }
+                LaunchedEffect(grouped, selectedNodeId) {
+                    val selectedGroupId = grouped.firstOrNull { (_, groupNodes) ->
+                        groupNodes.any { it.id == selectedNodeId }
+                    }?.first
+                    val hasCurrent = grouped.any { (subId, _) -> subId == selectedSubscriptionId }
+                    selectedSubscriptionId = when {
+                        selectedGroupId != null -> selectedGroupId
+                        hasCurrent -> selectedSubscriptionId
+                        else -> grouped.firstOrNull()?.first
+                    }
+                }
+                val currentGroupNodes = grouped.firstOrNull { (subId, _) ->
+                    subId == selectedSubscriptionId
+                }?.second.orEmpty()
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "节点列表",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(onClick = { onTestSubscription(currentGroupNodes) }) {
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("测速")
+                    }
+                }
+
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(grouped, key = { it.first }) { (subId, groupNodes) ->
+                        FilterChip(
+                            selected = subId == selectedSubscriptionId,
+                            onClick = { selectedSubscriptionId = subId },
+                            label = {
+                                Text(
+                                    text = subscriptionNames[subId] ?: "未分组",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            border = null
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
                 LazyColumn(
                     modifier = Modifier.height(400.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    grouped.forEach { (subId, groupNodes) ->
-                        val sortedGroupNodes = when (sortMode) {
-                            SortMode.LATENCY -> groupNodes.sortedBy {
-                                if (it.latency < 0) Int.MAX_VALUE else it.latency
-                            }
-                            SortMode.NAME -> groupNodes.sortedBy { it.name.lowercase() }
-                        }
-                        item(key = "header_$subId") {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.surfaceContainerLow
-                            ) {
-                                Text(
-                                    text = subscriptionNames[subId] ?: "未分组",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp)
-                                )
-                            }
-                        }
-                        items(sortedGroupNodes, key = { it.id }) { node ->
-                            NodeItem(
-                                node = node,
-                                isSelected = node.id == selectedNodeId,
-                                onClick = { onNodeSelected(node) },
-                                onTestLatency = { onTestNode(node) }
-                            )
-                        }
+                    items(currentGroupNodes, key = { it.id }) { node ->
+                        NodeItem(
+                            node = node,
+                            isSelected = node.id == selectedNodeId,
+                            onClick = { onNodeSelected(node) },
+                            onTestLatency = { onTestNode(node) }
+                        )
                     }
                 }
             }
