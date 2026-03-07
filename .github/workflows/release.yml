@@ -81,6 +81,19 @@ jobs:
           SING_VERSION="${SING_BOX_VERSION#v}"
           echo "Building libbox ${SING_VERSION} with tags: ${LIBBOX_BUILD_TAGS}"
 
+          # Keep platform log callbacks, but do not force-enable clash-api for them.
+          # The app does not use libbox's Clash API gRPC surface; it only needs runtime logs.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("box.go")
+          text = path.read_text()
+          old = """\tif experimentalOptions.ClashAPI != nil || options.PlatformLogWriter != nil {\n\t\tneedClashAPI = true\n\t}\n"""
+          new = """\tif experimentalOptions.ClashAPI != nil {\n\t\tneedClashAPI = true\n\t}\n"""
+          if old not in text:
+              raise SystemExit("Failed to patch needClashAPI condition in box.go")
+          path.write_text(text.replace(old, new, 1))
+          PY
+
           # Build with gomobile bind directly (no need to patch build_libbox)
           mkdir -p "${GITHUB_WORKSPACE}/app/build/libbox"
           gomobile bind -v \
