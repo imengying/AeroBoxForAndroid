@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.geo.GeoAssetManager
+import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.service.AeroBoxVpnService
@@ -38,14 +39,23 @@ class VpnRepository(private val context: Context) {
     /**
      * Validate config via libbox. Returns null if valid, error message otherwise.
      */
-    fun checkConfig(config: String): String? =
-        SingBoxNative.checkConfig(config)
+    fun checkConfig(config: String): String? {
+        val error = SingBoxNative.checkConfig(config)
+        if (error != null) {
+            RuntimeLogBuffer.append("error", "Config check failed: $error")
+        }
+        return error
+    }
 
     /**
      * Build a sing-box config JSON string for the given node,
      * reading all user preferences (routing, DNS, IPv6, geo paths, etc.).
      */
     suspend fun buildConfig(node: ProxyNode): String {
+        RuntimeLogBuffer.append(
+            "info",
+            "Generating config for ${node.name.ifBlank { "unnamed node" }}"
+        )
         withContext(Dispatchers.IO) {
             GeoAssetManager.ensureBundledAssets(context)
         }

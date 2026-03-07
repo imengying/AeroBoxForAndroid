@@ -132,6 +132,7 @@ object ConfigGenerator {
                 dnsRules.put(
                     JSONObject()
                         .put("rule_set", JSONArray().put("geosite-$country"))
+                        .put("action", "route")
                         .put("server", "local")
                 )
             }
@@ -444,6 +445,7 @@ object ConfigGenerator {
                     rules.put(
                         JSONObject()
                             .put("rule_set", JSONArray().put("geosite-cn"))
+                            .put("action", "route")
                             .put("outbound", "direct")
                     )
                 }
@@ -452,6 +454,7 @@ object ConfigGenerator {
                     rules.put(
                         JSONObject()
                             .put("rule_set", JSONArray().put("geoip-cn"))
+                            .put("action", "route")
                             .put("outbound", "direct")
                     )
                 }
@@ -506,12 +509,7 @@ object ConfigGenerator {
                 JSONObject()
                     .put("protocol", "dns")
                     .put("action", "hijack-dns")
-            )
-            .put(
-                JSONObject()
-                    .put("ip_is_private", true)
-                    .put("outbound", "direct")
-            )
+                )
             .put(
                 JSONObject()
                     .put("ip_cidr", JSONArray().put("224.0.0.0/3").put("ff00::/8"))

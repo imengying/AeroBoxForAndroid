@@ -24,50 +24,22 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-/**
- * Simple log buffer that collects sing-box log lines in memory.
- * In a real implementation this would read from the native library callback.
- */
-object LogBuffer {
-    private val _lines = mutableStateListOf<LogEntry>()
-    val lines: List<LogEntry> get() = _lines
-
-    fun append(level: String, message: String) {
-        val entry = LogEntry(
-            timestamp = System.currentTimeMillis(),
-            level = level,
-            message = message
-        )
-        _lines.add(entry)
-        // Keep last 500 lines
-        while (_lines.size > 500) _lines.removeAt(0)
-    }
-
-    fun clear() {
-        _lines.clear()
-    }
-}
-
-data class LogEntry(
-    val timestamp: Long,
-    val level: String,
-    val message: String
-)
+import com.aerobox.core.logging.RuntimeLogBuffer
+import com.aerobox.core.logging.RuntimeLogEntry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogScreen(
     onNavigateBack: () -> Unit
 ) {
-    val logLines = remember { LogBuffer.lines }
+    val logLines by RuntimeLogBuffer.lines.collectAsState()
     val listState = rememberLazyListState()
 
     // Auto-scroll to bottom when new entries arrive
@@ -87,7 +59,7 @@ fun LogScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { LogBuffer.clear() }) {
+                    IconButton(onClick = { RuntimeLogBuffer.clear() }) {
                         Icon(Icons.Filled.Delete, contentDescription = "清空日志")
                     }
                 },
@@ -127,7 +99,7 @@ fun LogScreen(
 }
 
 @Composable
-private fun LogEntryRow(entry: LogEntry) {
+private fun LogEntryRow(entry: RuntimeLogEntry) {
     val levelColor = when (entry.level.lowercase()) {
         "error", "fatal" -> MaterialTheme.colorScheme.error
         "warn", "warning" -> MaterialTheme.colorScheme.tertiary

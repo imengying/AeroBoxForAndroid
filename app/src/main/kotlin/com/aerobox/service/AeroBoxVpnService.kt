@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import com.aerobox.AeroBoxApplication
 import com.aerobox.MainActivity
 import com.aerobox.R
+import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.data.repository.VpnRepository
 import com.aerobox.utils.NetworkUtils
 import com.aerobox.utils.PreferenceManager
@@ -118,6 +119,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     private fun startVpn(config: String) {
         serviceScope.launch {
             runCatching {
+                RuntimeLogBuffer.append("info", "Starting sing-box service")
                 startForeground(
                     NOTIFICATION_ID,
                     buildNotification(connected = false)
@@ -142,13 +144,16 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 val server = commandServer ?: CommandServer(this@AeroBoxVpnService, this@AeroBoxVpnService).also {
                     it.start()
                     commandServer = it
+                    RuntimeLogBuffer.append("debug", "CommandServer started")
                 }
 
                 val overrides = buildOverrideOptions()
                 server.startOrReloadService(config, overrides)
+                RuntimeLogBuffer.append("info", "startOrReloadService invoked")
 
             }.onFailure { e ->
                 Log.e(TAG, "startVpn failed", e)
+                RuntimeLogBuffer.append("error", "startVpn failed: ${e.message ?: e}")
                 VpnStateManager.updateLastError(e.message ?: e.toString())
                 stopService()
             }
@@ -161,6 +166,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 val nodes = AeroBoxApplication.database.proxyNodeDao().getAllNodes().first()
                 if (nodes.isEmpty()) {
                     Log.w(TAG, "No nodes available for switch action")
+                    RuntimeLogBuffer.append("warn", "No nodes available for switch action")
                     return@runCatching
                 }
 
@@ -180,6 +186,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 val configError = vpnRepository.checkConfig(nextConfig)
                 if (configError != null) {
                     Log.e(TAG, "Switch node config invalid: $configError")
+                    RuntimeLogBuffer.append("error", "Switch node config invalid: $configError")
                     return@runCatching
                 }
 
@@ -190,6 +197,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 startVpn(nextConfig)
             }.onFailure { e ->
                 Log.e(TAG, "switchNodeFromNotification failed", e)
+                RuntimeLogBuffer.append("error", "switchNodeFromNotification failed: ${e.message ?: e}")
             }
         }
     }
@@ -231,6 +239,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
 
     private fun stopService() {
+        RuntimeLogBuffer.append("info", "Stopping service")
         speedTickerJob?.cancel()
         speedTickerJob = null
 
@@ -264,6 +273,10 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     // ─── CommandServerHandler callbacks ───
 
     override fun serviceStop() {
+        RuntimeLogBuffer.append(
+            if (userRequestedStop) "info" else "warn",
+            if (userRequestedStop) "Service stopped" else "Service stopped unexpectedly"
+        )
         // Called by libbox when the service stops (may be unexpected)
         vpnInterface?.close()
         vpnInterface = null
@@ -280,6 +293,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     override fun serviceReload() {
         // Called by libbox for hot-reload — not used in our simple flow
+        RuntimeLogBuffer.append("info", "Service reloaded")
     }
 
     override fun getSystemProxyStatus(): SystemProxyStatus {
@@ -292,10 +306,19 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     override fun writeDebugMessage(message: String) {
         Log.d(TAG, "libbox-debug: $message")
+        RuntimeLogBuffer.append("debug", message)
     }
 
     override fun sendNotification(notification: io.nekohasekai.libbox.Notification) {
         Log.i(TAG, "libbox notification: ${notification.title} - ${notification.body}")
+        val content = buildString {
+            if (notification.title.isNotBlank()) append(notification.title)
+            if (notification.body.isNotBlank()) {
+                if (isNotEmpty()) append(" - ")
+                append(notification.body)
+            }
+        }.ifBlank { "libbox notification" }
+        RuntimeLogBuffer.append("info", content)
     }
 
     // ─── PlatformInterfaceWrapper overrides ───
@@ -306,6 +329,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     override fun openTun(options: TunOptions): Int {
         if (prepare(this) != null) error("android: missing vpn permission")
+        RuntimeLogBuffer.append("debug", "Opening VPN TUN interface")
 
         val builder = Builder()
             .setSession("AeroBox")
@@ -392,6 +416,12 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         _isRunning.value = true
         VpnStateManager.clearLastError()
         VpnStateManager.updateConnectionState(true, connectedNode)
+        RuntimeLogBuffer.append(
+            "info",
+            "VPN interface established" + (
+                connectedNode?.name?.takeIf { it.isNotBlank() }?.let { " for $it" } ?: ""
+            )
+        )
         val notification = buildNotification(connected = true)
         val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
         nm.notify(NOTIFICATION_ID, notification)
@@ -513,6 +543,10 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             reconnectAttempts++
             val backoffMs = 1000L * (1L shl (reconnectAttempts - 1).coerceAtMost(5))
             Log.i(TAG, "Auto-reconnect attempt $reconnectAttempts in ${backoffMs}ms")
+            RuntimeLogBuffer.append(
+                "warn",
+                "Auto-reconnect attempt $reconnectAttempts in ${backoffMs}ms"
+            )
             delay(backoffMs)
 
             if (userRequestedStop) return@launch
