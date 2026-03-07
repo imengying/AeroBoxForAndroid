@@ -64,8 +64,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.GLOBAL_PROXY)
 
     fun setRoutingMode(mode: RoutingMode) {
+        if (routingMode.value == mode) return
         viewModelScope.launch {
-            PreferenceManager.setRoutingMode(appContext, mode)
+            applyRoutingMode(mode)
         }
     }
 
@@ -149,6 +150,42 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 .collect {
                     refreshNetworkInfo()
                 }
+        }
+    }
+
+
+    private suspend fun applyRoutingMode(mode: RoutingMode) {
+        val previousMode = routingMode.value
+        PreferenceManager.setRoutingMode(appContext, mode)
+
+        val currentNode = vpnState.value.currentNode ?: selectedNode.value
+        if (!vpnState.value.isConnected || currentNode == null) {
+            return
+        }
+
+        when (val result = vpnRepository.switchToNode(currentNode)) {
+            is VpnConnectionResult.Success -> {
+                appContext.showToast("已切换为${mode.displayName}")
+            }
+
+            is VpnConnectionResult.InvalidConfig -> {
+                PreferenceManager.setRoutingMode(appContext, previousMode)
+                handleConnectionFailure(appContext, result.error)
+            }
+
+            is VpnConnectionResult.Failure -> {
+                PreferenceManager.setRoutingMode(appContext, previousMode)
+                val details = result.throwable.message?.takeIf { it.isNotBlank() }
+                if (details != null) {
+                    handleConnectionFailure(appContext, details)
+                } else {
+                    appContext.showToast(appContext.getString(com.aerobox.R.string.operation_failed))
+                }
+            }
+
+            VpnConnectionResult.NoNodeAvailable -> {
+                PreferenceManager.setRoutingMode(appContext, previousMode)
+            }
         }
     }
 
@@ -286,7 +323,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val fixSuccess = when (fixAction) {
                 ConnectionFixAction.UPDATE_GEO -> GeoAssetManager.updateAll(appContext)
                 ConnectionFixAction.SWITCH_GLOBAL_MODE -> {
-                    PreferenceManager.setRoutingMode(appContext, RoutingMode.GLOBAL_PROXY)
+                    applyRoutingMode(RoutingMode.GLOBAL_PROXY)
                     true
                 }
 

@@ -82,31 +82,36 @@ fun ConnectionCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 16.dp),
+            .padding(top = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // ── Large circular connect button ──
         Box(
-            modifier = Modifier
-                .size(160.dp)
-                .scale(pulseScale)
-                .clip(CircleShape)
-                .background(buttonColor)
-                .border(
-                    width = 2.dp,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = if (isActive) 0.5f else 0.2f),
-                    shape = CircleShape
-                )
-                .clickable(onClick = onToggleConnection),
+            modifier = Modifier.size(170.dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = AppIcons.Flight,
-                contentDescription = if (isActive) stringResource(R.string.disconnect)
-                    else stringResource(R.string.connect),
-                tint = iconTint,
-                modifier = Modifier.size(72.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(160.dp)
+                    .scale(pulseScale)
+                    .clip(CircleShape)
+                    .background(buttonColor)
+                    .border(
+                        width = 2.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = if (isActive) 0.5f else 0.2f),
+                        shape = CircleShape
+                    )
+                    .clickable(onClick = onToggleConnection),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = AppIcons.Flight,
+                    contentDescription = if (isActive) stringResource(R.string.disconnect)
+                        else stringResource(R.string.connect),
+                    tint = iconTint,
+                    modifier = Modifier.size(72.dp)
+                )
+            }
         }
 
         Spacer(Modifier.height(16.dp))

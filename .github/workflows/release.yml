@@ -281,12 +281,8 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Build release APK
+      - name: Build unsigned release APK
         env:
-          KEYSTORE_PATH: ${{ env.AEROBOX_KEYSTORE_PATH }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           AEROBOX_VERSION_NAME: ${{ env.AEROBOX_VERSION_NAME }}
           AEROBOX_VERSION_CODE: ${{ env.AEROBOX_VERSION_CODE }}
         run: |
@@ -294,12 +290,47 @@ jobs:
           EXTRA_ARGS=(
             "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}"
             "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}"
-            "-Pandroid.injected.signing.store.file=${KEYSTORE_PATH}"
-            "-Pandroid.injected.signing.store.password=${KEYSTORE_PASSWORD}"
-            "-Pandroid.injected.signing.key.alias=${KEY_ALIAS}"
-            "-Pandroid.injected.signing.key.password=${KEY_PASSWORD}"
           )
           gradle --stacktrace :app:assembleRelease "${EXTRA_ARGS[@]}"
+
+      - name: Sign release APKs (v3 only)
+        env:
+          KEYSTORE_PATH: ${{ env.AEROBOX_KEYSTORE_PATH }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          SRC_DIR="${GITHUB_WORKSPACE}/app/build/outputs/apk/release"
+          APKSIGNER="${ANDROID_SDK_ROOT}/build-tools/35.0.0/apksigner"
+          if [ ! -x "${APKSIGNER}" ]; then
+            echo "::error::apksigner not found at ${APKSIGNER}"
+            exit 1
+          fi
+
+          shopt -s nullglob
+          APKS=("${SRC_DIR}"/*.apk)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::error::No APK files found in ${SRC_DIR}"
+            exit 1
+          fi
+
+          for apk in "${APKS[@]}"; do
+            signed_apk="${apk%.apk}-signed.apk"
+            "${APKSIGNER}" sign \
+              --ks "${KEYSTORE_PATH}" \
+              --ks-key-alias "${KEY_ALIAS}" \
+              --ks-pass env:KEYSTORE_PASSWORD \
+              --key-pass env:KEY_PASSWORD \
+              --v1-signing-enabled false \
+              --v2-signing-enabled false \
+              --v3-signing-enabled true \
+              --v4-signing-enabled false \
+              --out "${signed_apk}" \
+              "${apk}"
+
+            mv -f "${signed_apk}" "${apk}"
+          done
 
       - name: Rename APKs
         env:

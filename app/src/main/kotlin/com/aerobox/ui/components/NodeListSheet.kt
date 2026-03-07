@@ -66,17 +66,13 @@ fun NodeListSheet(
     var searchQuery by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(SortMode.LATENCY) }
 
-    val filteredNodes by remember(nodes, searchQuery, sortMode) {
+    val filteredNodes by remember(nodes, searchQuery) {
         derivedStateOf {
-            val filtered = if (searchQuery.isBlank()) nodes
+            if (searchQuery.isBlank()) nodes
             else nodes.filter {
                 it.name.contains(searchQuery, ignoreCase = true) ||
-                        it.server.contains(searchQuery, ignoreCase = true) ||
-                        it.type.name.contains(searchQuery, ignoreCase = true)
-            }
-            when (sortMode) {
-                SortMode.LATENCY -> filtered.sortedBy { if (it.latency < 0) Int.MAX_VALUE else it.latency }
-                SortMode.NAME -> filtered.sortedBy { it.name.lowercase() }
+                    it.server.contains(searchQuery, ignoreCase = true) ||
+                    it.type.name.contains(searchQuery, ignoreCase = true)
             }
         }
     }
@@ -160,29 +156,36 @@ fun NodeListSheet(
                     )
                 }
             } else {
-                val grouped = filteredNodes.groupBy { it.subscriptionId }
+                val grouped = filteredNodes
+                    .groupBy { it.subscriptionId }
+                    .toList()
+                    .sortedBy { (subId, _) -> subscriptionNames[subId] ?: "未分组" }
                 LazyColumn(
                     modifier = Modifier.height(400.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     grouped.forEach { (subId, groupNodes) ->
-                        if (grouped.size > 1) {
-                            item(key = "header_$subId") {
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = MaterialTheme.colorScheme.surfaceContainerLow
-                                ) {
-                                    Text(
-                                        text = subscriptionNames[subId] ?: "未分组",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp)
-                                    )
-                                }
+                        val sortedGroupNodes = when (sortMode) {
+                            SortMode.LATENCY -> groupNodes.sortedBy {
+                                if (it.latency < 0) Int.MAX_VALUE else it.latency
+                            }
+                            SortMode.NAME -> groupNodes.sortedBy { it.name.lowercase() }
+                        }
+                        item(key = "header_$subId") {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.surfaceContainerLow
+                            ) {
+                                Text(
+                                    text = subscriptionNames[subId] ?: "未分组",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp)
+                                )
                             }
                         }
-                        items(groupNodes, key = { it.id }) { node ->
+                        items(sortedGroupNodes, key = { it.id }) { node ->
                             NodeItem(
                                 node = node,
                                 isSelected = node.id == selectedNodeId,

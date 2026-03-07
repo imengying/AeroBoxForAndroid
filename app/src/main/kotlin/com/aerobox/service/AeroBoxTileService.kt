@@ -6,6 +6,8 @@ import android.content.Intent
 import android.graphics.drawable.Icon
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
@@ -26,6 +28,10 @@ class AeroBoxTileService : TileService() {
 
     companion object {
         private const val TAG = "AeroBoxTileService"
+        private val mainHandler = Handler(Looper.getMainLooper())
+
+        @Volatile
+        private var listeningService: AeroBoxTileService? = null
 
         @Volatile
         private var activeTileHint = false
@@ -46,6 +52,11 @@ class AeroBoxTileService : TileService() {
         }
 
         fun requestRefresh() {
+            val activeService = listeningService
+            if (activeService != null) {
+                mainHandler.post { activeService.updateTileState() }
+                return
+            }
             runCatching {
                 val context = com.aerobox.AeroBoxApplication.appInstance
                 requestListeningState(
@@ -60,7 +71,13 @@ class AeroBoxTileService : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
+        listeningService = this
         updateTileState()
+    }
+
+    override fun onStopListening() {
+        listeningService = null
+        super.onStopListening()
     }
 
     override fun onClick() {
@@ -163,6 +180,9 @@ class AeroBoxTileService : TileService() {
     }
 
     override fun onDestroy() {
+        if (listeningService === this) {
+            listeningService = null
+        }
         serviceScope.cancel()
         super.onDestroy()
     }

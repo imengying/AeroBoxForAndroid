@@ -2,18 +2,25 @@ package com.aerobox.utils
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import java.util.concurrent.TimeUnit
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.system.measureTimeMillis
 
 object NetworkUtils {
 
-    private const val URL_TEST_DEFAULT = "http://cp.cloudflare.com/"
+    private const val URL_TEST_DEFAULT = "https://www.gstatic.com/generate_204"
     private const val URL_TEST_TIMEOUT = 5000
+    private val URL_TEST_FALLBACKS = listOf(
+        URL_TEST_DEFAULT,
+        "https://connectivitycheck.gstatic.com/generate_204",
+        "https://cp.cloudflare.com/generate_204"
+    )
 
     /**
      * URL Test — NekoBox 方式 1：发起真实 HTTP 请求测量延迟。
@@ -23,19 +30,39 @@ object NetworkUtils {
         testUrl: String = URL_TEST_DEFAULT,
         timeout: Int = URL_TEST_TIMEOUT
     ): Int = withContext(Dispatchers.IO) {
-        runCatching {
+        val candidates = buildList {
+            add(testUrl)
+            URL_TEST_FALLBACKS.forEach { url ->
+                if (url != testUrl) add(url)
+            }
+        }
+        candidates.firstNotNullOfOrNull { candidate ->
+            urlTestOnce(candidate, timeout).takeIf { it > 0 }
+        } ?: -1
+    }
+
+    private fun urlTestOnce(testUrl: String, timeout: Int): Int {
+        return runCatching {
+            val client = OkHttpClient.Builder()
+                .callTimeout(timeout.toLong(), TimeUnit.MILLISECONDS)
+                .connectTimeout(timeout.toLong(), TimeUnit.MILLISECONDS)
+                .readTimeout(timeout.toLong(), TimeUnit.MILLISECONDS)
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .retryOnConnectionFailure(true)
+                .build()
+            val request = Request.Builder()
+                .url(testUrl)
+                .header("User-Agent", "AeroBox/URLTest")
+                .header("Cache-Control", "no-cache")
+                .get()
+                .build()
             measureTimeMillis {
-                val conn = URL(testUrl).openConnection() as HttpURLConnection
-                conn.connectTimeout = timeout
-                conn.readTimeout = timeout
-                conn.requestMethod = "HEAD"
-                conn.instanceFollowRedirects = true
-                conn.useCaches = false
-                try {
-                    conn.connect()
-                    conn.responseCode
-                } finally {
-                    conn.disconnect()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful && response.code !in 300..399) {
+                        error("HTTP ${response.code}")
+                    }
+                    response.body?.close()
                 }
             }.toInt()
         }.getOrDefault(-1)

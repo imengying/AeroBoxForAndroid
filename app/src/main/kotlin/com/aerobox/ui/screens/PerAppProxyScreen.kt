@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +28,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -40,7 +44,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -57,6 +65,36 @@ data class AppInfo(
     val isSystem: Boolean
 )
 
+
+private fun buildHighlightedText(
+    text: String,
+    query: String,
+    highlightStyle: SpanStyle
+): AnnotatedString {
+    val keyword = query.trim()
+    if (keyword.isBlank()) return AnnotatedString(text)
+
+    val lowerText = text.lowercase()
+    val lowerKeyword = keyword.lowercase()
+    var searchStart = 0
+    var matchIndex = lowerText.indexOf(lowerKeyword, searchStart)
+    if (matchIndex < 0) return AnnotatedString(text)
+
+    return buildAnnotatedString {
+        while (matchIndex >= 0) {
+            append(text.substring(searchStart, matchIndex))
+            withStyle(highlightStyle) {
+                append(text.substring(matchIndex, matchIndex + keyword.length))
+            }
+            searchStart = matchIndex + keyword.length
+            matchIndex = lowerText.indexOf(lowerKeyword, searchStart)
+        }
+        if (searchStart < text.length) {
+            append(text.substring(searchStart))
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PerAppProxyScreen(
@@ -69,6 +107,7 @@ fun PerAppProxyScreen(
     val selectedPackages by viewModel.perAppProxyPackages.collectAsStateWithLifecycle()
     var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
     var showSystem by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     // Load installed apps
     LaunchedEffect(Unit) {
@@ -89,7 +128,24 @@ fun PerAppProxyScreen(
         apps = installed
     }
 
-    val filteredApps = apps.filter { if (showSystem) true else !it.isSystem }
+    val filteredApps = apps
+        .asSequence()
+        .filter { if (showSystem) true else !it.isSystem }
+        .filter { app ->
+            val query = searchQuery.trim()
+            if (query.isBlank()) {
+                true
+            } else {
+                app.label.contains(query, ignoreCase = true) ||
+                    app.packageName.contains(query, ignoreCase = true)
+            }
+        }
+        .sortedWith(
+            compareByDescending<AppInfo> { selectedPackages.contains(it.packageName) }
+                .thenBy { it.isSystem }
+                .thenBy { it.label.lowercase() }
+        )
+        .toList()
 
     Scaffold(
         topBar = {
@@ -144,9 +200,37 @@ fun PerAppProxyScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
             )
 
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("搜索应用名称或包名") },
+                leadingIcon = {
+                    Icon(Icons.Filled.Search, contentDescription = null)
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Filled.Close, contentDescription = null)
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                )
+            )
+
             if (filteredApps.isEmpty()) {
                 Text(
-                    text = "未获取到应用列表，可尝试开启“显示系统”或重启应用",
+                    text = if (apps.isEmpty()) {
+                        "未获取到应用列表，可尝试开启“显示系统”或重启应用"
+                    } else {
+                        "未找到匹配的应用"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
@@ -159,6 +243,10 @@ fun PerAppProxyScreen(
                 ) {
                     items(filteredApps, key = { it.packageName }) { app ->
                         val isChecked = selectedPackages.contains(app.packageName)
+                        val highlightStyle = SpanStyle(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        )
                         val toggleSelection = {
                             val updated = if (!isChecked) {
                                 selectedPackages + app.packageName
@@ -188,13 +276,13 @@ fun PerAppProxyScreen(
                                 Spacer(Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = app.label,
+                                        text = buildHighlightedText(app.label, searchQuery, highlightStyle),
                                         style = MaterialTheme.typography.bodyMedium,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = app.packageName,
+                                        text = buildHighlightedText(app.packageName, searchQuery, highlightStyle),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline,
                                         maxLines = 1,
