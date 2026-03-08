@@ -83,26 +83,13 @@ object ConfigGenerator {
         return config.toString(2)
     }
 
-    fun generateUrlTestConfig(
-        node: ProxyNode,
-        localDns: String = "223.5.5.5"
-    ): String {
+    fun generateUrlTestConfig(node: ProxyNode): String {
         val config = JSONObject()
         config.put(
             "log",
             JSONObject()
                 .put("level", "error")
                 .put("timestamp", false)
-        )
-        config.put(
-            "dns",
-            buildDns(
-                remoteDns = "8.8.8.8",
-                localDns = localDns,
-                enableDoh = false,
-                routingMode = RoutingMode.DIRECT,
-                enableGeoCnDomainRule = false
-            )
         )
         config.put("inbounds", JSONArray())
         config.put(
@@ -114,8 +101,7 @@ object ConfigGenerator {
         config.put(
             "route",
             JSONObject()
-                .put("auto_detect_interface", true)
-                .put("default_domain_resolver", "local")
+                .put("auto_detect_interface", false)
                 .put("final", "direct")
         )
         return config.toString()
