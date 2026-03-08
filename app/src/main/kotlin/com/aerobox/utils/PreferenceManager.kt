@@ -20,7 +20,7 @@ object PreferenceManager {
     private val AUTO_CONNECT = booleanPreferencesKey("auto_connect")
     private val LAST_SELECTED_NODE_ID = longPreferencesKey("last_selected_node_id")
 
-    // Phase 2: Routing & Network
+    // Routing & Network
     private val ROUTING_MODE = stringPreferencesKey("routing_mode")
     private val REMOTE_DNS = stringPreferencesKey("remote_dns")
     private val LOCAL_DNS = stringPreferencesKey("local_dns")

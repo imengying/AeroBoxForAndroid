@@ -114,8 +114,8 @@ object ConfigGenerator {
         config.put(
             "route",
             JSONObject()
-                .put("auto_detect_interface", false)
-                .put("default_domain_resolver", "bootstrap")
+                .put("auto_detect_interface", true)
+                .put("default_domain_resolver", "local")
                 .put("final", "direct")
         )
         return config.toString()
@@ -405,7 +405,7 @@ object ConfigGenerator {
 
         inbounds.put(tunInbound)
 
-        // Optional SOCKS5 inbound (for Phase 6)
+        // Optional SOCKS5 inbound
         if (enableSocks) {
             inbounds.put(
                 JSONObject()
@@ -416,7 +416,7 @@ object ConfigGenerator {
             )
         }
 
-        // Optional HTTP inbound (for Phase 6)
+        // Optional HTTP inbound
         if (enableHttp) {
             inbounds.put(
                 JSONObject()

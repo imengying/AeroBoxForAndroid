@@ -58,7 +58,7 @@ class SubscriptionRepository(context: Context) {
 
     }
 
-    private val userInfoTokenPattern = Regex("""(?i)(?:^|[;,\s])(upload|download|total|expire)\s*=\s*\d+""")
+    private val userInfoTokenPattern = Regex("""(?i)(?:^|[;,\s])(upload|download|total|expire)\s*=\s*(\d+)""")
 
     fun getAllSubscriptions(): Flow<List<Subscription>> = subscriptionDao.getAllSubscriptions()
 
@@ -288,14 +288,10 @@ class SubscriptionRepository(context: Context) {
     private fun parseSubscriptionUserInfo(raw: String?): ParsedSubscriptionUserInfo {
         if (raw.isNullOrBlank()) return ParsedSubscriptionUserInfo()
         val values = mutableMapOf<String, Long>()
-        raw.split(";").forEach { part ->
-            val keyValue = part.trim().split("=", limit = 2)
-            if (keyValue.size != 2) return@forEach
-            val key = keyValue[0].trim().lowercase()
-            val value = keyValue[1].trim().toLongOrNull() ?: return@forEach
-            when (key) {
-                "upload", "download", "total", "expire" -> values[key] = value
-            }
+        userInfoTokenPattern.findAll(raw).forEach { match ->
+            val key = match.groupValues[1].lowercase()
+            val value = match.groupValues[2].toLongOrNull() ?: return@forEach
+            values[key] = value
         }
 
         return ParsedSubscriptionUserInfo(

@@ -374,7 +374,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         detectIpJob?.cancel()
         detectIpJob = viewModelScope.launch {
             if (delayMs > 0L) {
-                _detectedIp.value = "稍后自动检测..."
+                _detectedIp.value = appContext.getString(com.aerobox.R.string.detecting_ip_later)
                 delay(delayMs)
                 if (!vpnState.value.isConnected) {
                     return@launch
@@ -382,7 +382,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val networkNode = vpnState.value.currentNode ?: selectedNode.value
-            _detectedIp.value = "检测中..."
+            _detectedIp.value = appContext.getString(com.aerobox.R.string.detecting_ip)
             _detectedIp.value = fetchPublicIp(networkNode)
         }
     }
@@ -408,9 +408,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (fixSuccess) {
-                context.showToast("修复已完成，请重试连接")
+                context.showToast(context.getString(com.aerobox.R.string.connection_fix_success))
             } else {
-                context.showToast("修复失败，请检查网络后重试")
+                context.showToast(context.getString(com.aerobox.R.string.connection_fix_failed))
             }
             _connectionIssue.value = null
         }

@@ -51,9 +51,11 @@ import com.aerobox.data.model.RoutingMode
 import com.aerobox.ui.components.ConnectionCard
 import com.aerobox.ui.components.NodeListSheet
 import com.aerobox.ui.components.TrafficStatsCard
+import com.aerobox.core.AppEventBus
 import com.aerobox.core.connection.ConnectionFixAction
 import com.aerobox.utils.showToast
 import com.aerobox.viewmodel.HomeViewModel
+import androidx.compose.runtime.LaunchedEffect
 
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
@@ -93,6 +95,12 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     }
 
     val listState = rememberLazyListState()
+
+    LaunchedEffect(Unit) {
+        AppEventBus.showNodeSelector.collect {
+            showNodeList = true
+        }
+    }
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),

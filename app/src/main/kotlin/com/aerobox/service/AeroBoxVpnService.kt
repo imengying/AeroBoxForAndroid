@@ -317,7 +317,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
 
     override fun writeDebugMessage(message: String) {
-        Log.d(TAG, "libbox-debug: $message")
         RuntimeLogBuffer.append("debug", message)
     }
 

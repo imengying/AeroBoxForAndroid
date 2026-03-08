@@ -24,6 +24,7 @@ import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.ui.navigation.AppNavigation
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.PreferenceManager
+import com.aerobox.core.AppEventBus
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -85,6 +86,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun consumeActionIntent(intent: Intent?) {
+        if (intent?.action == AeroBoxVpnService.ACTION_SWITCH) {
+            intent.action = null
+            AppEventBus.showNodeSelector.tryEmit(Unit)
+            return
+        }
         val action = intent?.getStringExtra(EXTRA_ACTION) ?: return
         if (action == ACTION_TOGGLE_VPN) {
             intent.removeExtra(EXTRA_ACTION)

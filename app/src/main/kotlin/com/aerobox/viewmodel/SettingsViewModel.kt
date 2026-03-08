@@ -21,7 +21,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val autoConnect: StateFlow<Boolean> = PreferenceManager.autoConnectFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    // Phase 2
     val routingMode: StateFlow<RoutingMode> = PreferenceManager.routingModeFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.GLOBAL_PROXY)
 
@@ -82,7 +81,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         PreferenceManager.setAutoConnect(appContext, enabled)
     }
 
-    // Phase 2 setters
     suspend fun setRoutingMode(mode: RoutingMode) {
         PreferenceManager.setRoutingMode(appContext, mode)
     }

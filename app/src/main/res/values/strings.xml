@@ -51,4 +51,8 @@
     <string name="tile_action_open">开启</string>
     <string name="tile_action_close">关闭</string>
     <string name="enable_ipv6">IPv6 支持</string>
+    <string name="connection_fix_success">修复已完成，请重试连接</string>
+    <string name="connection_fix_failed">修复失败，请检查网络后重试</string>
+    <string name="detecting_ip">检测中...</string>
+    <string name="detecting_ip_later">稍后自动检测...</string>
 </resources>
