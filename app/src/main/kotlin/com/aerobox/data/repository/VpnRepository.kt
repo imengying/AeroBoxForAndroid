@@ -115,17 +115,28 @@ class VpnRepository(private val context: Context) {
         testUrl: String = "https://www.gstatic.com/generate_204",
         timeoutMs: Int = 3000
     ): Int {
-        val localDns = PreferenceManager.localDnsFlow(context).first()
-        val config = ConfigGenerator.generateUrlTestConfig(
-            node = node,
-            localDns = localDns
-        )
-        return SingBoxNative.urlTestOutbound(
-            configContent = config,
-            outboundTag = "proxy",
-            testUrl = testUrl,
-            timeoutMs = timeoutMs
-        )
+        return withContext(Dispatchers.IO) {
+            val localDns = PreferenceManager.localDnsFlow(context).first()
+            val config = ConfigGenerator.generateUrlTestConfig(
+                node = node,
+                localDns = localDns
+            )
+            RuntimeLogBuffer.append(
+                "debug",
+                "urlTest start: node=${node.name.ifBlank { "unnamed node" }}, timeout=${timeoutMs}ms"
+            )
+            val result = SingBoxNative.urlTestOutbound(
+                configContent = config,
+                outboundTag = "proxy",
+                testUrl = testUrl,
+                timeoutMs = timeoutMs
+            )
+            RuntimeLogBuffer.append(
+                if (result > 0) "debug" else "warn",
+                "urlTest result: node=${node.name.ifBlank { "unnamed node" }}, latency=$result"
+            )
+            result
+        }
     }
 
     suspend fun buildConfig(node: ProxyNode): String {

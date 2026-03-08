@@ -2,6 +2,7 @@ package com.aerobox.core.native
 
 import android.content.Context
 import android.util.Log
+import com.aerobox.core.logging.RuntimeLogBuffer
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.SetupOptions
 
@@ -71,6 +72,7 @@ object SingBoxNative {
         } catch (e: Exception) {
             val msg = e.message ?: "unknown error"
             Log.w(TAG, "urlTestOutbound failed: $msg")
+            RuntimeLogBuffer.append("error", "urlTestOutbound failed: $msg")
             -1
         }
     }

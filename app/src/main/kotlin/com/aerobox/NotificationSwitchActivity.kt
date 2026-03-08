@@ -24,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -107,6 +108,10 @@ private fun NotificationSwitchDialog(
         .collectAsStateWithLifecycle(initialValue = -1L)
     var pendingNodeId by remember { mutableStateOf<Long?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    LaunchedEffect(sheetState) {
+        sheetState.show()
+    }
 
     val groupedNodes = remember(allNodes, subscriptionNames) {
         val nameMap = subscriptionNames.associate { it.id to it.name }

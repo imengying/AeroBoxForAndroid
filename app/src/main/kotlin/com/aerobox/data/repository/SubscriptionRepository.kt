@@ -208,18 +208,6 @@ class SubscriptionRepository(context: Context) {
                             cont.resumeWithException(IOException("HTTP ${it.code}"))
                         } else {
                             val content = it.body?.string() ?: ""
-                            val relevantHeaders = it.headers.names()
-                                .filter { name ->
-                                    name.contains("subscription", ignoreCase = true) ||
-                                        name.contains("profile", ignoreCase = true)
-                                }
-                                .sorted()
-                            val rawUserInfo = it.header("Subscription-Userinfo")
-                            RuntimeLogBuffer.append(
-                                "debug",
-                                "Subscription fetch headers: userinfo=${!rawUserInfo.isNullOrBlank()}, " +
-                                    "relevant=${relevantHeaders.joinToString(",").ifBlank { "none" }}"
-                            )
                             val userInfo = extractSubscriptionUserInfo(it)
                             cont.resume(
                                 SubscriptionFetchResult(
@@ -237,9 +225,46 @@ class SubscriptionRepository(context: Context) {
         }
 
     private fun extractSubscriptionUserInfo(response: Response): ParsedSubscriptionUserInfo {
-        return response.headers("Subscription-Userinfo")
+        val headerValues = collectSubscriptionInfoHeaderValues(response)
+        return headerValues
             .map(::parseSubscriptionUserInfo)
             .fold(ParsedSubscriptionUserInfo()) { acc, item -> acc.merge(item) }
+    }
+
+    private fun collectSubscriptionInfoHeaderValues(response: Response): List<String> {
+        val values = mutableListOf<String>()
+        var hop: Response? = response
+        var hopIndex = 0
+        while (hop != null) {
+            val relevantHeaders = hop.headers.names()
+                .filter { name ->
+                    name.contains("subscription", ignoreCase = true) ||
+                        name.contains("profile", ignoreCase = true)
+                }
+                .sorted()
+            RuntimeLogBuffer.append(
+                "debug",
+                "Subscription fetch headers hop=$hopIndex: " +
+                    relevantHeaders.joinToString(",").ifBlank { "none" }
+            )
+            relevantHeaders.forEach { headerName ->
+                values += hop.headers(headerName)
+            }
+            hopIndex += 1
+            hop = hop.priorResponse
+        }
+
+        if (values.isEmpty()) {
+            values += response.headers("Subscription-Userinfo")
+            values += response.headers("X-Subscription-Userinfo")
+            values += response.headers("subscription-userinfo")
+        }
+
+        RuntimeLogBuffer.append(
+            "debug",
+            "Subscription userinfo candidates=${values.size}"
+        )
+        return values
     }
 
     private fun parseSubscriptionUserInfo(raw: String?): ParsedSubscriptionUserInfo {
