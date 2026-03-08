@@ -349,13 +349,22 @@ private fun SubscriptionItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = subscription.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = subscription.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = buildRelativeTimeText(subscription.updateTime),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
                 buildTrafficInfoText(subscription.info)?.let { trafficText ->
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -449,6 +458,20 @@ private fun SubscriptionItem(
             }
         }
     }
+}
+
+@Composable
+private fun buildRelativeTimeText(timestampMs: Long): String {
+    if (timestampMs <= 0L) return "从未更新"
+    val diff = System.currentTimeMillis() - timestampMs
+    val seconds = diff / 1000
+    if (seconds < 60) return "刚刚更新"
+    val minutes = seconds / 60
+    if (minutes < 60) return "${minutes}分钟前"
+    val hours = minutes / 60
+    if (hours < 24) return "${hours}小时前"
+    val days = hours / 24
+    return "${days}天前"
 }
 
 private fun buildTrafficInfoText(info: SubscriptionInfo): String? {

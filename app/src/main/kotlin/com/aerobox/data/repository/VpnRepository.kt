@@ -127,6 +127,7 @@ class VpnRepository(private val context: Context) {
                 node = node,
                 localDns = localDns
             )
+            RuntimeLogBuffer.append("debug", "urlTest generated config: \n$config")
             RuntimeLogBuffer.append(
                 "debug",
                 "urlTest start: node=${node.name.ifBlank { "unnamed node" }}, timeout=${timeoutMs}ms"
