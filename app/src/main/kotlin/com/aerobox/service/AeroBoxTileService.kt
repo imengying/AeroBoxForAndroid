@@ -29,6 +29,7 @@ class AeroBoxTileService : TileService() {
     companion object {
         private const val TAG = "AeroBoxTileService"
         private val mainHandler = Handler(Looper.getMainLooper())
+        private val refreshRetryDelaysMs = longArrayOf(0L, 300L, 1_200L)
 
         @Volatile
         private var listeningService: AeroBoxTileService? = null
@@ -38,6 +39,9 @@ class AeroBoxTileService : TileService() {
 
         @Volatile
         private var activeTileLabelHint: String? = null
+
+        @Volatile
+        private var refreshGeneration: Long = 0L
 
         fun showActive(label: String? = null) {
             activeTileHint = true
@@ -52,17 +56,25 @@ class AeroBoxTileService : TileService() {
         }
 
         fun requestRefresh() {
-            val activeService = listeningService
-            if (activeService != null) {
-                mainHandler.post { activeService.updateTileState() }
-                return
-            }
-            runCatching {
-                val context = com.aerobox.AeroBoxApplication.appInstance
-                requestListeningState(
-                    context,
-                    ComponentName(context, AeroBoxTileService::class.java)
-                )
+            val generation = ++refreshGeneration
+            val context = runCatching { com.aerobox.AeroBoxApplication.appInstance }.getOrNull()
+
+            refreshRetryDelaysMs.forEach { delayMs ->
+                mainHandler.postDelayed({
+                    if (generation == refreshGeneration) {
+                        val activeService = listeningService
+                        if (activeService != null) {
+                            activeService.updateTileState()
+                        } else if (context != null) {
+                            runCatching {
+                                requestListeningState(
+                                    context,
+                                    ComponentName(context, AeroBoxTileService::class.java)
+                                )
+                            }
+                        }
+                    }
+                }, delayMs)
             }
         }
     }

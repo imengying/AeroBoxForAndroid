@@ -47,6 +47,10 @@ import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
+    private companion object {
+        const val POST_CONNECT_IP_DETECT_DELAY_MS = 500L
+    }
+
     private val appContext = application.applicationContext
     private val nodeDao = AeroBoxApplication.database.proxyNodeDao()
     private val vpnRepository = VpnRepository(appContext)
@@ -150,8 +154,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 .map { state -> state.isConnected to state.currentNode?.id }
                 .distinctUntilChanged()
                 .drop(1)
-                .collect {
-                    refreshNetworkInfo()
+                .collect { (isConnected, _) ->
+                    if (isConnected) {
+                        scheduleNetworkInfoRefresh(POST_CONNECT_IP_DETECT_DELAY_MS)
+                    } else {
+                        refreshNetworkInfo()
+                    }
                 }
         }
     }
@@ -342,8 +350,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshNetworkInfo() {
+        scheduleNetworkInfoRefresh()
+    }
+
+    private fun scheduleNetworkInfoRefresh(delayMs: Long = 0L) {
         detectIpJob?.cancel()
         detectIpJob = viewModelScope.launch {
+            if (delayMs > 0L) {
+                _detectedIp.value = "稍后自动检测..."
+                delay(delayMs)
+                if (!vpnState.value.isConnected) {
+                    return@launch
+                }
+            }
+
             val networkNode = vpnState.value.currentNode ?: selectedNode.value
             _detectedIp.value = "检测中..."
             _detectedIp.value = fetchPublicIp(networkNode)

@@ -12,6 +12,83 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
 object SubscriptionParser {
+    private val trafficInfoPrefixes = listOf(
+        "剩余流量",
+        "流量剩余",
+        "总流量",
+        "已用流量",
+        "使用流量",
+        "流量信息",
+        "remaining traffic",
+        "used traffic",
+        "total traffic",
+        "traffic"
+    )
+
+    private val resetInfoPrefixes = listOf(
+        "距离下次重置剩余",
+        "距离下次重置",
+        "下次重置剩余",
+        "下次重置",
+        "重置剩余",
+        "重置时间",
+        "next reset",
+        "traffic reset",
+        "reset in",
+        "reset time",
+        "reset"
+    )
+
+    private val expiryInfoPrefixes = listOf(
+        "套餐到期",
+        "订阅到期",
+        "到期时间",
+        "过期时间",
+        "有效期",
+        "到期",
+        "expire date",
+        "expires",
+        "expiry",
+        "valid until"
+    )
+
+    private val trafficValuePattern = Regex(
+        """
+        (?ix)
+        ^
+        \d+(?:\.\d+)?\s*
+        (?:B|KB|MB|GB|TB|PB|KIB|MIB|GIB|TIB|PIB|BYTE|BYTES|字节|字節)
+        (?:\s*/\s*\d+(?:\.\d+)?\s*(?:B|KB|MB|GB|TB|PB|KIB|MIB|GIB|TIB|PIB|BYTE|BYTES|字节|字節))?
+        $
+        """.trimIndent()
+    )
+
+    private val relativeTimeValuePattern = Regex(
+        """
+        (?ix)
+        ^
+        \d+\s*
+        (?:
+            天|日|小时|小時|时|時|分钟|分鐘|分|秒|秒钟|秒鐘|
+            day|days|hour|hours|hr|hrs|minute|minutes|min|mins|second|seconds|sec|secs|
+            d|h|m|s
+        )
+        $
+        """.trimIndent()
+    )
+
+    private val dateValuePattern = Regex(
+        """
+        ^
+        \d{4}[-/.]\d{1,2}[-/.]\d{1,2}
+        (?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?
+        $
+        """.trimIndent(),
+        setOf(RegexOption.IGNORE_CASE, RegexOption.COMMENTS)
+    )
+
+    private val timestampValuePattern = Regex("^\\d{10,13}$")
+
     suspend fun parseSubscription(content: String): List<ProxyNode> = withContext(Dispatchers.Default) {
         runCatching {
             val normalized = content.trim()
@@ -21,16 +98,14 @@ object SubscriptionParser {
 
             // Check for Clash/ClashMeta YAML format first
             if (ClashParser.isClashYaml(normalized)) {
-                return@runCatching ClashParser.parseClashYaml(normalized)
-                    .distinctBy { "${it.type}:${it.server}:${it.port}:${it.name}" }
+                return@runCatching sanitizeNodes(ClashParser.parseClashYaml(normalized))
             }
 
             val base64Decoded = tryBase64Decode(normalized)
 
             // Also check if Base64-decoded content is Clash YAML
             if (base64Decoded != normalized && ClashParser.isClashYaml(base64Decoded)) {
-                return@runCatching ClashParser.parseClashYaml(base64Decoded)
-                    .distinctBy { "${it.type}:${it.server}:${it.port}:${it.name}" }
+                return@runCatching sanitizeNodes(ClashParser.parseClashYaml(base64Decoded))
             }
 
             val targetContent = when {
@@ -47,8 +122,43 @@ object SubscriptionParser {
                 else -> emptyList()
             }
 
-            nodes.distinctBy { "${it.type}:${it.server}:${it.port}:${it.name}" }
+            sanitizeNodes(nodes)
         }.getOrDefault(emptyList())
+    }
+
+    private fun sanitizeNodes(nodes: List<ProxyNode>): List<ProxyNode> {
+        return nodes
+            .filterNot(::isInformationalNode)
+            .distinctBy { "${it.type}:${it.server}:${it.port}:${it.name}" }
+    }
+
+    private fun isInformationalNode(node: ProxyNode): Boolean {
+        val normalizedName = node.name
+            .replace('：', ':')
+            .trim()
+            .trimStart { it.isWhitespace() || !it.isLetterOrDigit() }
+
+        val separatorIndex = normalizedName.indexOf(':')
+        if (separatorIndex <= 0 || separatorIndex >= normalizedName.lastIndex) return false
+
+        val prefix = normalizedName.substring(0, separatorIndex).trim()
+        val value = normalizedName.substring(separatorIndex + 1).trim()
+        if (prefix.isBlank() || value.isBlank()) return false
+
+        return when {
+            prefix.matchesAnyPrefix(resetInfoPrefixes) -> {
+                relativeTimeValuePattern.matches(value) || dateValuePattern.matches(value) || timestampValuePattern.matches(value)
+            }
+            prefix.matchesAnyPrefix(expiryInfoPrefixes) -> {
+                dateValuePattern.matches(value) || relativeTimeValuePattern.matches(value) || timestampValuePattern.matches(value)
+            }
+            prefix.matchesAnyPrefix(trafficInfoPrefixes) -> trafficValuePattern.matches(value)
+            else -> false
+        }
+    }
+
+    private fun String.matchesAnyPrefix(prefixes: List<String>): Boolean {
+        return prefixes.any { startsWith(it, ignoreCase = true) }
     }
 
     private fun parseUriList(content: String): List<ProxyNode> {
