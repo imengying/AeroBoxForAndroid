@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.core.view.WindowCompat
@@ -147,7 +148,7 @@ private fun NotificationSwitchDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 8.dp)
             ) {
-                items(groupedNodes.indices.toList()) { index ->
+                items(count = groupedNodes.size) { index ->
                     val (subId, _) = groupedNodes[index]
                     val groupName = subscriptionNames.firstOrNull { it.id == subId }?.name ?: "未分组"
                     FilterChip(
