@@ -135,6 +135,9 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         VpnStateManager.updateServiceActive(true)
         serviceScope.launch {
             runCatching {
+                SingBoxNative.setup(this@AeroBoxVpnService)
+                RuntimeLogBuffer.append("debug", "SingBoxNative.setup() called in service")
+                RuntimeLogBuffer.append("debug", "SingBoxNative.version=${SingBoxNative.getVersion()}")
                 RuntimeLogBuffer.append("info", "Starting sing-box service")
                 startForeground(
                     NOTIFICATION_ID,

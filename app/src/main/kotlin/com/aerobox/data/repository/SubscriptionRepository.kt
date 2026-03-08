@@ -58,6 +58,8 @@ class SubscriptionRepository(context: Context) {
 
     }
 
+    private val userInfoTokenPattern = Regex("""(?i)(?:^|[;,\s])(upload|download|total|expire)\s*=\s*\d+""")
+
     fun getAllSubscriptions(): Flow<List<Subscription>> = subscriptionDao.getAllSubscriptions()
 
     fun getNodesBySubscription(subscriptionId: Long): Flow<List<ProxyNode>> =
@@ -198,6 +200,8 @@ class SubscriptionRepository(context: Context) {
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", SUBSCRIPTION_USER_AGENT)
+                .header("Accept-Encoding", "identity")
+                .header("Connection", "keep-alive")
                 .build()
             val call = client.newCall(request)
             cont.invokeOnCancellation { call.cancel() }
@@ -237,20 +241,33 @@ class SubscriptionRepository(context: Context) {
         var hopIndex = 0
         while (hop != null) {
             val currentHop = hop
-            val relevantHeaders = currentHop.headers.names()
-                .filter { name ->
-                    name.contains("subscription", ignoreCase = true) ||
-                        name.contains("profile", ignoreCase = true)
+            val headerNames = currentHop.headers.names().sorted()
+            val explicitHeaders = mutableListOf<String>()
+            val tokenHeaders = mutableListOf<String>()
+
+            headerNames.forEach { name ->
+                val headerValues = currentHop.headers(name)
+                val matchesByName = name.contains("subscription", ignoreCase = true) ||
+                    name.contains("profile", ignoreCase = true) ||
+                    name.contains("userinfo", ignoreCase = true)
+                val tokenValues = headerValues.filter { value ->
+                    userInfoTokenPattern.containsMatchIn(value)
                 }
-                .sorted()
+                if (matchesByName) {
+                    explicitHeaders += name
+                    values += headerValues
+                } else if (tokenValues.isNotEmpty()) {
+                    tokenHeaders += name
+                    values += tokenValues
+                }
+            }
+
             RuntimeLogBuffer.append(
                 "debug",
                 "Subscription fetch headers hop=$hopIndex: " +
-                    relevantHeaders.joinToString(",").ifBlank { "none" }
+                    "explicit=${explicitHeaders.distinct().joinToString(",").ifBlank { "none" }}, " +
+                    "token=${tokenHeaders.distinct().joinToString(",").ifBlank { "none" }}"
             )
-            relevantHeaders.forEach { headerName ->
-                values += currentHop.headers(headerName)
-            }
             hopIndex += 1
             hop = currentHop.priorResponse
         }
