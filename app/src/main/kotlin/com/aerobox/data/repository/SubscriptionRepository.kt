@@ -236,7 +236,8 @@ class SubscriptionRepository(context: Context) {
         var hop: Response? = response
         var hopIndex = 0
         while (hop != null) {
-            val relevantHeaders = hop.headers.names()
+            val currentHop = hop
+            val relevantHeaders = currentHop.headers.names()
                 .filter { name ->
                     name.contains("subscription", ignoreCase = true) ||
                         name.contains("profile", ignoreCase = true)
@@ -248,10 +249,10 @@ class SubscriptionRepository(context: Context) {
                     relevantHeaders.joinToString(",").ifBlank { "none" }
             )
             relevantHeaders.forEach { headerName ->
-                values += hop.headers(headerName)
+                values += currentHop.headers(headerName)
             }
             hopIndex += 1
-            hop = hop.priorResponse
+            hop = currentHop.priorResponse
         }
 
         if (values.isEmpty()) {
