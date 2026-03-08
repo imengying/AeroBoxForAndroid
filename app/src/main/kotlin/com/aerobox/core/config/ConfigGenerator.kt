@@ -562,8 +562,9 @@ object ConfigGenerator {
     // ── Proxy Outbound ───────────────────────────────────────────────
 
     private fun buildProxyOutbound(node: ProxyNode): JSONObject {
+        val cleanServer = node.server.replace("[ipv4]", "").replace("[ipv6]", "").trim()
         val outbound = JSONObject()
-            .put("server", node.server)
+            .put("server", cleanServer.ifBlank { "127.0.0.1" })
             .put("server_port", node.port)
 
         when (node.type) {

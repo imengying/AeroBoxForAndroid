@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.core.view.WindowCompat
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -44,6 +46,7 @@ import kotlinx.coroutines.launch
 class NotificationSwitchActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
             val darkMode by PreferenceManager.darkModeFlow(this)
@@ -136,28 +139,32 @@ private fun NotificationSwitchDialog(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
             )
+            
+            var selectedGroupIndex by remember { mutableStateOf(0) }
+            
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 8.dp)
+            ) {
+                items(groupedNodes.indices.toList()) { index ->
+                    val (subId, _) = groupedNodes[index]
+                    val groupName = subscriptionNames.firstOrNull { it.id == subId }?.name ?: "未分组"
+                    FilterChip(
+                        selected = selectedGroupIndex == index,
+                        onClick = { selectedGroupIndex = index },
+                        label = { Text(groupName) }
+                    )
+                }
+            }
+
             LazyColumn(
-                modifier = Modifier.heightIn(max = 420.dp),
+                modifier = Modifier.heightIn(max = 380.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
-                groupedNodes.forEach { (subId, nodes) ->
-                    val groupName = subscriptionNames.firstOrNull { it.id == subId }?.name ?: "未分组"
-                    item(key = "header_$subId") {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.surfaceContainerLow,
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                text = groupName,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                            )
-                        }
-                    }
+                if (groupedNodes.isNotEmpty() && selectedGroupIndex < groupedNodes.size) {
+                    val (_, nodes) = groupedNodes[selectedGroupIndex]
                     items(nodes, key = { it.id }) { node ->
                         val isSelected = node.id == selectedNodeId
                         Card(

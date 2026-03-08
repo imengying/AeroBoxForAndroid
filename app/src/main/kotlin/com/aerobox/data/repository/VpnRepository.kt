@@ -122,10 +122,11 @@ class VpnRepository(private val context: Context) {
                 RuntimeLogBuffer.append("debug", "SingBoxNative.setup() retried in urlTestNode")
             }
             RuntimeLogBuffer.append("debug", "SingBoxNative.version=${SingBoxNative.getVersion()}")
-            val localDns = PreferenceManager.localDnsFlow(context).first()
+            val userLocalDns = PreferenceManager.localDnsFlow(context).first()
+            val safeLocalDns = if (userLocalDns.contains("[")) "223.5.5.5" else userLocalDns
             val config = ConfigGenerator.generateUrlTestConfig(
                 node = node,
-                localDns = localDns
+                localDns = safeLocalDns
             )
             RuntimeLogBuffer.append("debug", "urlTest generated config: \n$config")
             RuntimeLogBuffer.append(
