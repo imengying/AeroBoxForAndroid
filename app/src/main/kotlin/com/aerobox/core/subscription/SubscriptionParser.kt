@@ -98,14 +98,14 @@ object SubscriptionParser {
 
             // Check for Clash/ClashMeta YAML format first
             if (ClashParser.isClashYaml(normalized)) {
-                return@runCatching sanitizeNodes(ClashParser.parseClashYaml(normalized))
+                return@runCatching sanitizeClashNodes(ClashParser.parseClashYaml(normalized))
             }
 
             val base64Decoded = tryBase64Decode(normalized)
 
             // Also check if Base64-decoded content is Clash YAML
             if (base64Decoded != normalized && ClashParser.isClashYaml(base64Decoded)) {
-                return@runCatching sanitizeNodes(ClashParser.parseClashYaml(base64Decoded))
+                return@runCatching sanitizeClashNodes(ClashParser.parseClashYaml(base64Decoded))
             }
 
             val targetContent = when {
@@ -122,13 +122,18 @@ object SubscriptionParser {
                 else -> emptyList()
             }
 
-            sanitizeNodes(nodes)
+            dedupeNodes(nodes)
         }.getOrDefault(emptyList())
     }
 
-    private fun sanitizeNodes(nodes: List<ProxyNode>): List<ProxyNode> {
+    private fun sanitizeClashNodes(nodes: List<ProxyNode>): List<ProxyNode> {
         return nodes
             .filterNot(::isInformationalNode)
+            .let(::dedupeNodes)
+    }
+
+    private fun dedupeNodes(nodes: List<ProxyNode>): List<ProxyNode> {
+        return nodes
             .distinctBy { "${it.type}:${it.server}:${it.port}:${it.name}" }
     }
 

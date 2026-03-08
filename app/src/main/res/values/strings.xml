@@ -45,6 +45,8 @@
     <string name="subscription_update_interval_minutes">自动更新间隔（分钟）</string>
     <string name="subscription_update_interval_hint">最小 15 分钟，建议 60 或 1440</string>
     <string name="subscription_auto_update_invalid_interval">间隔至少为 15 分钟</string>
+    <string name="subscription_traffic_remaining">剩余 %1$s</string>
+    <string name="subscription_no_expiry">长期有效</string>
     <string name="tile_label">AeroBox</string>
     <string name="tile_action_open">开启</string>
     <string name="tile_action_close">关闭</string>

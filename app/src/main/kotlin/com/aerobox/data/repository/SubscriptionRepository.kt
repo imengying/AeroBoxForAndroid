@@ -6,6 +6,8 @@ import com.aerobox.AeroBoxApplication
 import com.aerobox.core.subscription.SubscriptionParser
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
+import com.aerobox.data.model.SubscriptionInfo
+import com.aerobox.data.model.withInfo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
@@ -20,10 +22,7 @@ import kotlin.coroutines.resumeWithException
 
 data class SubscriptionFetchResult(
     val content: String,
-    val uploadBytes: Long = 0,
-    val downloadBytes: Long = 0,
-    val totalBytes: Long = 0,
-    val expireTimestamp: Long = 0
+    val info: SubscriptionInfo = SubscriptionInfo()
 )
 
 data class SubscriptionImportResult(
@@ -41,6 +40,22 @@ class SubscriptionRepository(context: Context) {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
+
+    private data class ParsedSubscriptionUserInfo(
+        val info: SubscriptionInfo = SubscriptionInfo()
+    ) {
+        fun merge(other: ParsedSubscriptionUserInfo): ParsedSubscriptionUserInfo {
+            return ParsedSubscriptionUserInfo(
+                info = SubscriptionInfo(
+                    uploadBytes = info.uploadBytes.takeIf { it > 0 } ?: other.info.uploadBytes,
+                    downloadBytes = info.downloadBytes.takeIf { it > 0 } ?: other.info.downloadBytes,
+                    totalBytes = info.totalBytes.takeIf { it > 0 } ?: other.info.totalBytes,
+                    expireTimestamp = info.expireTimestamp.takeIf { it > 0 } ?: other.info.expireTimestamp
+                )
+            )
+        }
+
+    }
 
     fun getAllSubscriptions(): Flow<List<Subscription>> = subscriptionDao.getAllSubscriptions()
 
@@ -73,12 +88,8 @@ class SubscriptionRepository(context: Context) {
                     subscription.copy(
                         id = insertedId,
                         updateTime = updatedAt,
-                        nodeCount = nodes.size,
-                        uploadBytes = prepared.fetchResult.uploadBytes,
-                        downloadBytes = prepared.fetchResult.downloadBytes,
-                        totalBytes = prepared.fetchResult.totalBytes,
-                        expireTimestamp = prepared.fetchResult.expireTimestamp
-                    )
+                        nodeCount = nodes.size
+                    ).withInfo(prepared.fetchResult.info)
                 )
                 insertedId
             }
@@ -126,12 +137,8 @@ class SubscriptionRepository(context: Context) {
             subscriptionDao.update(
                 subscription.copy(
                     updateTime = updatedAt,
-                    nodeCount = nodes.size,
-                    uploadBytes = prepared.fetchResult.uploadBytes,
-                    downloadBytes = prepared.fetchResult.downloadBytes,
-                    totalBytes = prepared.fetchResult.totalBytes,
-                    expireTimestamp = prepared.fetchResult.expireTimestamp
-                )
+                    nodeCount = nodes.size
+                ).withInfo(prepared.fetchResult.info)
             )
         }
     }
@@ -200,16 +207,11 @@ class SubscriptionRepository(context: Context) {
                             cont.resumeWithException(IOException("HTTP ${it.code}"))
                         } else {
                             val content = it.body?.string() ?: ""
-                            val userInfo = parseSubscriptionUserInfo(
-                                it.header("Subscription-Userinfo")
-                            )
+                            val userInfo = extractSubscriptionUserInfo(it)
                             cont.resume(
                                 SubscriptionFetchResult(
                                     content = content,
-                                    uploadBytes = userInfo["upload"] ?: 0,
-                                    downloadBytes = userInfo["download"] ?: 0,
-                                    totalBytes = userInfo["total"] ?: 0,
-                                    expireTimestamp = userInfo["expire"] ?: 0
+                                    info = userInfo.info
                                 )
                             )
                         }
@@ -221,15 +223,33 @@ class SubscriptionRepository(context: Context) {
             })
         }
 
-    private fun parseSubscriptionUserInfo(header: String?): Map<String, Long> {
-        if (header.isNullOrBlank()) return emptyMap()
-        return header.split(";")
-            .mapNotNull { part ->
-                val kv = part.trim().split("=", limit = 2)
-                if (kv.size == 2) kv[0].trim() to (kv[1].trim().toLongOrNull() ?: 0L)
-                else null
+    private fun extractSubscriptionUserInfo(response: Response): ParsedSubscriptionUserInfo {
+        return response.headers("Subscription-Userinfo")
+            .map(::parseSubscriptionUserInfo)
+            .fold(ParsedSubscriptionUserInfo()) { acc, item -> acc.merge(item) }
+    }
+
+    private fun parseSubscriptionUserInfo(raw: String?): ParsedSubscriptionUserInfo {
+        if (raw.isNullOrBlank()) return ParsedSubscriptionUserInfo()
+        val values = mutableMapOf<String, Long>()
+        raw.split(";").forEach { part ->
+            val keyValue = part.trim().split("=", limit = 2)
+            if (keyValue.size != 2) return@forEach
+            val key = keyValue[0].trim().lowercase()
+            val value = keyValue[1].trim().toLongOrNull() ?: return@forEach
+            when (key) {
+                "upload", "download", "total", "expire" -> values[key] = value
             }
-            .toMap()
+        }
+
+        return ParsedSubscriptionUserInfo(
+            info = SubscriptionInfo(
+                uploadBytes = values["upload"] ?: 0L,
+                downloadBytes = values["download"] ?: 0L,
+                totalBytes = values["total"] ?: 0L,
+                expireTimestamp = values["expire"] ?: 0L
+            )
+        )
     }
 
     private fun shouldAutoUpdate(subscription: Subscription, now: Long): Boolean {

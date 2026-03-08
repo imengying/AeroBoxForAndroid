@@ -1,8 +1,10 @@
 package com.aerobox.service
 
 import android.app.PendingIntent
-import android.content.ComponentName
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.drawable.Icon
 import android.net.VpnService
 import android.os.Build
@@ -28,8 +30,10 @@ class AeroBoxTileService : TileService() {
 
     companion object {
         private const val TAG = "AeroBoxTileService"
+        private const val ACTION_TILE_STATE_CHANGED = "com.aerobox.action.TILE_STATE_CHANGED"
+        private const val EXTRA_TILE_ACTIVE = "extra_tile_active"
+        private const val EXTRA_TILE_LABEL = "extra_tile_label"
         private val mainHandler = Handler(Looper.getMainLooper())
-        private val refreshRetryDelaysMs = longArrayOf(0L, 300L, 1_200L)
 
         @Volatile
         private var listeningService: AeroBoxTileService? = null
@@ -40,56 +44,77 @@ class AeroBoxTileService : TileService() {
         @Volatile
         private var activeTileLabelHint: String? = null
 
-        @Volatile
-        private var refreshGeneration: Long = 0L
-
         fun showActive(label: String? = null) {
-            activeTileHint = true
-            activeTileLabelHint = label?.takeIf { it.isNotBlank() }
-            requestRefresh()
+            publishState(active = true, label = label)
         }
 
         fun clearActiveHint() {
-            activeTileHint = false
-            activeTileLabelHint = null
+            publishState(active = false, label = null)
+        }
+
+        fun publishState(active: Boolean, label: String? = null) {
+            activeTileHint = active
+            activeTileLabelHint = label?.takeIf { it.isNotBlank() }
+            dispatchTileState(activeTileHint, activeTileLabelHint)
             requestRefresh()
         }
 
-        fun requestRefresh() {
-            val generation = ++refreshGeneration
-            val context = runCatching { com.aerobox.AeroBoxApplication.appInstance }.getOrNull()
+        private fun dispatchTileState(active: Boolean, label: String?) {
+            val context = runCatching { com.aerobox.AeroBoxApplication.appInstance }.getOrNull() ?: return
+            val intent = Intent(ACTION_TILE_STATE_CHANGED)
+                .setPackage(context.packageName)
+                .putExtra(EXTRA_TILE_ACTIVE, active)
+                .putExtra(EXTRA_TILE_LABEL, label)
+            context.sendBroadcast(intent)
+        }
 
-            refreshRetryDelaysMs.forEach { delayMs ->
-                mainHandler.postDelayed({
-                    if (generation == refreshGeneration) {
-                        val activeService = listeningService
-                        if (activeService != null) {
-                            activeService.updateTileState()
-                        } else if (context != null) {
-                            runCatching {
-                                requestListeningState(
-                                    context,
-                                    ComponentName(context, AeroBoxTileService::class.java)
-                                )
-                            }
-                        }
-                    }
-                }, delayMs)
-            }
+        fun requestRefresh() {
+            val activeService = listeningService ?: return
+            mainHandler.post { activeService.updateTileState() }
         }
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var tileStateReceiverRegistered = false
+    private val tileStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != ACTION_TILE_STATE_CHANGED) return
+            updateTile(
+                active = intent.getBooleanExtra(EXTRA_TILE_ACTIVE, false),
+                labelOverride = intent.getStringExtra(EXTRA_TILE_LABEL)
+            )
+        }
+    }
 
     override fun onStartListening() {
         super.onStartListening()
         listeningService = this
+        registerTileStateReceiver()
         updateTileState()
     }
 
     override fun onStopListening() {
+        unregisterTileStateReceiver()
         listeningService = null
         super.onStopListening()
+    }
+
+    private fun registerTileStateReceiver() {
+        if (tileStateReceiverRegistered) return
+        val filter = IntentFilter(ACTION_TILE_STATE_CHANGED)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(tileStateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(tileStateReceiver, filter)
+        }
+        tileStateReceiverRegistered = true
+    }
+
+    private fun unregisterTileStateReceiver() {
+        if (!tileStateReceiverRegistered) return
+        runCatching { unregisterReceiver(tileStateReceiver) }
+        tileStateReceiverRegistered = false
     }
 
     override fun onClick() {
@@ -192,6 +217,7 @@ class AeroBoxTileService : TileService() {
     }
 
     override fun onDestroy() {
+        unregisterTileStateReceiver()
         if (listeningService === this) {
             listeningService = null
         }

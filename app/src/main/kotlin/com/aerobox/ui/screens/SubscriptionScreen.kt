@@ -36,6 +36,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -66,8 +67,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aerobox.AeroBoxApplication
 import com.aerobox.R
 import com.aerobox.data.model.Subscription
+import com.aerobox.data.model.SubscriptionInfo
+import com.aerobox.data.model.info
 import com.aerobox.utils.NetworkUtils
 import com.aerobox.viewmodel.SubscriptionViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -352,15 +356,32 @@ private fun SubscriptionItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                buildTrafficInfoText(subscription)?.let { trafficText ->
+                buildTrafficInfoText(subscription.info)?.let { trafficText ->
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = trafficText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { subscription.info.progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                    )
                 }
-                buildExpiryInfoText(subscription)?.let { expiryText ->
+                buildRemainingInfoText(subscription.info)?.let { remainingText ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = remainingText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                buildExpiryInfoText(subscription.info)?.let { expiryText ->
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = expiryText,
@@ -430,23 +451,23 @@ private fun SubscriptionItem(
     }
 }
 
-private fun buildTrafficInfoText(subscription: Subscription): String? {
-    val hasTrafficInfo = subscription.totalBytes > 0 || subscription.uploadBytes > 0 || subscription.downloadBytes > 0
-    if (!hasTrafficInfo) return null
-
-    val remainingBytes = (subscription.totalBytes - subscription.uploadBytes - subscription.downloadBytes)
-        .coerceAtLeast(0L)
-    return if (subscription.totalBytes > 0) {
-        "${NetworkUtils.formatBytesCompact(remainingBytes)} / ${NetworkUtils.formatBytesCompact(subscription.totalBytes)}"
-    } else {
-        NetworkUtils.formatBytesCompact(remainingBytes)
-    }
+private fun buildTrafficInfoText(info: SubscriptionInfo): String? {
+    if (!info.hasTrafficQuota) return null
+    return "${NetworkUtils.formatBytesCompact(info.usedBytes)} / ${NetworkUtils.formatBytesCompact(info.totalBytes)}"
 }
 
-private fun buildExpiryInfoText(subscription: Subscription): String? {
+private fun buildRemainingInfoText(info: SubscriptionInfo): String? {
+    if (!info.hasTrafficQuota) return null
+    return AeroBoxApplication.appInstance.getString(
+        R.string.subscription_traffic_remaining,
+        NetworkUtils.formatBytesCompact(info.remainingBytes)
+    )
+}
+
+private fun buildExpiryInfoText(info: SubscriptionInfo): String? {
     return when {
-        subscription.expireTimestamp > 0L -> formatExpiry(subscription.expireTimestamp)
-        buildTrafficInfoText(subscription) != null -> "长期有效"
+        info.hasExpiry -> formatExpiry(info.expireTimestamp)
+        buildTrafficInfoText(info) != null -> AeroBoxApplication.appInstance.getString(R.string.subscription_no_expiry)
         else -> null
     }
 }

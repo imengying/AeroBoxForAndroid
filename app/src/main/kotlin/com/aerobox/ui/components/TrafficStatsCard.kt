@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.aerobox.R
 import com.aerobox.data.model.TrafficStats
 import com.aerobox.utils.NetworkUtils
@@ -43,7 +44,7 @@ fun TrafficStatsCard(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -51,7 +52,7 @@ fun TrafficStatsCard(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     SpeedMetric(
@@ -63,7 +64,7 @@ fun TrafficStatsCard(
                     Box(
                         modifier = Modifier
                             .width(1.dp)
-                            .height(44.dp)
+                            .height(36.dp)
                             .background(
                                 color = MaterialTheme.colorScheme.outlineVariant,
                                 shape = RoundedCornerShape(999.dp)
@@ -91,21 +92,21 @@ private fun SpeedMetric(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        verticalArrangement = Arrangement.spacedBy(1.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = prefix,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(3.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -113,11 +114,12 @@ private fun SpeedMetric(
         }
         Text(
             text = speed,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false
         )
     }
 }

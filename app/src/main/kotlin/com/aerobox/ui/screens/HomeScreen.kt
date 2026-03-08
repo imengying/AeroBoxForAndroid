@@ -134,11 +134,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
                     nodeAddress = selectedNode?.type?.displayName() ?: "--",
                     onClick = { showNodeList = true },
-                    modifier = Modifier.weight(0.5f).height(100.dp)
+                    modifier = Modifier.weight(0.5f).height(92.dp)
                 )
                 TrafficStatsCard(
                     stats = trafficStats,
-                    modifier = Modifier.weight(0.5f).height(100.dp)
+                    modifier = Modifier.weight(0.5f).height(92.dp)
                 )
             }
         }
@@ -158,11 +158,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 NetworkDetectCard(
                     ip = detectedIp,
                     onClick = { viewModel.refreshNetworkInfo() },
-                    modifier = Modifier.weight(0.5f).height(100.dp)
+                    modifier = Modifier.weight(0.5f).height(92.dp)
                 )
                 MemoryUsageCard(
                     memoryUsage = memoryUsage,
-                    modifier = Modifier.weight(0.5f).height(100.dp)
+                    modifier = Modifier.weight(0.5f).height(92.dp)
                 )
             }
         }
@@ -272,8 +272,8 @@ private fun MemoryUsageCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.Start
         ) {
             Text(
@@ -311,8 +311,8 @@ private fun NetworkDetectCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.Start
         ) {
             Text(
@@ -351,8 +351,8 @@ private fun NodeSelectorCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.Start
         ) {
             Text(

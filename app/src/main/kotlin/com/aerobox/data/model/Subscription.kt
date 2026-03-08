@@ -26,3 +26,20 @@ data class Subscription(
     val totalBytes: Long = 0,
     val expireTimestamp: Long = 0
 )
+
+val Subscription.info: SubscriptionInfo
+    get() = SubscriptionInfo(
+        uploadBytes = uploadBytes,
+        downloadBytes = downloadBytes,
+        totalBytes = totalBytes,
+        expireTimestamp = expireTimestamp
+    )
+
+fun Subscription.withInfo(info: SubscriptionInfo): Subscription {
+    return copy(
+        uploadBytes = info.uploadBytes,
+        downloadBytes = info.downloadBytes,
+        totalBytes = info.totalBytes,
+        expireTimestamp = info.expireTimestamp
+    )
+}
