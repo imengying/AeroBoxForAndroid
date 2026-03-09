@@ -15,4 +15,15 @@
         <item name="android:windowBackgroundBlurRadius">0dp</item>
         <item name="android:windowBlurBehindEnabled">false</item>
     </style>
+
+    <style name="Theme.AeroBox.Popup" parent="@style/Theme.AeroBox">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowBackgroundBlurRadius">0dp</item>
+        <item name="android:windowBlurBehindEnabled">false</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
 </resources>

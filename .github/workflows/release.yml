@@ -169,13 +169,11 @@ jobs:
               "time"
 
               box "github.com/sagernet/sing-box"
-              "github.com/sagernet/sing-box/adapter"
               C "github.com/sagernet/sing-box/constant"
               "github.com/sagernet/sing-box/option"
               E "github.com/sagernet/sing/common/exceptions"
               M "github.com/sagernet/sing/common/metadata"
               "github.com/sagernet/sing/common/ntp"
-              "github.com/sagernet/sing/service"
           )
 
           func URLTestOutbound(configContent string, outboundTag string, testURL string, timeout int32) (int32, error) {
@@ -187,7 +185,6 @@ jobs:
 
               ctx, cancel := context.WithCancel(ctx)
               defer cancel()
-              ctx = service.ContextWith[adapter.PlatformInterface](ctx, (*platformInterfaceStub)(nil))
 
               if outboundTag == "" {
                   outboundTag = "proxy"

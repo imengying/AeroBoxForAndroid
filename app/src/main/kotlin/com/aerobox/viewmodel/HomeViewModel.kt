@@ -336,15 +336,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             jobs.forEach { it.join() }
-
-            val updatedNodes = nodeDao.getAllNodes().first()
-            val bestNode = updatedNodes
-                .filter { candidate -> nodes.any { it.id == candidate.id } }
-                .filter { it.latency > 0 }
-                .minByOrNull { it.latency }
-            if (bestNode != null) {
-                selectNode(bestNode)
-            }
         }
     }
 
