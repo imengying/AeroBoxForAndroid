@@ -1,7 +1,6 @@
 package com.aerobox.data.database
 
 import androidx.room.Dao
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -14,9 +13,6 @@ interface SubscriptionDao {
     @Query("SELECT * FROM subscriptions ORDER BY createdAt DESC")
     fun getAllSubscriptions(): Flow<List<Subscription>>
 
-    @Query("SELECT * FROM subscriptions WHERE id = :id LIMIT 1")
-    suspend fun getSubscriptionById(id: Long): Subscription?
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(subscription: Subscription): Long
 
@@ -25,7 +21,4 @@ interface SubscriptionDao {
 
     @Query("DELETE FROM subscriptions WHERE id = :id")
     suspend fun deleteById(id: Long)
-
-    @Delete
-    suspend fun delete(subscription: Subscription)
 }

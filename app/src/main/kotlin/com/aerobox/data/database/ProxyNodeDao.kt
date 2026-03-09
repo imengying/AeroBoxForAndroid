@@ -9,9 +9,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ProxyNodeDao {
-    @Query("SELECT * FROM proxy_nodes WHERE subscriptionId = :subscriptionId ORDER BY id ASC")
-    fun getNodesBySubscription(subscriptionId: Long): Flow<List<ProxyNode>>
-
     @Query("SELECT * FROM proxy_nodes ORDER BY subscriptionId ASC, id ASC")
     fun getAllNodes(): Flow<List<ProxyNode>>
 

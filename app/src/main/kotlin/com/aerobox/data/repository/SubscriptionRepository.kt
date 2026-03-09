@@ -5,9 +5,7 @@ import androidx.room.withTransaction
 import com.aerobox.AeroBoxApplication
 import com.aerobox.core.subscription.ParsedSubscription
 import com.aerobox.core.subscription.SubscriptionParser
-import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -35,10 +33,7 @@ class SubscriptionRepository(context: Context) {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    fun getAllSubscriptions(): Flow<List<Subscription>> = subscriptionDao.getAllSubscriptions()
-
-    fun getNodesBySubscription(subscriptionId: Long): Flow<List<ProxyNode>> =
-        proxyNodeDao.getNodesBySubscription(subscriptionId)
+    fun getAllSubscriptions() = subscriptionDao.getAllSubscriptions()
 
     suspend fun addSubscription(
         name: String,

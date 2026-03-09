@@ -3,12 +3,8 @@ package com.aerobox.data.database
 import androidx.room.TypeConverter
 import com.aerobox.data.model.ProxyType
 import com.aerobox.data.model.SubscriptionType
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 class Converters {
-    private val json = Json { ignoreUnknownKeys = true }
-
     @TypeConverter
     fun fromProxyType(type: ProxyType): String = type.name
 
@@ -22,16 +18,4 @@ class Converters {
     @TypeConverter
     fun toSubscriptionType(value: String): SubscriptionType =
         runCatching { SubscriptionType.valueOf(value) }.getOrDefault(SubscriptionType.BASE64)
-
-    @TypeConverter
-    fun fromStringList(list: List<String>?): String =
-        json.encodeToString(list ?: emptyList())
-
-    @TypeConverter
-    fun toStringList(value: String?): List<String> {
-        if (value.isNullOrBlank()) {
-            return emptyList()
-        }
-        return runCatching { json.decodeFromString<List<String>>(value) }.getOrDefault(emptyList())
-    }
 }

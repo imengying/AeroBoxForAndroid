@@ -4,17 +4,6 @@
 -keep class com.aerobox.data.model.** { *; }
 -keep class com.aerobox.data.database.** { *; }
 
-# Keep kotlinx serialization
--keepclassmembers class kotlinx.serialization.json.** { *; }
--keep,includedescriptorclasses class com.aerobox.**$$serializer { *; }
--keepclassmembers class com.aerobox.** {
-    *** Companion;
-}
--keepclasseswithmembers class com.aerobox.** {
-    kotlinx.serialization.KSerializer serializer(...);
-}
--dontwarn kotlinx.serialization.**
-
 # Keep JNI native methods
 -keepclasseswithmembernames class * {
     native <methods>;

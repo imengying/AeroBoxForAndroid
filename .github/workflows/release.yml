@@ -46,7 +46,7 @@ jobs:
       - name: Install required Android SDK packages
         run: |
           yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;${ANDROID_NDK_VERSION}"
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;${ANDROID_NDK_VERSION}"
           echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "${GITHUB_ENV}"
 
       - name: Resolve latest stable sing-box release
@@ -375,7 +375,7 @@ jobs:
         run: |
           set -euo pipefail
           SRC_DIR="${GITHUB_WORKSPACE}/app/build/outputs/apk/release"
-          APKSIGNER="${ANDROID_SDK_ROOT}/build-tools/35.0.0/apksigner"
+          APKSIGNER="${ANDROID_SDK_ROOT}/build-tools/36.0.0/apksigner"
           if [ ! -x "${APKSIGNER}" ]; then
             echo "::error::apksigner not found at ${APKSIGNER}"
             exit 1

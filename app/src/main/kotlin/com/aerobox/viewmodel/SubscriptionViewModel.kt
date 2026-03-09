@@ -4,7 +4,6 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.SubscriptionRepository
 import com.aerobox.data.repository.SubscriptionImportResult
@@ -15,8 +14,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -31,25 +28,11 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     val subscriptions = repository.getAllSubscriptions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _selectedSubscriptionId = MutableStateFlow<Long?>(null)
-    val selectedSubscriptionId: StateFlow<Long?> = _selectedSubscriptionId.asStateFlow()
-
-    val selectedSubscriptionNodes: StateFlow<List<ProxyNode>> = _selectedSubscriptionId
-        .flatMapLatest { id ->
-            if (id != null) repository.getNodesBySubscription(id)
-            else flowOf(emptyList())
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     private val _uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val uiMessage: SharedFlow<String> = _uiMessage.asSharedFlow()
-
-    fun selectSubscription(subscription: Subscription) {
-        _selectedSubscriptionId.value = subscription.id
-    }
 
     fun addSubscription(
         name: String,
@@ -86,9 +69,6 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     fun deleteSubscription(subscription: Subscription) {
         viewModelScope.launch {
             repository.deleteSubscription(subscription)
-            if (_selectedSubscriptionId.value == subscription.id) {
-                _selectedSubscriptionId.value = null
-            }
         }
     }
 
