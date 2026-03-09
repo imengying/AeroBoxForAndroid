@@ -52,7 +52,7 @@ import java.util.concurrent.TimeUnit
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         const val POST_CONNECT_IP_DETECT_DELAY_MS = 500L
-        const val NODE_TEST_TIMEOUT_MS = 3000
+        const val NODE_TEST_TIMEOUT_MS = 5000
         const val NODE_TEST_CONCURRENCY = 4
     }
 
