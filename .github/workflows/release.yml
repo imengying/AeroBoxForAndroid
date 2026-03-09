@@ -23,11 +23,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 17 (libbox build)
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -85,7 +85,7 @@ jobs:
             exit 1
           fi
 
-          # Upstream sing-box 1.13.x treats `PlatformLogWriter != nil` as a reason to enable
+          # Current sing-box upstream treats `PlatformLogWriter != nil` as a reason to enable
           # extra services automatically. AeroBox only uses PlatformLogWriter for runtime log
           # callbacks, and does not depend on the Clash API gRPC surface or cache-file side
           # effects. Keep these patches explicit and fail loudly if upstream refactors the
@@ -347,12 +347,6 @@ jobs:
 
           echo "Bundled routing assets:"
           ls -lh "${ASSET_DIR}"
-
-      - name: Switch to JDK 21 (Android build)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
 
       - name: Build unsigned release APK
         env:
