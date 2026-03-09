@@ -77,7 +77,8 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    // material-icons-extended removed to save ~15MB; custom icons in AppIcons.kt
+    implementation("androidx.compose.material:material-icons-core")
+    // material-icons-extended remains removed to avoid pulling the full icon set
 
     implementation("androidx.navigation:navigation-compose:2.9.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
