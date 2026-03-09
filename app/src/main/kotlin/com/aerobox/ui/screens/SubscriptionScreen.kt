@@ -2,6 +2,12 @@ package com.aerobox.ui.screens
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -31,7 +37,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -44,7 +49,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +72,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
 import com.aerobox.data.model.Subscription
+import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.utils.NetworkUtils
 import com.aerobox.viewmodel.SubscriptionViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -91,6 +96,16 @@ fun SubscriptionScreen(
     var orderedSubscriptions by remember { mutableStateOf(subscriptions) }
     var draggingSubscriptionId by remember { mutableStateOf<Long?>(null) }
     var draggingOffsetY by remember { mutableFloatStateOf(0f) }
+    val refreshRotation by rememberInfiniteTransition(label = "subscription_refresh")
+        .animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "subscription_refresh_rotation"
+        )
 
     LaunchedEffect(viewModel) {
         viewModel.uiMessage.collectLatest { message ->
@@ -115,19 +130,17 @@ fun SubscriptionScreen(
                     }
                 },
                 actions = {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .padding(end = 8.dp),
-                            strokeWidth = 2.dp
-                        )
-                    }
                     IconButton(
                         onClick = { viewModel.updateAllSubscriptions() },
                         enabled = !isLoading
                     ) {
-                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.refresh))
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = stringResource(R.string.refresh),
+                            modifier = Modifier.graphicsLayer {
+                                rotationZ = if (isLoading) refreshRotation else 0f
+                            }
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -135,7 +148,7 @@ fun SubscriptionScreen(
                 )
             )
         },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        snackbarHost = { AppSnackbarHost(hostState = snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
                 Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.add_subscription))

@@ -87,25 +87,15 @@ fun SettingsScreen(
             )
         }
 
-        // ── DNS ──
-        item { SectionHeader(title = "DNS 设置") }
+        // ── Routing ──
+        item { SectionHeader(title = "路由") }
         item {
             SettingItem(
-                modifier = Modifier.clickable { showDnsDialog = true },
+                modifier = Modifier.clickable { onNavigateToRouting() },
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
-                title = "DNS 服务器",
-                supporting = "远程: $remoteDns · 本地: $localDns",
+                title = "路由",
+                supporting = "当前模式 · ${routingMode.displayName}",
                 trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
-            )
-        }
-        item {
-            SettingItem(
-                icon = { Icon(AppIcons.Security, contentDescription = null) },
-                title = "加密 DNS",
-                supporting = "使用 DNS over TLS/HTTPS",
-                trailing = {
-                    Switch(checked = enableDoh, onCheckedChange = { scope.launch { viewModel.setEnableDoh(it) } })
-                }
             )
         }
 
@@ -134,47 +124,6 @@ fun SettingsScreen(
                     trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
                 )
             }
-        }
-
-        // ── Routing ──
-        item { SectionHeader(title = "路由") }
-        item {
-            SettingItem(
-                modifier = Modifier.clickable { onNavigateToRouting() },
-                icon = { Icon(AppIcons.Security, contentDescription = null) },
-                title = "路由",
-                supporting = "当前模式 · ${routingMode.displayName}",
-                trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
-            )
-        }
-
-        // ── Inbound Proxy ──
-        item { SectionHeader(title = "入站代理") }
-        item {
-            SettingItem(
-                icon = { Icon(AppIcons.Speed, contentDescription = null) },
-                title = "SOCKS5 入站",
-                supporting = "端口 2080",
-                trailing = {
-                    Switch(
-                        checked = enableSocksInbound,
-                        onCheckedChange = { scope.launch { viewModel.setEnableSocksInbound(it) } }
-                    )
-                }
-            )
-        }
-        item {
-            SettingItem(
-                icon = { Icon(AppIcons.Speed, contentDescription = null) },
-                title = "HTTP 入站",
-                supporting = "端口 2081",
-                trailing = {
-                    Switch(
-                        checked = enableHttpInbound,
-                        onCheckedChange = { scope.launch { viewModel.setEnableHttpInbound(it) } }
-                    )
-                }
-            )
         }
 
         // ── Appearance ──
@@ -216,6 +165,57 @@ fun SettingsScreen(
                             label = { Text("浅色") }
                         )
                     }
+                }
+            )
+        }
+
+        // ── DNS ──
+        item { SectionHeader(title = "DNS 设置") }
+        item {
+            SettingItem(
+                modifier = Modifier.clickable { showDnsDialog = true },
+                icon = { Icon(AppIcons.Security, contentDescription = null) },
+                title = "DNS 服务器",
+                supporting = "远程: $remoteDns · 本地: $localDns",
+                trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
+            )
+        }
+        item {
+            SettingItem(
+                icon = { Icon(AppIcons.Security, contentDescription = null) },
+                title = "加密 DNS",
+                supporting = "使用 DNS over TLS/HTTPS",
+                trailing = {
+                    Switch(checked = enableDoh, onCheckedChange = { scope.launch { viewModel.setEnableDoh(it) } })
+                }
+            )
+        }
+
+        // ── Inbound ──
+        item { SectionHeader(title = "入站设置") }
+        item {
+            SettingItem(
+                icon = { Icon(AppIcons.Speed, contentDescription = null) },
+                title = "SOCKS5 入站",
+                supporting = "端口 2080",
+                trailing = {
+                    Switch(
+                        checked = enableSocksInbound,
+                        onCheckedChange = { scope.launch { viewModel.setEnableSocksInbound(it) } }
+                    )
+                }
+            )
+        }
+        item {
+            SettingItem(
+                icon = { Icon(AppIcons.Speed, contentDescription = null) },
+                title = "HTTP 入站",
+                supporting = "端口 2081",
+                trailing = {
+                    Switch(
+                        checked = enableHttpInbound,
+                        onCheckedChange = { scope.launch { viewModel.setEnableHttpInbound(it) } }
+                    )
                 }
             )
         }

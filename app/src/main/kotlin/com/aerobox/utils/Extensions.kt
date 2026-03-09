@@ -1,14 +1,8 @@
 package com.aerobox.utils
 
-import android.content.Context
-import android.widget.Toast
 import com.aerobox.data.model.TrafficStats
 import com.aerobox.data.model.VpnState
 import kotlin.math.max
-
-fun Context.showToast(message: String, duration: Int = Toast.LENGTH_SHORT) {
-    Toast.makeText(this, message, duration).show()
-}
 
 fun VpnState.toTrafficStats(): TrafficStats {
     return TrafficStats(

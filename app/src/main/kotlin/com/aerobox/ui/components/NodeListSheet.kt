@@ -46,12 +46,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.aerobox.data.model.NodeLatencyState
 import com.aerobox.data.model.ProxyNode
+import com.aerobox.data.model.Subscription
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun NodeListSheet(
     nodes: List<ProxyNode>,
-    subscriptionNames: Map<Long, String> = emptyMap(),
+    subscriptions: List<Subscription> = emptyList(),
     selectedNodeId: Long,
     onNodeSelected: (ProxyNode) -> Unit,
     onTestSubscription: (List<ProxyNode>) -> Unit,
@@ -89,16 +90,25 @@ fun NodeListSheet(
                     )
                 }
             } else {
-                val grouped = remember(nodes, subscriptionNames) {
+                val grouped = remember(nodes, subscriptions) {
+                    val subscriptionOrder = subscriptions.withIndex().associate { it.value.id to it.index }
+                    val subscriptionNames = subscriptions.associate { it.id to it.name }
                     nodes
                         .groupBy { it.subscriptionId }
                         .filterValues { groupNodes -> groupNodes.isNotEmpty() }
                         .toList()
                         .sortedWith(
                             compareBy<Pair<Long, List<ProxyNode>>> { (subId, _) ->
+                                subscriptionOrder[subId] ?: Int.MAX_VALUE
+                            }.thenBy { (subId, _) ->
                                 if (subId == 0L || !subscriptionNames.containsKey(subId)) 1 else 0
-                            }.thenBy { (subId, _) -> subscriptionNames[subId] ?: "未分组" }
+                            }.thenBy { (subId, _) ->
+                                subscriptionNames[subId] ?: "未分组"
+                            }
                         )
+                }
+                val subscriptionNames = remember(subscriptions) {
+                    subscriptions.associate { it.id to it.name }
                 }
                 val groupIds = remember(grouped) { grouped.map { it.first } }
                 var selectedSubscriptionId by remember { mutableStateOf<Long?>(null) }

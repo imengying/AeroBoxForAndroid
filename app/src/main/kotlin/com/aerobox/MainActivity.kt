@@ -6,25 +6,34 @@ import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Bundle
 import android.os.Build
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.AeroBoxVpnService
+import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.navigation.AppNavigation
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.PreferenceManager
 import com.aerobox.core.AppEventBus
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -33,20 +42,22 @@ class MainActivity : ComponentActivity() {
         const val ACTION_TOGGLE_VPN = "toggle_vpn"
     }
 
+    private val uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
             ensureNotificationPermissionThenStartVpn()
         } else {
-            Toast.makeText(this, R.string.permission_required, Toast.LENGTH_SHORT).show()
+            uiMessage.tryEmit(getString(R.string.permission_required))
         }
     }
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (!granted) {
-            Toast.makeText(this, R.string.notification_permission_hint, Toast.LENGTH_SHORT).show()
+            uiMessage.tryEmit(getString(R.string.notification_permission_hint))
         }
         startVpnFromIntent()
     }
@@ -72,7 +83,19 @@ class MainActivity : ComponentActivity() {
                 darkTheme = useDarkTheme,
                 dynamicColor = dynamicColor
             ) {
-                AppNavigation()
+                val snackbarHostState = remember { SnackbarHostState() }
+                LaunchedEffect(Unit) {
+                    uiMessage.collectLatest { message ->
+                        snackbarHostState.showSnackbar(message)
+                    }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AppNavigation()
+                    AppSnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
             }
         }
 
@@ -134,24 +157,18 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             when (val result = VpnRepository(applicationContext).connectSelectedNode()) {
                 VpnConnectionResult.NoNodeAvailable -> {
-                    Toast.makeText(
-                        this@MainActivity,
-                        R.string.add_node_first,
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    uiMessage.tryEmit(getString(R.string.add_node_first))
                 }
 
                 is VpnConnectionResult.Success -> Unit
                 is VpnConnectionResult.InvalidConfig,
                 is VpnConnectionResult.Failure -> {
-                    Toast.makeText(
-                        this@MainActivity,
+                    uiMessage.tryEmit(
                         ConnectionDiagnostics.userFacingFailureMessage(
                             result = result,
                             operationFailedText = getString(R.string.operation_failed)
-                        ),
-                        Toast.LENGTH_SHORT
-                    ).show()
+                        )
+                    )
                 }
             }
         }

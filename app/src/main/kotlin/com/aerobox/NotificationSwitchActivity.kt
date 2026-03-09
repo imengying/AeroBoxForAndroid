@@ -1,7 +1,6 @@
 package com.aerobox
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,10 +22,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,13 +42,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.data.model.ProxyNode
+import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnRepository
+import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 
 class NotificationSwitchActivity : ComponentActivity() {
+    private val uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    private val pendingNodeId = MutableStateFlow<Long?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -67,35 +75,51 @@ class NotificationSwitchActivity : ComponentActivity() {
                 },
                 dynamicColor = dynamicColor
             ) {
-                NotificationSwitchDialog(
-                    onDismiss = { finish() },
-                    onNodeSelected = { node ->
-                        switchToNode(node)
+                val snackbarHostState = remember { SnackbarHostState() }
+                val pendingNodeIdState by pendingNodeId.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) {
+                    uiMessage.collectLatest { message ->
+                        snackbarHostState.showSnackbar(message)
                     }
-                )
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    NotificationSwitchDialog(
+                        pendingNodeId = pendingNodeIdState,
+                        onDismiss = { finish() },
+                        onNodeSelected = { node ->
+                            switchToNode(node)
+                        }
+                    )
+                    AppSnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
+                }
             }
         }
     }
 
     private fun switchToNode(node: ProxyNode) {
+        if (pendingNodeId.value != null) return
+        pendingNodeId.value = node.id
         lifecycleScope.launch {
             PreferenceManager.setLastSelectedNodeId(applicationContext, node.id)
             when (val result = VpnRepository(applicationContext).switchToNode(node)) {
-                is VpnConnectionResult.Success -> Unit
+                is VpnConnectionResult.Success -> {
+                    finish()
+                }
                 VpnConnectionResult.NoNodeAvailable,
                 is VpnConnectionResult.InvalidConfig,
                 is VpnConnectionResult.Failure -> {
-                    Toast.makeText(
-                        this@NotificationSwitchActivity,
+                    uiMessage.tryEmit(
                         ConnectionDiagnostics.userFacingFailureMessage(
                             result = result,
                             operationFailedText = getString(R.string.operation_failed)
-                        ),
-                        Toast.LENGTH_SHORT
-                    ).show()
+                        )
+                    )
+                    pendingNodeId.value = null
                 }
             }
-            finish()
         }
     }
 }
@@ -103,27 +127,31 @@ class NotificationSwitchActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NotificationSwitchDialog(
+    pendingNodeId: Long?,
     onDismiss: () -> Unit,
     onNodeSelected: (ProxyNode) -> Unit
 ) {
     val allNodes by AeroBoxApplication.database.proxyNodeDao().getAllNodes()
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val subscriptionNames by AeroBoxApplication.database.subscriptionDao().getAllSubscriptions()
+    val subscriptions by AeroBoxApplication.database.subscriptionDao().getAllSubscriptions()
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val selectedNodeId by PreferenceManager.lastSelectedNodeIdFlow(AeroBoxApplication.appInstance)
         .collectAsStateWithLifecycle(initialValue = -1L)
-    var pendingNodeId by remember { mutableStateOf<Long?>(null) }
-
-    val groupedNodes = remember(allNodes, subscriptionNames) {
-        val nameMap = subscriptionNames.associate { it.id to it.name }
+    val groupedNodes = remember(allNodes, subscriptions) {
+        val nameMap = subscriptions.associate { it.id to it.name }
+        val orderMap = subscriptions.withIndex().associate { it.value.id to it.index }
         allNodes
             .groupBy { it.subscriptionId }
             .filterValues { it.isNotEmpty() }
             .toList()
             .sortedWith(
                 compareBy<Pair<Long, List<ProxyNode>>> { (subId, _) ->
+                    orderMap[subId] ?: Int.MAX_VALUE
+                }.thenBy { (subId, _) ->
                     if (subId == 0L || !nameMap.containsKey(subId)) 1 else 0
-                }.thenBy { (subId, _) -> nameMap[subId] ?: "未分组" }
+                }.thenBy { (subId, _) ->
+                    nameMap[subId] ?: "未分组"
+                }
             )
     }
 
@@ -167,7 +195,7 @@ private fun NotificationSwitchDialog(
                 ) {
                     items(count = groupedNodes.size) { index ->
                         val (subId, _) = groupedNodes[index]
-                        val groupName = subscriptionNames.firstOrNull { it.id == subId }?.name ?: "未分组"
+                        val groupName = subscriptions.firstOrNull { it.id == subId }?.name ?: "未分组"
                         FilterChip(
                             selected = selectedGroupIndex == index,
                             onClick = { selectedGroupIndex = index },
@@ -196,7 +224,6 @@ private fun NotificationSwitchDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable(enabled = pendingNodeId == null) {
-                                        pendingNodeId = node.id
                                         onNodeSelected(node)
                                     },
                                 shape = RoundedCornerShape(16.dp)

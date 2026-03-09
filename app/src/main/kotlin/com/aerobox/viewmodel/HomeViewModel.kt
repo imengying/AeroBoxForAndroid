@@ -15,6 +15,7 @@ import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.NodeLatencyState
 import com.aerobox.data.model.RoutingMode
+import com.aerobox.data.model.Subscription
 import com.aerobox.data.model.TrafficStats
 import com.aerobox.data.model.VpnState
 import com.aerobox.data.repository.SubscriptionRepository
@@ -24,14 +25,16 @@ import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.NetworkUtils
 import com.aerobox.utils.PreferenceManager
 import com.aerobox.utils.formatDuration
-import com.aerobox.utils.showToast
 import com.aerobox.utils.toTrafficStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -88,10 +91,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val allNodes: StateFlow<List<ProxyNode>> = nodeDao.getAllNodes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val subscriptionNames: StateFlow<Map<Long, String>> = subscriptionRepository
+    val subscriptions: StateFlow<List<Subscription>> = subscriptionRepository
         .getAllSubscriptions()
-        .map { subs -> subs.associate { it.id to it.name } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _selectedNode = MutableStateFlow<ProxyNode?>(null)
     val selectedNode: StateFlow<ProxyNode?> = _selectedNode.asStateFlow()
@@ -107,6 +109,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _memoryUsage = MutableStateFlow("--")
     val memoryUsage: StateFlow<String> = _memoryUsage.asStateFlow()
+
+    private val _uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val uiMessage: SharedFlow<String> = _uiMessage.asSharedFlow()
 
     private var detectIpJob: Job? = null
     private var connectWatchdogJob: Job? = null
@@ -199,7 +204,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         when (val result = vpnRepository.switchToNode(currentNode)) {
             is VpnConnectionResult.Success -> {
-                appContext.showToast("已切换为${mode.displayName}")
+                _uiMessage.tryEmit("已切换为${mode.displayName}")
             }
 
             is VpnConnectionResult.InvalidConfig -> {
@@ -213,7 +218,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (details != null) {
                     handleConnectionFailure(appContext, details)
                 } else {
-                    appContext.showToast(appContext.getString(com.aerobox.R.string.operation_failed))
+                    _uiMessage.tryEmit(appContext.getString(com.aerobox.R.string.operation_failed))
                 }
             }
 
@@ -244,7 +249,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun startConnection(context: Context) {
         val node = selectedNode.value
         if (node == null) {
-            context.showToast(context.getString(com.aerobox.R.string.add_node_first))
+            _uiMessage.tryEmit(context.getString(com.aerobox.R.string.add_node_first))
             return
         }
 
@@ -252,7 +257,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             VpnStateManager.clearLastError()
             when (val result = vpnRepository.connectNode(node, refreshDueSubscriptions = true)) {
                 is VpnConnectionResult.Success -> {
-                    context.showToast(context.getString(com.aerobox.R.string.notification_connecting))
+                    _uiMessage.tryEmit(context.getString(com.aerobox.R.string.notification_connecting))
                     startConnectWatchdog(context)
                 }
 
@@ -267,12 +272,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     if (details != null) {
                         handleConnectionFailure(context, details)
                     } else {
-                        context.showToast(context.getString(com.aerobox.R.string.operation_failed))
+                        _uiMessage.tryEmit(context.getString(com.aerobox.R.string.operation_failed))
                     }
                 }
 
                 VpnConnectionResult.NoNodeAvailable -> {
-                    context.showToast(context.getString(com.aerobox.R.string.add_node_first))
+                    _uiMessage.tryEmit(context.getString(com.aerobox.R.string.add_node_first))
                 }
             }
         }
@@ -314,7 +319,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     if (details != null) {
                         handleConnectionFailure(appContext, details)
                     } else {
-                        appContext.showToast(appContext.getString(com.aerobox.R.string.operation_failed))
+                        _uiMessage.tryEmit(appContext.getString(com.aerobox.R.string.operation_failed))
                     }
                 }
                 VpnConnectionResult.NoNodeAvailable -> Unit
@@ -399,9 +404,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (fixSuccess) {
-                context.showToast(context.getString(com.aerobox.R.string.connection_fix_success))
+                _uiMessage.tryEmit(context.getString(com.aerobox.R.string.connection_fix_success))
             } else {
-                context.showToast(context.getString(com.aerobox.R.string.connection_fix_failed))
+                _uiMessage.tryEmit(context.getString(com.aerobox.R.string.connection_fix_failed))
             }
             _connectionIssue.value = null
         }
@@ -471,6 +476,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun handleConnectionFailure(context: Context, rawError: String) {
         val issue = ConnectionDiagnostics.classify(rawError)
         _connectionIssue.value = issue
-        context.showToast("${context.getString(com.aerobox.R.string.operation_failed)}: ${issue.title}")
+        _uiMessage.tryEmit("${context.getString(com.aerobox.R.string.operation_failed)}: ${issue.title}")
     }
 }

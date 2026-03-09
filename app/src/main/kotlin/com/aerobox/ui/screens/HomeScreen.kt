@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,12 +26,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,9 +54,11 @@ import com.aerobox.ui.components.NodeListSheet
 import com.aerobox.ui.components.TrafficStatsCard
 import com.aerobox.core.AppEventBus
 import com.aerobox.core.connection.ConnectionFixAction
-import com.aerobox.utils.showToast
+import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.viewmodel.HomeViewModel
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
@@ -71,12 +74,16 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val memoryUsage by viewModel.memoryUsage.collectAsStateWithLifecycle()
     val connectionIssue by viewModel.connectionIssue.collectAsStateWithLifecycle()
     var showNodeList by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (!granted) {
-            context.showToast(context.getString(R.string.notification_permission_hint))
+            snackbarScope.launch {
+                snackbarHostState.showSnackbar(context.getString(R.string.notification_permission_hint))
+            }
         }
         viewModel.onVpnPermissionGranted(context)
     }
@@ -90,7 +97,9 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
             )
         } else {
-            context.showToast(context.getString(R.string.permission_required))
+            snackbarScope.launch {
+                snackbarHostState.showSnackbar(context.getString(R.string.permission_required))
+            }
         }
     }
 
@@ -101,97 +110,108 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             showNodeList = true
         }
     }
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 80.dp, bottom = 24.dp, start = 16.dp, end = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                ConnectionCard(
-                    isConnected = vpnState.isConnected,
-                    isConnecting = isConnecting,
-                    connectionDuration = connectionDuration,
-                    onToggleConnection = {
-                        if (vpnState.isConnected || isConnecting) {
-                            viewModel.toggleConnection(context)
-                        } else {
-                            val permissionIntent = VpnService.prepare(context)
-                            if (permissionIntent != null) {
-                                permissionLauncher.launch(permissionIntent)
-                            } else {
-                                ensureNotificationPermissionThenStart(
-                                    context = context,
-                                    onContinue = { viewModel.onVpnPermissionGranted(context) },
-                                    onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
-                                )
-                            }
-                        }
-                    },
-                )
-            }
+    LaunchedEffect(viewModel) {
+        viewModel.uiMessage.collectLatest { message ->
+            snackbarHostState.showSnackbar(message)
         }
-
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                NodeSelectorCard(
-                    nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
-                    nodeAddress = selectedNode?.type?.displayName() ?: "--",
-                    onClick = { showNodeList = true },
-                    modifier = Modifier.weight(0.5f).height(92.dp)
-                )
-                TrafficStatsCard(
-                    stats = trafficStats,
-                    modifier = Modifier.weight(0.5f).height(92.dp)
-                )
-            }
-        }
-
-        item {
-            RoutingModeRow(
-                selected = routingMode,
-                onSelect = { viewModel.setRoutingMode(it) }
-            )
-        }
-
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                NetworkDetectCard(
-                    ip = detectedIp,
-                    onClick = { viewModel.refreshNetworkInfo() },
-                    modifier = Modifier.weight(0.5f).height(92.dp)
-                )
-                MemoryUsageCard(
-                    memoryUsage = memoryUsage,
-                    modifier = Modifier.weight(0.5f).height(92.dp)
-                )
-            }
-        }
-
-        if (selectedNode == null) {
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 80.dp, bottom = 24.dp, start = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
             item {
-                Text(
-                    text = stringResource(R.string.hint_add_subscription),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    ConnectionCard(
+                        isConnected = vpnState.isConnected,
+                        isConnecting = isConnecting,
+                        connectionDuration = connectionDuration,
+                        onToggleConnection = {
+                            if (vpnState.isConnected || isConnecting) {
+                                viewModel.toggleConnection(context)
+                            } else {
+                                val permissionIntent = VpnService.prepare(context)
+                                if (permissionIntent != null) {
+                                    permissionLauncher.launch(permissionIntent)
+                                } else {
+                                    ensureNotificationPermissionThenStart(
+                                        context = context,
+                                        onContinue = { viewModel.onVpnPermissionGranted(context) },
+                                        onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
+                                    )
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    NodeSelectorCard(
+                        nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
+                        nodeAddress = selectedNode?.type?.displayName() ?: "--",
+                        onClick = { showNodeList = true },
+                        modifier = Modifier.weight(0.5f).height(92.dp)
+                    )
+                    TrafficStatsCard(
+                        stats = trafficStats,
+                        modifier = Modifier.weight(0.5f).height(92.dp)
+                    )
+                }
+            }
+
+            item {
+                RoutingModeRow(
+                    selected = routingMode,
+                    onSelect = { viewModel.setRoutingMode(it) }
                 )
             }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    NetworkDetectCard(
+                        ip = detectedIp,
+                        onClick = { viewModel.refreshNetworkInfo() },
+                        modifier = Modifier.weight(0.5f).height(92.dp)
+                    )
+                    MemoryUsageCard(
+                        memoryUsage = memoryUsage,
+                        modifier = Modifier.weight(0.5f).height(92.dp)
+                    )
+                }
+            }
+
+            if (selectedNode == null) {
+                item {
+                    Text(
+                        text = stringResource(R.string.hint_add_subscription),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
+        AppSnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 
     // Node list bottom sheet
     if (showNodeList) {
-        val subscriptionNames by viewModel.subscriptionNames.collectAsStateWithLifecycle()
+        val subscriptions by viewModel.subscriptions.collectAsStateWithLifecycle()
         NodeListSheet(
             nodes = allNodes,
-            subscriptionNames = subscriptionNames,
+            subscriptions = subscriptions,
             selectedNodeId = selectedNode?.id ?: -1,
             onNodeSelected = { node ->
                 viewModel.selectNode(node)

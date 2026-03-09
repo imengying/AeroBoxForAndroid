@@ -13,7 +13,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     env:
-      ANDROID_NDK_VERSION: 28.0.13004108
+      ANDROID_NDK_VERSION: 29.0.14206865
       GOMOBILE_VERSION: v0.1.12
       LIBBOX_BUILD_TAGS: with_quic,with_utls
 

@@ -21,6 +21,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -39,8 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.core.geo.GeoAssetManager
+import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.icons.AppIcons
-import com.aerobox.utils.showToast
 import com.aerobox.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
@@ -58,6 +59,7 @@ fun RoutingSettingsScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var geoUpdating by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
         topBar = {
@@ -72,7 +74,8 @@ fun RoutingSettingsScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
-        }
+        },
+        snackbarHost = { AppSnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -167,7 +170,7 @@ fun RoutingSettingsScreen(
                             scope.launch {
                                 val ok = GeoAssetManager.updateAll(context)
                                 geoUpdating = false
-                                context.showToast(
+                                snackbarHostState.showSnackbar(
                                     if (ok) "路由资源更新完成" else "路由资源更新失败，请检查网络"
                                 )
                             }
