@@ -710,7 +710,7 @@ object ConfigGenerator {
     }
 
     private fun destinationDomainStrategy(ipv6Mode: IPv6Mode): String {
-        return "ipv4_only"
+        return ipv6Mode.domainStrategy()
     }
 
     private fun buildTlsObject(node: ProxyNode, includeReality: Boolean = false): JSONObject {
