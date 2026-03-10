@@ -388,7 +388,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             RuntimeLogBuffer.append(
                 "debug",
                 "Tun prepared: ipv4=${inet4Addresses.size}, ipv6=${inet6Addresses.size}, " +
-                    "forcedDefaultRoutes=true"
+                    "forcedDefaultRoutes=true, vpnDns=${options.dnsServerAddress.value}"
             )
         }
 

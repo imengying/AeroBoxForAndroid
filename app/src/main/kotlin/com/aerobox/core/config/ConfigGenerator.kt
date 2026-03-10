@@ -40,6 +40,7 @@ object ConfigGenerator {
         val hasGeoSiteCn = !geoSiteCnRuleSetPath.isNullOrBlank()
         val hasGeoIpCn = !geoIpCnRuleSetPath.isNullOrBlank()
         val hasGeoAds = !geoSiteAdsRuleSetPath.isNullOrBlank()
+        val preferLocalDomainResolver = isPureIpv6Server(node.server)
 
         config.put(
             "log",
@@ -56,7 +57,8 @@ object ConfigGenerator {
                 enableDoh = enableDoh,
                 routingMode = routingMode,
                 enableGeoCnDomainRule = enableGeoCnDomainRule && hasGeoSiteCn,
-                ipv6Mode = ipv6Mode
+                ipv6Mode = ipv6Mode,
+                preferLocalDomainResolver = preferLocalDomainResolver
             )
         )
         config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, ipv6Mode))
@@ -80,7 +82,8 @@ object ConfigGenerator {
                 enableGeoCnDomainRule = enableGeoCnDomainRule && hasGeoSiteCn,
                 enableGeoCnIpRule = enableGeoCnIpRule && hasGeoIpCn,
                 enableGeoAdsBlock = enableGeoAdsBlock && hasGeoAds,
-                enableGeoBlockQuic = enableGeoBlockQuic
+                enableGeoBlockQuic = enableGeoBlockQuic,
+                preferLocalDomainResolver = preferLocalDomainResolver
             )
         )
         config.put("experimental", buildExperimental())
@@ -155,7 +158,8 @@ object ConfigGenerator {
         enableDoh: Boolean,
         routingMode: RoutingMode,
         enableGeoCnDomainRule: Boolean,
-        ipv6Mode: IPv6Mode
+        ipv6Mode: IPv6Mode,
+        preferLocalDomainResolver: Boolean = false
     ): JSONObject {
         val bootstrapServer = buildDnsServer(
             tag = "bootstrap",
@@ -181,7 +185,7 @@ object ConfigGenerator {
             tag = "remote",
             dns = normalizeRemoteDnsAddress(remoteDns, enableDoh),
             detour = "proxy",
-            resolverTag = "bootstrap",
+            resolverTag = if (preferLocalDomainResolver) "local" else "bootstrap",
             ipv6Mode = ipv6Mode
         )
 
@@ -487,14 +491,15 @@ object ConfigGenerator {
         enableGeoCnDomainRule: Boolean = true,
         enableGeoCnIpRule: Boolean = true,
         enableGeoAdsBlock: Boolean = true,
-        enableGeoBlockQuic: Boolean = true
+        enableGeoBlockQuic: Boolean = true,
+        preferLocalDomainResolver: Boolean = false
     ): JSONObject {
         val route = JSONObject()
             .put("auto_detect_interface", true)
             .put(
                 "default_domain_resolver",
                 JSONObject()
-                    .put("server", "bootstrap")
+                    .put("server", if (preferLocalDomainResolver) "local" else "bootstrap")
                     .put("strategy", ipv6Mode.domainStrategy())
             )
 
@@ -705,6 +710,11 @@ object ConfigGenerator {
             .removeSuffix("]")
             .substringBefore('%')
             .trim()
+    }
+
+    private fun isPureIpv6Server(server: String): Boolean {
+        val normalized = normalizeOutboundServer(server)
+        return normalized.contains(':') && isIpLiteral(normalized)
     }
 
     private fun buildTlsObject(node: ProxyNode, includeReality: Boolean = false): JSONObject {

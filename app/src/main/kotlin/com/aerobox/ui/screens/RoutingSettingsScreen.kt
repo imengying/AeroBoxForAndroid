@@ -1,6 +1,5 @@
 package com.aerobox.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -164,7 +163,7 @@ fun RoutingSettingsScreen(
                 val geoSiteSize = GeoAssetManager.getGeoSiteSize(context)
                 val geoAdsSize = GeoAssetManager.getGeoAdsSize(context)
                 RoutingSettingItem(
-                    modifier = Modifier.clickable {
+                    onClick = {
                         if (!geoUpdating) {
                             geoUpdating = true
                             scope.launch {
@@ -216,35 +215,72 @@ private fun RoutingSettingItem(
     title: String,
     supporting: String,
     trailing: @Composable () -> Unit,
+    onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        ListItem(
-            leadingContent = icon,
-            headlineContent = {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+    val shape = RoundedCornerShape(16.dp)
+    val colors = CardDefaults.cardColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+    )
+
+    if (onClick != null) {
+        Card(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            colors = colors
+        ) {
+            ListItem(
+                leadingContent = icon,
+                headlineContent = {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = supporting,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                trailingContent = trailing,
+                colors = ListItemDefaults.colors(
+                    containerColor = Color.Transparent
                 )
-            },
-            supportingContent = {
-                Text(
-                    text = supporting,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            trailingContent = trailing,
-            colors = ListItemDefaults.colors(
-                containerColor = Color.Transparent
             )
-        )
+        }
+    } else {
+        Card(
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            colors = colors
+        ) {
+            ListItem(
+                leadingContent = icon,
+                headlineContent = {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = supporting,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                trailingContent = trailing,
+                colors = ListItemDefaults.colors(
+                    containerColor = Color.Transparent
+                )
+            )
+        }
     }
 }

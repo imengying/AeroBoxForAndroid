@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -84,7 +83,7 @@ fun SettingsScreen(
         item { SectionHeader(title = "订阅管理") }
         item {
             SettingItem(
-                modifier = Modifier.clickable { onNavigateToSubscriptions() },
+                onClick = onNavigateToSubscriptions,
                 icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                 title = "订阅管理",
                 supporting = "添加、更新和管理订阅",
@@ -96,7 +95,7 @@ fun SettingsScreen(
         item { SectionHeader(title = "路由") }
         item {
             SettingItem(
-                modifier = Modifier.clickable { onNavigateToRouting() },
+                onClick = onNavigateToRouting,
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
                 title = "路由",
                 supporting = "当前模式 · ${routingMode.displayName}",
@@ -122,7 +121,7 @@ fun SettingsScreen(
         if (perAppProxyEnabled) {
             item {
                 SettingItem(
-                    modifier = Modifier.clickable { onNavigateToPerAppProxy() },
+                    onClick = onNavigateToPerAppProxy,
                     icon = { Icon(AppIcons.Speed, contentDescription = null) },
                     title = "配置应用列表",
                     supporting = "选择哪些应用走代理/绕过代理",
@@ -178,7 +177,7 @@ fun SettingsScreen(
         item { SectionHeader(title = "DNS 设置") }
         item {
             SettingItem(
-                modifier = Modifier.clickable { showDnsDialog = true },
+                onClick = { showDnsDialog = true },
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
                 title = "DNS 服务器",
                 supporting = "远程: $remoteDns · 本地: $localDns",
@@ -269,7 +268,7 @@ fun SettingsScreen(
         item { SectionHeader(title = stringResource(R.string.about)) }
         item {
             SettingItem(
-                modifier = Modifier.clickable { onNavigateToLog() },
+                onClick = onNavigateToLog,
                 icon = { Icon(Icons.Filled.Info, contentDescription = null) },
                 title = "运行日志",
                 supporting = "查看 sing-box 运行日志",
@@ -278,7 +277,7 @@ fun SettingsScreen(
         }
         item {
             SettingItem(
-                modifier = Modifier.clickable {
+                onClick = {
                     context.startActivity(
                         Intent(
                             Intent.ACTION_VIEW,
@@ -294,7 +293,7 @@ fun SettingsScreen(
         }
         item {
             SettingItem(
-                modifier = Modifier.clickable { onNavigateToLicense() },
+                onClick = onNavigateToLicense,
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
                 title = stringResource(R.string.open_source_licenses),
                 supporting = stringResource(R.string.about),
@@ -384,35 +383,72 @@ private fun SettingItem(
     title: String,
     supporting: String,
     trailing: @Composable () -> Unit,
+    onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-        colors = androidx.compose.material3.CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        )
-    ) {
-        ListItem(
-            leadingContent = icon,
-            headlineContent = { 
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                ) 
-            },
-            supportingContent = { 
-                Text(
-                    text = supporting,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                ) 
-            },
-            trailingContent = trailing,
-            colors = androidx.compose.material3.ListItemDefaults.colors(
-                containerColor = androidx.compose.ui.graphics.Color.Transparent
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+    val colors = androidx.compose.material3.CardDefaults.cardColors(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+    )
+
+    if (onClick != null) {
+        Card(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            colors = colors
+        ) {
+            ListItem(
+                leadingContent = icon,
+                headlineContent = {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = supporting,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                trailingContent = trailing,
+                colors = androidx.compose.material3.ListItemDefaults.colors(
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent
+                )
             )
-        )
+        }
+    } else {
+        Card(
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            colors = colors
+        ) {
+            ListItem(
+                leadingContent = icon,
+                headlineContent = {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        text = supporting,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                trailingContent = trailing,
+                colors = androidx.compose.material3.ListItemDefaults.colors(
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent
+                )
+            )
+        }
     }
 }
