@@ -407,9 +407,11 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                     }
                 }
             } else {
-                builder.addRoute("0.0.0.0", 0)
+                builder.addRoute("0.0.0.0", 1)
+                builder.addRoute("128.0.0.0", 1)
                 if (inet6Addresses.isNotEmpty()) {
-                    builder.addRoute("::", 0)
+                    builder.addRoute("::", 1)
+                    builder.addRoute("8000::", 1)
                 }
             }
             RuntimeLogBuffer.append(
