@@ -245,7 +245,6 @@ jobs:
               }
               defer conn.Close()
 
-              client := v2rayapi.NewStatsServiceClient(conn)
               patterns := make([]string, 0)
               for _, tag := range strings.Split(outboundTags, ",") {
                   trimmed := strings.TrimSpace(tag)
@@ -261,9 +260,16 @@ jobs:
               ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
               defer cancel()
 
-              response, err := client.QueryStats(ctx, &v2rayapi.QueryStatsRequest{
+              request := &v2rayapi.QueryStatsRequest{
                   Patterns: patterns,
-              })
+              }
+              response := new(v2rayapi.QueryStatsResponse)
+              err = conn.Invoke(
+                  ctx,
+                  "/v2ray.core.app.stats.command.StatsService/QueryStats",
+                  request,
+                  response,
+              )
               if err != nil {
                   return "", E.Cause(err, "query stats")
               }
