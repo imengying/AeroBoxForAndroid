@@ -170,6 +170,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 val overrides = buildOverrideOptions()
                 server.startOrReloadService(config, overrides)
                 RuntimeLogBuffer.append("info", "startOrReloadService invoked")
+                startSpeedTicker()
 
             }.onFailure { e ->
                 Log.e(TAG, "startVpn failed", e)
@@ -422,7 +423,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
             updateUnderlyingNetwork(DefaultNetworkMonitor.defaultNetwork)
         }
-        startSpeedTicker()
         return pfd.fd
     }
 

@@ -159,6 +159,7 @@ class VpnRepository(private val context: Context) {
             buildString {
                 append("Node summary: ")
                 append("type=").append(node.type.name)
+                append(", serverType=").append(node.serverType())
                 node.network?.takeIf { it.isNotBlank() }?.let { append(", network=").append(it) }
                 append(", tls=").append(node.tls)
                 node.security?.takeIf { it.isNotBlank() }?.let { append(", security=").append(it) }
@@ -234,5 +235,19 @@ class VpnRepository(private val context: Context) {
             geoSiteCnRuleSetPath = geoSiteCnRuleSetPath,
             geoSiteAdsRuleSetPath = geoSiteAdsRuleSetPath
         )
+    }
+
+    private fun ProxyNode.serverType(): String {
+        val host = server.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
+        val isIpv4 = host.split('.').let { parts ->
+            parts.size == 4 && parts.all { part -> part.toIntOrNull()?.let { it in 0..255 } == true }
+        }
+        if (isIpv4) return "ipv4"
+        val isIpv6 = host.contains(':') &&
+            host.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
+        return when {
+            isIpv6 -> "ipv6"
+            else -> "domain"
+        }
     }
 }
