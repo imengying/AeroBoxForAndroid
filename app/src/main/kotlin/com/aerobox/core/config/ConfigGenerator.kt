@@ -124,9 +124,7 @@ object ConfigGenerator {
                 .put("auto_detect_interface", false)
                 .put(
                     "default_domain_resolver",
-                    JSONObject()
-                        .put("server", "local")
-                        .put("strategy", destinationDomainStrategy(ipv6Mode))
+                    buildDomainResolver("local", ipv6Mode)
                 )
                 .put("final", PROXY_OUTBOUND_TAG)
         )
@@ -175,7 +173,7 @@ object ConfigGenerator {
             return JSONObject()
                 .put("servers", JSONArray().put(localServer).put(bootstrapServer))
                 .put("final", "local")
-                .put("strategy", destinationDomainStrategy(ipv6Mode))
+                .putDomainStrategyIfSet(ipv6Mode)
         }
 
         val remoteServer = buildDnsServer(
@@ -195,7 +193,7 @@ object ConfigGenerator {
                     .put(bootstrapServer)
             )
             .put("final", "remote")
-            .put("strategy", destinationDomainStrategy(ipv6Mode))
+            .putDomainStrategyIfSet(ipv6Mode)
 
         // Only add DNS routing rules for rule-based modes
         if (routingMode == RoutingMode.RULE_BASED) {
@@ -242,9 +240,7 @@ object ConfigGenerator {
                 if (!isIpLiteral(spec.server)) {
                     put(
                         "domain_resolver",
-                        JSONObject()
-                            .put("server", resolverTag ?: "bootstrap")
-                            .put("strategy", ipv6Mode.domainStrategy())
+                        buildDomainResolver(resolverTag ?: "bootstrap", ipv6Mode)
                     )
                 }
             }
@@ -446,10 +442,10 @@ object ConfigGenerator {
             .put("tag", "tun-in")
             .put("interface_name", "tun0")
             .put("address", tunAddresses)
-            .put("mtu", 1500)
+            .put("mtu", 1400)
             .put("auto_route", true)
             .put("strict_route", true)
-            .put("stack", "system")
+            .put("stack", "mixed")
             .put("sniff", true)
             .put("sniff_override_destination", true)
 
@@ -501,9 +497,7 @@ object ConfigGenerator {
             .put("auto_detect_interface", true)
             .put(
                 "default_domain_resolver",
-                JSONObject()
-                    .put("server", "local")
-                    .put("strategy", destinationDomainStrategy(ipv6Mode))
+                buildDomainResolver("local", ipv6Mode)
             )
 
         val ruleSets = JSONArray()
@@ -696,9 +690,7 @@ object ConfigGenerator {
         if (!isIpLiteral(cleanServer)) {
             outbound.put(
                 "domain_resolver",
-                JSONObject()
-                    .put("server", "bootstrap")
-                    .put("strategy", ipv6Mode.domainStrategy())
+                buildDomainResolver("bootstrap", ipv6Mode)
             )
         }
         return outbound
@@ -715,8 +707,23 @@ object ConfigGenerator {
             .trim()
     }
 
-    private fun destinationDomainStrategy(ipv6Mode: IPv6Mode): String {
-        return ipv6Mode.domainStrategy()
+    private fun buildDomainResolver(serverTag: String, ipv6Mode: IPv6Mode): JSONObject {
+        return JSONObject()
+            .put("server", serverTag)
+            .apply {
+                val strategy = ipv6Mode.domainStrategy()
+                if (strategy.isNotEmpty()) {
+                    put("strategy", strategy)
+                }
+            }
+    }
+
+    private fun JSONObject.putDomainStrategyIfSet(ipv6Mode: IPv6Mode): JSONObject {
+        val strategy = ipv6Mode.domainStrategy()
+        if (strategy.isNotEmpty()) {
+            put("strategy", strategy)
+        }
+        return this
     }
 
     private fun buildTlsObject(node: ProxyNode, includeReality: Boolean = false): JSONObject {

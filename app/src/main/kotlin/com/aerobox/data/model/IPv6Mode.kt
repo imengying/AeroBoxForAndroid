@@ -14,7 +14,7 @@ enum class IPv6Mode {
     fun domainStrategy(): String {
         return when (this) {
             DISABLE -> "ipv4_only"
-            ENABLE -> "prefer_ipv4"
+            ENABLE -> "prefer_ipv6"
         }
     }
 
