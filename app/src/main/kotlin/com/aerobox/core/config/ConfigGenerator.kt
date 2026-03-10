@@ -175,6 +175,7 @@ object ConfigGenerator {
             return JSONObject()
                 .put("servers", JSONArray().put(localServer).put(bootstrapServer))
                 .put("final", "local")
+                .put("strategy", destinationDomainStrategy(ipv6Mode))
         }
 
         val remoteServer = buildDnsServer(
@@ -194,6 +195,7 @@ object ConfigGenerator {
                     .put(bootstrapServer)
             )
             .put("final", "remote")
+            .put("strategy", destinationDomainStrategy(ipv6Mode))
 
         // Only add DNS routing rules for rule-based modes
         if (routingMode == RoutingMode.RULE_BASED) {
