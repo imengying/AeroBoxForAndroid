@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.IpPrefix
-import android.net.Network
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
@@ -71,7 +70,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     private var lastNodeId: Long = -1L
     private var userRequestedStop = false
     private var reconnectAttempts = 0
-    private var hasIpv6Tun = false
     private var cachedConnectedNode: com.aerobox.data.model.ProxyNode? = null
 
     private val closeReceiver = object : BroadcastReceiver() {
@@ -152,9 +150,8 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                    DefaultNetworkMonitor.setNetworkChangedCallback(::updateUnderlyingNetwork)
+                    DefaultNetworkMonitor.start()
                 }
-                DefaultNetworkMonitor.start()
 
                 val server = commandServer ?: CommandServer(this@AeroBoxVpnService, this@AeroBoxVpnService).also {
                     it.start()
@@ -312,14 +309,13 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     override fun openTun(options: TunOptions): Int {
         if (prepare(this) != null) error("android: missing vpn permission")
-        hasIpv6Tun = false // Reset before reading new TUN options
         RuntimeLogBuffer.append("debug", "Opening VPN TUN interface")
 
         val builder = Builder()
             .setSession("AeroBox")
             .setMtu(options.mtu)
 
-        // Read addresses first so we know if IPv6 is active
+        // Read addresses
         val inet4Addresses = mutableListOf<Pair<String, Int>>()
         val inet4Address = options.inet4Address
         while (inet4Address.hasNext()) {
@@ -336,33 +332,8 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         }
         inet6Addresses.forEach { (address, prefix) -> builder.addAddress(address, prefix) }
 
-        hasIpv6Tun = inet6Addresses.isNotEmpty()
+        val hasIpv6 = inet6Addresses.isNotEmpty()
         builder.setMetered(false)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-            // When IPv6 TUN addresses are present, pass null to let the system
-            // auto-select the right physical network for both IPv4 and IPv6 traffic.
-            // Binding to a single network may prevent IPv6 from working if that
-            // network is IPv4-only.
-            if (hasIpv6Tun) {
-                runCatching {
-                    builder.setUnderlyingNetworks(null)
-                }
-                RuntimeLogBuffer.append("debug", "Builder underlying networks: null (IPv6 enabled)")
-            } else {
-                DefaultNetworkMonitor.defaultNetwork?.let { network ->
-                    runCatching {
-                        builder.setUnderlyingNetworks(arrayOf(network))
-                    }.onSuccess {
-                        RuntimeLogBuffer.append("debug", "Builder underlying network set: $network")
-                    }.onFailure {
-                        RuntimeLogBuffer.append(
-                            "warn",
-                            "Builder setUnderlyingNetworks failed: ${it.message ?: it}"
-                        )
-                    }
-                }
-            }
-        }
 
         if (options.autoRoute) {
             val inet4Routes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -392,7 +363,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             // on the VPN network. sing-box hijacks all DNS traffic, so the
             // actual address doesn't matter – it just needs to be routable
             // through the TUN.
-            if (hasIpv6Tun) {
+            if (hasIpv6) {
                 inet6Addresses.firstOrNull()?.let { (address, _) ->
                     runCatching { builder.addDnsServer(address) }
                 }
@@ -420,7 +391,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                     toIpPrefixOrNull(address, prefix)?.let { builder.excludeRoute(it) }
                 }
             }
-            val ipv6Dns = if (hasIpv6Tun) inet6Addresses.firstOrNull()?.first else null
+            val ipv6Dns = if (hasIpv6) inet6Addresses.firstOrNull()?.first else null
             RuntimeLogBuffer.append(
                 "debug",
                 "Tun prepared: ipv4=${inet4Addresses.size}, ipv6=${inet6Addresses.size}, " +
@@ -456,15 +427,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         val initialSpeedText = "↑ 0 B/s  ↓ 0 B/s"
         val notification = buildNotification(contentText = initialSpeedText, connected = true)
         notificationManager.notify(NOTIFICATION_ID, notification)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-            if (hasIpv6Tun) {
-                // Explicitly set null on the VPN service after establish() to
-                // override any specific network that was set before openTun.
-                runCatching { setUnderlyingNetworks(null) }
-            } else {
-                updateUnderlyingNetwork(DefaultNetworkMonitor.defaultNetwork)
-            }
-        }
         return pfd.fd
     }
 
@@ -536,24 +498,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             is Int -> value
             is Number -> value.toInt()
             else -> value.toString().toIntOrNull()
-        }
-    }
-
-    private fun updateUnderlyingNetwork(network: Network?) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return
-        // When IPv6 is active, always force underlying networks to null so the
-        // system can route both IPv4 and IPv6 traffic through the correct interfaces.
-        if (hasIpv6Tun) {
-            runCatching { setUnderlyingNetworks(null) }
-            return
-        }
-        runCatching {
-            setUnderlyingNetworks(network?.let { arrayOf(it) })
-        }.onFailure {
-            RuntimeLogBuffer.append(
-                "warn",
-                "setUnderlyingNetworks failed: ${it.message ?: it}"
-            )
         }
     }
 

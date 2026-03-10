@@ -27,9 +27,12 @@ object DefaultNetworkMonitor {
         private set
 
     private var listener: InterfaceUpdateListener? = null
-    private var networkChangedCallback: ((Network?) -> Unit)? = null
     private var registered = false
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // Dedup: only notify libbox when the interface actually changes
+    private var lastInterfaceName: String? = null
+    private var lastInterfaceIndex: Int = -1
 
     private val networkRequest: NetworkRequest = NetworkRequest.Builder()
         .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
@@ -40,7 +43,6 @@ object DefaultNetworkMonitor {
         override fun onAvailable(network: Network) {
             defaultNetwork = network
             RuntimeLogBuffer.append("debug", "Default network available: $network")
-            networkChangedCallback?.invoke(network)
             notifyInterfaceUpdate(network)
         }
 
@@ -49,7 +51,6 @@ object DefaultNetworkMonitor {
             capabilities: NetworkCapabilities
         ) {
             if (network == defaultNetwork) {
-                networkChangedCallback?.invoke(network)
                 notifyInterfaceUpdate(network)
             }
         }
@@ -57,8 +58,9 @@ object DefaultNetworkMonitor {
         override fun onLost(network: Network) {
             if (network == defaultNetwork) {
                 defaultNetwork = null
+                lastInterfaceName = null
+                lastInterfaceIndex = -1
                 RuntimeLogBuffer.append("warn", "Default network lost: $network")
-                networkChangedCallback?.invoke(null)
                 listener?.runCatching {
                     updateDefaultInterface("", -1, false, false)
                 }
@@ -78,7 +80,6 @@ object DefaultNetworkMonitor {
             Log.w(TAG, "Failed to register network callback", e)
         }
         defaultNetwork = cm.activeNetwork
-        networkChangedCallback?.invoke(defaultNetwork)
         defaultNetwork?.let { notifyInterfaceUpdate(it) }
     }
 
@@ -90,7 +91,8 @@ object DefaultNetworkMonitor {
         registered = false
         defaultNetwork = null
         listener = null
-        networkChangedCallback = null
+        lastInterfaceName = null
+        lastInterfaceIndex = -1
     }
 
     fun setListener(listener: InterfaceUpdateListener?) {
@@ -98,11 +100,6 @@ object DefaultNetworkMonitor {
         if (listener != null) {
             defaultNetwork?.let { notifyInterfaceUpdate(it) }
         }
-    }
-
-    fun setNetworkChangedCallback(callback: ((Network?) -> Unit)?) {
-        networkChangedCallback = callback
-        callback?.invoke(defaultNetwork)
     }
 
     private fun notifyInterfaceUpdate(network: Network) {
@@ -117,6 +114,13 @@ object DefaultNetworkMonitor {
             -1
         }
 
+        // Skip if interface hasn't changed — avoids flooding libbox with
+        // duplicate updates on repeated onCapabilitiesChanged callbacks.
+        if (interfaceName == lastInterfaceName && interfaceIndex == lastInterfaceIndex) return
+        lastInterfaceName = interfaceName
+        lastInterfaceIndex = interfaceIndex
+
+        RuntimeLogBuffer.append("debug", "Default interface updated: name=$interfaceName, index=$interfaceIndex")
         runCatching {
             listener.updateDefaultInterface(interfaceName, interfaceIndex, false, false)
         }.onFailure {

@@ -28,6 +28,8 @@ import com.aerobox.utils.formatDuration
 import com.aerobox.utils.toTrafficStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +47,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -56,7 +59,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         const val POST_CONNECT_IP_DETECT_DELAY_MS = 500L
         const val NODE_TEST_TIMEOUT_MS = 5000
-        const val NODE_TEST_CONCURRENCY = 4
+        const val NODE_TEST_CONCURRENCY = 6
         val IPV4_REGEX = Regex("""^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$""")
         val IPV6_REGEX = Regex("""^[0-9A-Fa-f:]+(%[0-9A-Za-z._~-]+)?$""")
     }
@@ -337,8 +340,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun testSubscriptionNodesLatency(nodes: List<ProxyNode>) {
         viewModelScope.launch {
+            val subscriptionId = nodes.firstOrNull()?.subscriptionId ?: return@launch
             val semaphore = Semaphore(NODE_TEST_CONCURRENCY)
             val latencyResults = java.util.concurrent.ConcurrentHashMap<Long, Int>()
+
             val jobs = nodes.map { node ->
                 launch {
                     subscriptionRepository.updateNodeLatency(node.id, NodeLatencyState.TESTING)
@@ -346,28 +351,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     val finalLatency = latency.takeIf { it > 0 } ?: NodeLatencyState.FAILED
                     subscriptionRepository.updateNodeLatency(node.id, finalLatency)
                     latencyResults[node.id] = finalLatency
+
+                    // Recompute sort after each result
+                    val sortedIds = computeSortedIds(nodes, latencyResults)
+                    _nodeSortOrder.update { it + (subscriptionId to sortedIds) }
                 }
             }
             jobs.forEach { it.join() }
-
-            // Compute sorted order snapshot: valid latency ascending, then FAILED, then rest
-            val subscriptionId = nodes.firstOrNull()?.subscriptionId ?: return@launch
-            val sortedIds = nodes.sortedWith(
-                compareBy<ProxyNode> {
-                    val lat = latencyResults[it.id] ?: it.latency
-                    when {
-                        lat > 0 -> 0    // valid latency first
-                        lat == NodeLatencyState.FAILED -> 1
-                        else -> 2        // UNTESTED / TESTING last
-                    }
-                }.thenBy {
-                    val lat = latencyResults[it.id] ?: it.latency
-                    if (lat > 0) lat else Int.MAX_VALUE
-                }
-            ).map { it.id }
-
-            _nodeSortOrder.update { it + (subscriptionId to sortedIds) }
         }
+    }
+
+    private fun computeSortedIds(
+        nodes: List<ProxyNode>,
+        latencyResults: Map<Long, Int>
+    ): List<Long> {
+        return nodes.sortedWith(
+            compareBy<ProxyNode> {
+                val lat = latencyResults[it.id] ?: it.latency
+                when {
+                    lat > 0 -> 0    // valid latency first
+                    lat == NodeLatencyState.FAILED -> 1
+                    lat == NodeLatencyState.TESTING -> 2
+                    else -> 3       // UNTESTED last
+                }
+            }.thenBy {
+                val lat = latencyResults[it.id] ?: it.latency
+                if (lat > 0) lat else Int.MAX_VALUE
+            }
+        ).map { it.id }
     }
 
     fun testSingleNodeLatency(node: ProxyNode) {
@@ -439,46 +450,54 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun fetchPublicIp(node: ProxyNode?): String = withContext(Dispatchers.IO) {
-        val directIpv4Endpoints = listOf(
-            "https://4.ipw.cn",
-            "https://api.ip.sb/ip"
-        )
-        val directIpv6Endpoints = listOf(
-            "https://6.ipw.cn",
-            "https://api6.ipify.org"
-        )
-        val proxiedIpv4Endpoints = listOf(
-            "https://api4.ipify.org",
-            "https://v4.ident.me"
-        )
-        val proxiedIpv6Endpoints = listOf(
-            "https://api6.ipify.org",
-            "https://v6.ident.me"
-        )
+        val ipv4Endpoints = if (vpnState.value.isConnected) {
+            listOf("https://api4.ipify.org", "https://v4.ident.me", "https://4.ipw.cn")
+        } else {
+            listOf("https://4.ipw.cn", "https://api.ip.sb/ip", "https://api4.ipify.org")
+        }
+        val ipv6Endpoints = if (vpnState.value.isConnected) {
+            listOf("https://api6.ipify.org", "https://v6.ident.me", "https://6.ipw.cn")
+        } else {
+            listOf("https://6.ipw.cn", "https://api6.ipify.org")
+        }
 
-        val useProxyFriendlyEndpoints = vpnState.value.isConnected
-        val ipv4Endpoints = if (useProxyFriendlyEndpoints) proxiedIpv4Endpoints else directIpv4Endpoints + proxiedIpv4Endpoints
-        val ipv6Endpoints = if (useProxyFriendlyEndpoints) proxiedIpv6Endpoints else directIpv6Endpoints + proxiedIpv6Endpoints
-        val endpointGroups = listOf(ipv4Endpoints, ipv6Endpoints)
+        // Race IPv4 and IPv6 in parallel — first valid result wins
+        coroutineScope {
+            val ipv4 = async { tryEndpoints(ipv4Endpoints) }
+            val ipv6 = async { tryEndpoints(ipv6Endpoints) }
 
-        for (group in endpointGroups) {
-            for (endpoint in group) {
-                val ip = runCatching {
-                    val request = Request.Builder()
-                        .url(endpoint)
-                        .header("User-Agent", "AeroBox/IP-Check")
-                        .build()
-                    ipDetectClient.newCall(request).execute().use { response ->
-                        if (!response.isSuccessful) return@use null
-                        response.body?.string()?.trim()
-                    }
-                }.getOrNull()
-                if (!ip.isNullOrBlank() && isLikelyIpAddress(ip)) {
-                    return@withContext ip
+            val first = select<String?> {
+                ipv4.onAwait { it }
+                ipv6.onAwait { it }
+            }
+            if (first != null) {
+                ipv4.cancel()
+                ipv6.cancel()
+                return@coroutineScope first
+            }
+            // First returned null — wait for the remaining one
+            val second = if (ipv4.isCompleted) ipv6.await() else ipv4.await()
+            second
+        } ?: "检测失败，点击重试"
+    }
+
+    private suspend fun tryEndpoints(endpoints: List<String>): String? = withContext(Dispatchers.IO) {
+        for (endpoint in endpoints) {
+            val ip = runCatching {
+                val request = Request.Builder()
+                    .url(endpoint)
+                    .header("User-Agent", "AeroBox/IP-Check")
+                    .build()
+                ipDetectClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use null
+                    response.body?.string()?.trim()
                 }
+            }.getOrNull()
+            if (!ip.isNullOrBlank() && isLikelyIpAddress(ip)) {
+                return@withContext ip
             }
         }
-        "检测失败，点击重试"
+        null
     }
 
     private fun isLikelyIpAddress(value: String): Boolean {
