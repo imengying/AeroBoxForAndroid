@@ -382,42 +382,55 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         inet6Addresses.forEach { (address, prefix) -> builder.addAddress(address, prefix) }
 
         if (options.autoRoute) {
-            val inet4Routes = readTunAddressList(options, "inet4RouteAddress")
-            val inet6Routes = readTunAddressList(options, "inet6RouteAddress")
-            val inet4ExcludedRoutes = readTunAddressList(options, "inet4RouteExcludeAddress")
-            val inet6ExcludedRoutes = readTunAddressList(options, "inet6RouteExcludeAddress")
-            val vpnDns = resolveVpnDnsServer(options, inet4Addresses, inet6Addresses)
+            val inet4Routes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                readTunAddressList(options, "inet4RouteAddress")
+            } else {
+                readTunAddressList(options, "inet4RouteRange")
+            }
+            val inet6Routes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                readTunAddressList(options, "inet6RouteAddress")
+            } else {
+                readTunAddressList(options, "inet6RouteRange")
+            }
+            val inet4ExcludedRoutes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                readTunAddressList(options, "inet4RouteExcludeAddress")
+            } else {
+                emptyList()
+            }
+            val inet6ExcludedRoutes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                readTunAddressList(options, "inet6RouteExcludeAddress")
+            } else {
+                emptyList()
+            }
+            val vpnDns = options.dnsServerAddress.value.trim().takeIf { it.isNotEmpty() }
 
             vpnDns?.let { builder.addDnsServer(it) }
 
-            val hasExplicitRoutes = inet4Routes.isNotEmpty() || inet6Routes.isNotEmpty()
-            if (hasExplicitRoutes) {
+            if (inet4Routes.isNotEmpty()) {
                 inet4Routes.forEach { (address, prefix) ->
                     builder.addRouteCompat(address, prefix)
                 }
+            } else if (inet4Addresses.isNotEmpty()) {
+                builder.addRoute("0.0.0.0", 0)
+            }
+            if (inet6Routes.isNotEmpty()) {
                 inet6Routes.forEach { (address, prefix) ->
                     builder.addRouteCompat(address, prefix)
                 }
-                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.TIRAMISU) {
-                    inet4ExcludedRoutes.forEach { (address, prefix) ->
-                        toIpPrefixOrNull(address, prefix)?.let { builder.excludeRoute(it) }
-                    }
-                    inet6ExcludedRoutes.forEach { (address, prefix) ->
-                        toIpPrefixOrNull(address, prefix)?.let { builder.excludeRoute(it) }
-                    }
+            } else if (inet6Addresses.isNotEmpty()) {
+                builder.addRoute("::", 0)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                inet4ExcludedRoutes.forEach { (address, prefix) ->
+                    toIpPrefixOrNull(address, prefix)?.let { builder.excludeRoute(it) }
                 }
-            } else {
-                builder.addRoute("0.0.0.0", 1)
-                builder.addRoute("128.0.0.0", 1)
-                if (inet6Addresses.isNotEmpty()) {
-                    builder.addRoute("::", 1)
-                    builder.addRoute("8000::", 1)
+                inet6ExcludedRoutes.forEach { (address, prefix) ->
+                    toIpPrefixOrNull(address, prefix)?.let { builder.excludeRoute(it) }
                 }
             }
             RuntimeLogBuffer.append(
                 "debug",
                 "Tun prepared: ipv4=${inet4Addresses.size}, ipv6=${inet6Addresses.size}, " +
-                    "forcedDefaultRoutes=${!hasExplicitRoutes}, " +
                     "routes4=${inet4Routes.size}, routes6=${inet6Routes.size}, " +
                     "exclude4=${inet4ExcludedRoutes.size}, exclude6=${inet6ExcludedRoutes.size}, " +
                     "vpnDns=${vpnDns ?: "none"}"
@@ -459,7 +472,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
 
     private fun Builder.addRouteCompat(address: String, prefix: Int) {
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             toIpPrefixOrNull(address, prefix)?.let(::addRoute) ?: addRoute(address, prefix)
         } else {
             addRoute(address, prefix)
@@ -489,37 +502,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             pairs += address to prefix
         }
         return pairs
-    }
-
-    private fun resolveVpnDnsServer(
-        options: TunOptions,
-        inet4Addresses: List<Pair<String, Int>>,
-        inet6Addresses: List<Pair<String, Int>>
-    ): String? {
-        val raw = options.dnsServerAddress.value.trim()
-        if (raw.isBlank()) return null
-        return when (raw) {
-            "[ipv4]" -> deriveTunnelRouterAddress(inet4Addresses.firstOrNull()?.first)
-            "[ipv6]" -> deriveTunnelRouterAddress(inet6Addresses.firstOrNull()?.first)
-            else -> raw
-        }
-    }
-
-    private fun deriveTunnelRouterAddress(address: String?): String? {
-        val normalized = address?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val literal = normalized.removePrefix("[").removeSuffix("]").substringBefore('%')
-        val bytes = runCatching { InetAddress.getByName(literal).address.clone() }.getOrNull() ?: return null
-        for (index in bytes.lastIndex downTo 0) {
-            val value = bytes[index].toInt() and 0xFF
-            if (value < 0xFF) {
-                bytes[index] = (value + 1).toByte()
-                for (tail in index + 1..bytes.lastIndex) {
-                    bytes[tail] = 0
-                }
-                return InetAddress.getByAddress(bytes).hostAddress
-            }
-        }
-        return null
     }
 
     private fun resolveNoArgMember(target: Any, memberName: String): Any? {
