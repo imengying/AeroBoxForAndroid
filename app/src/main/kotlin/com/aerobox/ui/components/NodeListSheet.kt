@@ -1,7 +1,6 @@
 package com.aerobox.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -200,9 +199,9 @@ private fun NodeItem(
     onTestLatency: () -> Unit
 ) {
     Card(
+        onClick = onClick,
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow
@@ -282,7 +281,8 @@ private fun LatencyBadge(latency: Int, onClick: () -> Unit) {
         else -> MaterialTheme.colorScheme.error to "${latency}ms"
     }
     Surface(
-        modifier = Modifier.clickable(onClick = onClick),
+        onClick = onClick,
+        modifier = Modifier,
         color = color.copy(alpha = 0.15f),
         shape = MaterialTheme.shapes.small
     ) {

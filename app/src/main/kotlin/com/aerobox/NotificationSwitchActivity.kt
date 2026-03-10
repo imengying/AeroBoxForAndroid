@@ -104,9 +104,9 @@ class NotificationSwitchActivity : ComponentActivity() {
         if (pendingNodeId.value != null) return
         pendingNodeId.value = node.id
         lifecycleScope.launch {
-            PreferenceManager.setLastSelectedNodeId(applicationContext, node.id)
             when (val result = VpnRepository(applicationContext).switchToNode(node)) {
                 is VpnConnectionResult.Success -> {
+                    PreferenceManager.setLastSelectedNodeId(applicationContext, result.node.id)
                     finish()
                 }
                 VpnConnectionResult.NoNodeAvailable,
@@ -222,11 +222,14 @@ private fun NotificationSwitchDialog(
                         items(nodes, key = { it.id }) { node ->
                             val isSelected = node.id == selectedNodeId
                             Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(enabled = pendingNodeId == null) {
+                                onClick = {
+                                    if (pendingNodeId == null) {
                                         onNodeSelected(node)
-                                    },
+                                    }
+                                },
+                                enabled = pendingNodeId == null,
+                                modifier = Modifier
+                                    .fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp)
                             ) {
                                 Column(

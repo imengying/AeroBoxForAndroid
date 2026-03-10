@@ -12,6 +12,9 @@ interface ProxyNodeDao {
     @Query("SELECT * FROM proxy_nodes ORDER BY subscriptionId ASC, id ASC")
     fun getAllNodes(): Flow<List<ProxyNode>>
 
+    @Query("SELECT * FROM proxy_nodes WHERE subscriptionId = :subscriptionId ORDER BY id ASC")
+    suspend fun getNodesBySubscription(subscriptionId: Long): List<ProxyNode>
+
     @Query("SELECT * FROM proxy_nodes WHERE id = :id LIMIT 1")
     suspend fun getNodeById(id: Long): ProxyNode?
 

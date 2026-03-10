@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Base64
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
+import com.aerobox.data.model.connectionFingerprint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -137,29 +138,29 @@ object SubscriptionParser {
                 else -> emptyList()
             }
 
-            ParsedSubscription(nodes = dedupeNodes(nodes))
+            sanitizeParsedNodes(nodes)
         }.getOrDefault(ParsedSubscription(emptyList()))
     }
 
     private fun parseClashSubscription(content: String): ParsedSubscription {
         val rawNodes = ClashParser.parseClashYaml(content)
-        val infoNodes = rawNodes.filter(::isInformationalNode)
+        return sanitizeParsedNodes(rawNodes)
+    }
+
+    private fun sanitizeParsedNodes(nodes: List<ProxyNode>): ParsedSubscription {
+        val infoNodes = nodes.filter(::isInformationalNode)
         return ParsedSubscription(
-            nodes = sanitizeClashNodes(rawNodes),
+            nodes = nodes
+                .filterNot(::isInformationalNode)
+                .let(::dedupeNodes),
             trafficBytes = infoNodes.mapNotNull { extractTrafficBytes(it.name) }.firstOrNull() ?: 0L,
             expireTimestamp = infoNodes.mapNotNull { extractExpireTimestamp(it.name) }.firstOrNull() ?: 0L
         )
     }
 
-    private fun sanitizeClashNodes(nodes: List<ProxyNode>): List<ProxyNode> {
-        return nodes
-            .filterNot(::isInformationalNode)
-            .let(::dedupeNodes)
-    }
-
     private fun dedupeNodes(nodes: List<ProxyNode>): List<ProxyNode> {
         return nodes
-            .distinctBy { "${it.type}:${it.server}:${it.port}:${it.name}" }
+            .distinctBy { it.connectionFingerprint() }
     }
 
     private fun isInformationalNode(node: ProxyNode): Boolean {
@@ -334,13 +335,14 @@ object SubscriptionParser {
             tryBase64Decode(core)
         }
 
-        val pattern = Regex("(.+):(.+)@([^:]+):(\\d+)")
-        val match = pattern.find(normalizedCore) ?: return null
+        val separatorIndex = normalizedCore.lastIndexOf('@')
+        if (separatorIndex <= 0 || separatorIndex >= normalizedCore.lastIndex) return null
 
-        val method = match.groupValues[1]
-        val password = match.groupValues[2]
-        val server = match.groupValues[3]
-        val port = match.groupValues[4].toIntOrNull() ?: return null
+        val credentials = normalizedCore.substring(0, separatorIndex)
+        val endpoint = normalizedCore.substring(separatorIndex + 1)
+        val method = credentials.substringBefore(':').takeIf { it.isNotBlank() } ?: return null
+        val password = credentials.substringAfter(':', "").takeIf { it.isNotBlank() } ?: return null
+        val (server, port) = parseServerPort(endpoint) ?: return null
 
         return ProxyNode(
             name = name,
@@ -709,6 +711,25 @@ object SubscriptionParser {
             "http-upgrade" -> "httpupgrade"
             else -> normalized
         }
+    }
+
+    private fun parseServerPort(raw: String): Pair<String, Int>? {
+        val value = raw.trim()
+        if (value.isBlank()) return null
+
+        if (value.startsWith("[")) {
+            val closingBracket = value.indexOf(']')
+            if (closingBracket <= 1 || closingBracket >= value.lastIndex) return null
+            val host = value.substring(1, closingBracket)
+            val port = value.substring(closingBracket + 1).removePrefix(":").toIntOrNull() ?: return null
+            return host to port
+        }
+
+        val separatorIndex = value.lastIndexOf(':')
+        if (separatorIndex <= 0 || separatorIndex >= value.lastIndex) return null
+        val host = value.substring(0, separatorIndex)
+        val port = value.substring(separatorIndex + 1).toIntOrNull() ?: return null
+        return host to port
     }
 
     private fun firstNonBlank(vararg values: String?): String? {

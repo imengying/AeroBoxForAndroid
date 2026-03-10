@@ -33,6 +33,9 @@ class VpnRepository(private val context: Context) {
         val allNodes = nodeDao.getAllNodes().first()
         val node = allNodes.firstOrNull { it.id == selectedId } ?: allNodes.firstOrNull()
             ?: return VpnConnectionResult.NoNodeAvailable
+        if (node.id != selectedId && node.id > 0L) {
+            PreferenceManager.setLastSelectedNodeId(context, node.id)
+        }
         return connectNode(node, refreshDueSubscriptions)
     }
 
@@ -40,14 +43,14 @@ class VpnRepository(private val context: Context) {
         node: ProxyNode,
         refreshDueSubscriptions: Boolean = false
     ): VpnConnectionResult {
-        return launchNodeAction(node, refreshDueSubscriptions) { config ->
-            startVpn(config, node.id)
+        return launchNodeAction(node, refreshDueSubscriptions) { config, resolvedNode ->
+            startVpn(config, resolvedNode.id)
         }
     }
 
     suspend fun switchToNode(node: ProxyNode): VpnConnectionResult {
-        return launchNodeAction(node) { config ->
-            switchNode(config, node.id)
+        return launchNodeAction(node) { config, resolvedNode ->
+            switchNode(config, resolvedNode.id)
         }
     }
 
@@ -62,7 +65,7 @@ class VpnRepository(private val context: Context) {
     private suspend fun launchNodeAction(
         node: ProxyNode,
         refreshDueSubscriptions: Boolean = false,
-        action: (String) -> Unit
+        action: (String, ProxyNode) -> Unit
     ): VpnConnectionResult {
         return runCatching {
             if (refreshDueSubscriptions) {
@@ -70,17 +73,42 @@ class VpnRepository(private val context: Context) {
                 subscriptionRepository.refreshDueSubscriptions(subscriptions)
             }
 
-            val config = buildConfig(node)
+            val resolvedNode = resolveNodeForAction(
+                node = node,
+                allowSelectedFallback = refreshDueSubscriptions
+            ) ?: return@runCatching VpnConnectionResult.NoNodeAvailable
+
+            val config = buildConfig(resolvedNode)
             val configError = checkConfig(config)
             if (configError != null) {
                 VpnConnectionResult.InvalidConfig(configError)
             } else {
-                action(config)
-                VpnConnectionResult.Success(node)
+                action(config, resolvedNode)
+                VpnConnectionResult.Success(resolvedNode)
             }
         }.getOrElse { error ->
             VpnConnectionResult.Failure(error)
         }
+    }
+
+    private suspend fun resolveNodeForAction(
+        node: ProxyNode,
+        allowSelectedFallback: Boolean
+    ): ProxyNode? {
+        subscriptionRepository.resolveNode(node)?.let { return it }
+        nodeDao.getNodeById(node.id)?.let { return it }
+
+        if (allowSelectedFallback) {
+            val selectedId = PreferenceManager.lastSelectedNodeIdFlow(context).first()
+            val allNodes = nodeDao.getAllNodes().first()
+            val fallbackNode = allNodes.firstOrNull { it.id == selectedId } ?: allNodes.firstOrNull()
+            if (fallbackNode != null && fallbackNode.id > 0L && fallbackNode.id != selectedId) {
+                PreferenceManager.setLastSelectedNodeId(context, fallbackNode.id)
+            }
+            return fallbackNode
+        }
+
+        return node.takeIf { it.subscriptionId == 0L }
     }
 
     private fun startServiceWithAction(action: String, config: String, nodeId: Long? = null) {

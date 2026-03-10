@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.aerobox.AeroBoxApplication
 import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnRepository
@@ -29,12 +28,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 if (!autoConnect) return@runCatching
                 if (android.net.VpnService.prepare(context) != null) return@runCatching
 
-                val nodeId = PreferenceManager.lastSelectedNodeIdFlow(context).first()
-                if (nodeId <= 0L) return@runCatching
-
-                val node = AeroBoxApplication.database.proxyNodeDao().getNodeById(nodeId) ?: return@runCatching
-
-                when (val result = VpnRepository(context).connectNode(node, refreshDueSubscriptions = true)) {
+                when (val result = VpnRepository(context).connectSelectedNode(refreshDueSubscriptions = true)) {
                     is VpnConnectionResult.Success -> Unit
                     VpnConnectionResult.NoNodeAvailable -> Unit
                     is VpnConnectionResult.InvalidConfig,

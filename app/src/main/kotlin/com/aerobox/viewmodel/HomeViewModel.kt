@@ -302,17 +302,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectNode(node: ProxyNode) {
-        _selectedNode.value = node
         if (!vpnState.value.isConnected) {
+            _selectedNode.value = node
             refreshNetworkInfo()
-        }
-        viewModelScope.launch {
-            PreferenceManager.setLastSelectedNodeId(appContext, node.id)
-            if (!vpnState.value.isConnected) {
-                return@launch
+            viewModelScope.launch {
+                PreferenceManager.setLastSelectedNodeId(appContext, node.id)
             }
+            return
+        }
+
+        viewModelScope.launch {
             when (val result = vpnRepository.switchToNode(node)) {
-                is VpnConnectionResult.Success -> Unit
+                is VpnConnectionResult.Success -> {
+                    _selectedNode.value = result.node
+                    PreferenceManager.setLastSelectedNodeId(appContext, result.node.id)
+                }
                 is VpnConnectionResult.InvalidConfig -> handleConnectionFailure(appContext, result.error)
                 is VpnConnectionResult.Failure -> {
                     val details = result.throwable.message?.takeIf { it.isNotBlank() }

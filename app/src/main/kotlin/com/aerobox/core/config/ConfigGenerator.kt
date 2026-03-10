@@ -157,10 +157,11 @@ object ConfigGenerator {
         enableGeoCnDomainRule: Boolean,
         ipv6Mode: IPv6Mode
     ): JSONObject {
-        val bootstrapServer = JSONObject()
-            .put("type", "local")
-            .put("tag", "bootstrap")
-            .put("detour", "direct")
+        val bootstrapServer = buildDnsServer(
+            tag = "bootstrap",
+            dns = bootstrapDnsAddress(ipv6Mode),
+            ipv6Mode = ipv6Mode
+        )
 
         val localServer = buildDnsServer(
             tag = "local",
@@ -214,6 +215,10 @@ object ConfigGenerator {
         }
 
         return dns
+    }
+
+    private fun bootstrapDnsAddress(ipv6Mode: IPv6Mode): String {
+        return "1.1.1.1"
     }
 
     private fun buildDnsServer(
@@ -609,7 +614,7 @@ object ConfigGenerator {
     // ── Proxy Outbound ───────────────────────────────────────────────
 
     private fun buildProxyOutbound(node: ProxyNode, ipv6Mode: IPv6Mode): JSONObject {
-        val cleanServer = node.server.replace("[ipv4]", "").replace("[ipv6]", "").trim()
+        val cleanServer = normalizeOutboundServer(node.server)
         val outbound = JSONObject()
             .put("server", cleanServer.ifBlank { "127.0.0.1" })
             .put("server_port", node.port)
@@ -689,6 +694,17 @@ object ConfigGenerator {
             )
         }
         return outbound
+    }
+
+    private fun normalizeOutboundServer(server: String): String {
+        return server
+            .replace("[ipv4]", "")
+            .replace("[ipv6]", "")
+            .trim()
+            .removePrefix("[")
+            .removeSuffix("]")
+            .substringBefore('%')
+            .trim()
     }
 
     private fun buildTlsObject(node: ProxyNode, includeReality: Boolean = false): JSONObject {

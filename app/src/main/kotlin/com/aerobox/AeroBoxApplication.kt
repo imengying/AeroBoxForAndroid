@@ -10,8 +10,14 @@ import com.aerobox.data.database.AppDatabase
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.service.VpnStateManager
+import com.aerobox.work.SubscriptionUpdateScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class AeroBoxApplication : Application() {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
@@ -26,6 +32,10 @@ class AeroBoxApplication : Application() {
         Thread {
             GeoAssetManager.ensureBundledAssets(this)
         }.start()
+
+        applicationScope.launch {
+            SubscriptionUpdateScheduler.reconfigure(this@AeroBoxApplication)
+        }
     }
 
     private fun createNotificationChannel() {

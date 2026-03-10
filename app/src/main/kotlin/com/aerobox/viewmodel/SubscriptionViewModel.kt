@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.SubscriptionRepository
 import com.aerobox.data.repository.SubscriptionImportResult
+import com.aerobox.data.repository.SubscriptionUpdateResult
+import com.aerobox.data.repository.SubscriptionUpdateSummary
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -110,8 +112,8 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 repository.updateSubscription(subscription)
             }
             result
-                .onSuccess {
-                    _uiMessage.tryEmit("订阅更新完成：${subscription.name}")
+                .onSuccess { updateResult ->
+                    _uiMessage.tryEmit(formatUpdateResultMessage(subscription.name, updateResult))
                 }
                 .onFailure { error ->
                     _uiMessage.tryEmit("更新订阅失败：${toFriendlyError(error)}")
@@ -124,24 +126,43 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         viewModelScope.launch {
             _isLoading.value = true
             val subs = subscriptions.value
-            var successCount = 0
-            var failCount = 0
-            var lastError: Throwable? = null
-            subs.forEach { subscription ->
-                runCatching {
-                    repository.updateSubscription(subscription)
-                }.onSuccess {
-                    successCount++
-                }.onFailure { error ->
-                    failCount++
-                    lastError = error
-                }
-            }
+            val results = repository.refreshAllSubscriptions(subs)
+            val successResults = results.mapNotNull { it.getOrNull() }
+            val successCount = successResults.size
+            val failCount = results.size - successCount
+            val lastError = results.asReversed().firstNotNullOfOrNull { it.exceptionOrNull() }
+            val addedCount = successResults.sumOf { it.summary.addedCount }
+            val updatedCount = successResults.sumOf { it.summary.updatedCount }
+            val deletedCount = successResults.sumOf { it.summary.deletedCount }
+            val metadataCount = successResults.count { it.metadataFromHeader }
             if (failCount == 0) {
-                _uiMessage.tryEmit("订阅更新完成：$successCount 个")
+                _uiMessage.tryEmit(
+                    buildString {
+                        append("订阅更新完成：").append(successCount).append(" 个")
+                        append("（新增 ").append(addedCount)
+                        append(" / 更新 ").append(updatedCount)
+                        append(" / 删除 ").append(deletedCount).append("）")
+                        if (metadataCount > 0) {
+                            append("，").append(metadataCount).append(" 个同步流量/到期信息")
+                        }
+                    }
+                )
             } else {
                 val suffix = lastError?.let { "，${toFriendlyError(it)}" } ?: ""
-                _uiMessage.tryEmit("订阅部分更新失败（成功 $successCount / 失败 $failCount）$suffix")
+                _uiMessage.tryEmit(
+                    buildString {
+                        append("订阅部分更新失败（成功 ").append(successCount)
+                        append(" / 失败 ").append(failCount)
+                        append("，新增 ").append(addedCount)
+                        append(" / 更新 ").append(updatedCount)
+                        append(" / 删除 ").append(deletedCount)
+                        append("）")
+                        if (metadataCount > 0) {
+                            append("，").append(metadataCount).append(" 个同步流量/到期信息")
+                        }
+                        append(suffix)
+                    }
+                )
             }
             _isLoading.value = false
         }
@@ -158,7 +179,12 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     private fun formatImportResultMessage(result: SubscriptionImportResult): String {
         val error = result.error
         if (error == null && result.nodeCount > 0) {
-            return "导入成功：${result.nodeCount} 个节点"
+            return buildString {
+                append("导入成功：").append(result.nodeCount).append(" 个节点")
+                if (result.metadataFromHeader) {
+                    append("，已读取订阅流量/到期信息")
+                }
+            }
         }
 
         return when {
@@ -193,6 +219,34 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 }
             }
             else -> error.message?.takeIf { it.isNotBlank() } ?: "未知错误"
+        }
+    }
+
+    private fun formatUpdateResultMessage(
+        subscriptionName: String,
+        result: SubscriptionUpdateResult
+    ): String {
+        val summaryText = formatSummary(result.summary)
+        return buildString {
+            append("订阅更新完成：").append(subscriptionName)
+            if (summaryText.isNotBlank()) {
+                append("（").append(summaryText).append("）")
+            }
+            if (result.metadataFromHeader) {
+                append("，已同步流量/到期信息")
+            }
+        }
+    }
+
+    private fun formatSummary(summary: SubscriptionUpdateSummary): String {
+        return if (summary.changedCount == 0) {
+            "无节点变更"
+        } else {
+            buildString {
+                append("新增 ").append(summary.addedCount)
+                append(" / 更新 ").append(summary.updatedCount)
+                append(" / 删除 ").append(summary.deletedCount)
+            }
         }
     }
 }
