@@ -516,6 +516,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.AEROBOX_TAG || github.ref_name }}
-          generate_release_notes: true
+          generate_release_notes: false
           files: |
             app/build/outputs/apk/release/dist/*.apk
