@@ -163,14 +163,12 @@ object ConfigGenerator {
         val bootstrapServer = buildDnsServer(
             tag = "bootstrap",
             dns = bootstrapDnsAddress(),
-            detour = "direct",
             ipv6Mode = ipv6Mode
         )
 
         val localServer = buildDnsServer(
             tag = "local",
             dns = normalizeLocalDnsAddress(localDns),
-            detour = "direct",
             resolverTag = "bootstrap",
             ipv6Mode = ipv6Mode
         )
