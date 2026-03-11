@@ -246,7 +246,7 @@ class VpnRepository(private val context: Context) {
             null
         }
 
-        return ConfigGenerator.generateSingBoxConfig(
+        val configJson = ConfigGenerator.generateSingBoxConfig(
             node = node,
             routingMode = routingMode,
             remoteDns = remoteDns,
@@ -263,6 +263,8 @@ class VpnRepository(private val context: Context) {
             geoSiteCnRuleSetPath = geoSiteCnRuleSetPath,
             geoSiteAdsRuleSetPath = geoSiteAdsRuleSetPath
         )
+        RuntimeLogBuffer.append("debug", "Generated config JSON:\n$configJson")
+        return configJson
     }
 
     private fun ProxyNode.serverType(): String {
