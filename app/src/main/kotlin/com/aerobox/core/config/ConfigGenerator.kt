@@ -124,7 +124,7 @@ object ConfigGenerator {
                 .put("auto_detect_interface", false)
                 .put(
                     "default_domain_resolver",
-                    buildDestinationDomainResolver("local")
+                    buildDestinationDomainResolver("local", ipv6Mode)
                 )
                 .put("final", PROXY_OUTBOUND_TAG)
         )
@@ -173,7 +173,7 @@ object ConfigGenerator {
             return JSONObject()
                 .put("servers", JSONArray().put(localServer).put(bootstrapServer))
                 .put("final", "local")
-                .putDestinationDomainStrategy()
+                .putDestinationDomainStrategy(ipv6Mode)
         }
 
         val remoteServer = buildDnsServer(
@@ -193,7 +193,7 @@ object ConfigGenerator {
                     .put(bootstrapServer)
             )
             .put("final", "remote")
-            .putDestinationDomainStrategy()
+            .putDestinationDomainStrategy(ipv6Mode)
 
         // Only add DNS routing rules for rule-based modes
         if (routingMode == RoutingMode.RULE_BASED) {
@@ -495,7 +495,7 @@ object ConfigGenerator {
             .put("auto_detect_interface", true)
             .put(
                 "default_domain_resolver",
-                buildDestinationDomainResolver("local")
+                buildDestinationDomainResolver("local", ipv6Mode)
             )
 
         val ruleSets = JSONArray()
@@ -711,18 +711,18 @@ object ConfigGenerator {
             .put("strategy", ipv6Mode.domainStrategy())
     }
 
-    private fun buildDestinationDomainResolver(serverTag: String): JSONObject {
+    private fun buildDestinationDomainResolver(serverTag: String, ipv6Mode: IPv6Mode): JSONObject {
         return JSONObject()
             .put("server", serverTag)
-            .put("strategy", destinationDomainStrategy())
+            .put("strategy", destinationDomainStrategy(ipv6Mode))
     }
 
-    private fun JSONObject.putDestinationDomainStrategy(): JSONObject {
-        put("strategy", destinationDomainStrategy())
+    private fun JSONObject.putDestinationDomainStrategy(ipv6Mode: IPv6Mode): JSONObject {
+        put("strategy", destinationDomainStrategy(ipv6Mode))
         return this
     }
 
-    private fun destinationDomainStrategy(): String = "ipv4_only"
+    private fun destinationDomainStrategy(ipv6Mode: IPv6Mode): String = ipv6Mode.domainStrategy()
 
     private fun buildTlsObject(node: ProxyNode, includeReality: Boolean = false): JSONObject {
         val tls = JSONObject()
