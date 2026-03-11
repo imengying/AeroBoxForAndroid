@@ -48,6 +48,7 @@ object ConfigGenerator {
                 .put("timestamp", true)
         )
 
+        val nodeIsIpv6Only = isIpv6Literal(node.server)
         config.put(
             "dns",
             buildDns(
@@ -57,7 +58,7 @@ object ConfigGenerator {
                 routingMode = routingMode,
                 enableGeoCnDomainRule = enableGeoCnDomainRule && hasGeoSiteCn,
                 ipv6Mode = ipv6Mode,
-                nodeIsIpv6Only = isIpv6Literal(node.server)
+                nodeIsIpv6Only = nodeIsIpv6Only
             )
         )
         config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, ipv6Mode))
@@ -75,6 +76,7 @@ object ConfigGenerator {
             buildRoute(
                 routingMode = routingMode,
                 ipv6Mode = ipv6Mode,
+                nodeIsIpv6Only = nodeIsIpv6Only,
                 geoIpCnRuleSetPath = geoIpCnRuleSetPath,
                 geoSiteCnRuleSetPath = geoSiteCnRuleSetPath,
                 geoSiteAdsRuleSetPath = geoSiteAdsRuleSetPath,
@@ -125,7 +127,7 @@ object ConfigGenerator {
                 .put("auto_detect_interface", false)
                 .put(
                     "default_domain_resolver",
-                    buildDestinationDomainResolver("local", ipv6Mode)
+                    buildDestinationDomainResolver("local", isIpv6Literal(node.server))
                 )
                 .put("final", PROXY_OUTBOUND_TAG)
         )
@@ -178,7 +180,7 @@ object ConfigGenerator {
             return JSONObject()
                 .put("servers", JSONArray().put(localServer).put(bootstrapServer))
                 .put("final", "local")
-                .putDestinationDomainStrategy(ipv6Mode)
+                .putDestinationDomainStrategy(nodeIsIpv6Only)
         }
 
         val remoteServer = buildDnsServer(
@@ -199,7 +201,7 @@ object ConfigGenerator {
                     .put(bootstrapServer)
             )
             .put("final", "remote")
-            .putDestinationDomainStrategy(ipv6Mode)
+            .putDestinationDomainStrategy(nodeIsIpv6Only)
 
         // Only add DNS routing rules for rule-based modes
         if (routingMode == RoutingMode.RULE_BASED) {
@@ -498,6 +500,7 @@ object ConfigGenerator {
     private fun buildRoute(
         routingMode: RoutingMode,
         ipv6Mode: IPv6Mode,
+        nodeIsIpv6Only: Boolean = false,
         geoIpCnRuleSetPath: String? = null,
         geoSiteCnRuleSetPath: String? = null,
         geoSiteAdsRuleSetPath: String? = null,
@@ -510,7 +513,7 @@ object ConfigGenerator {
             .put("auto_detect_interface", true)
             .put(
                 "default_domain_resolver",
-                buildDestinationDomainResolver("local", ipv6Mode)
+                buildDestinationDomainResolver("local", nodeIsIpv6Only)
             )
 
         val ruleSets = JSONArray()
@@ -744,14 +747,14 @@ object ConfigGenerator {
             normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
     }
 
-    private fun buildDestinationDomainResolver(serverTag: String, ipv6Mode: IPv6Mode): JSONObject {
+    private fun buildDestinationDomainResolver(serverTag: String, nodeIsIpv6Only: Boolean): JSONObject {
         return JSONObject()
             .put("server", serverTag)
-            .put("strategy", "ipv4_only")
+            .put("strategy", if (nodeIsIpv6Only) "prefer_ipv6" else "ipv4_only")
     }
 
-    private fun JSONObject.putDestinationDomainStrategy(ipv6Mode: IPv6Mode): JSONObject {
-        put("strategy", "ipv4_only")
+    private fun JSONObject.putDestinationDomainStrategy(nodeIsIpv6Only: Boolean): JSONObject {
+        put("strategy", if (nodeIsIpv6Only) "prefer_ipv6" else "ipv4_only")
         return this
     }
 
