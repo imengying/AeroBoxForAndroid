@@ -186,7 +186,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val currentNode = state.currentNode ?: return
         if (!state.isConnected) return
 
-        when (val result = vpnRepository.switchToNode(currentNode)) {
+        when (val result = vpnRepository.reloadActiveConnection(currentNode)) {
             is VpnConnectionResult.Success -> {
                 _uiMessage.tryEmit("入站设置已生效")
             }

@@ -49,11 +49,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
 import com.aerobox.data.model.RoutingMode
+import com.aerobox.core.connection.ConnectionFixAction
 import com.aerobox.ui.components.ConnectionCard
 import com.aerobox.ui.components.NodeListSheet
 import com.aerobox.ui.components.TrafficStatsCard
-import com.aerobox.core.AppEventBus
-import com.aerobox.core.connection.ConnectionFixAction
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.viewmodel.HomeViewModel
 import androidx.compose.runtime.LaunchedEffect
@@ -106,11 +105,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
 
     val listState = rememberLazyListState()
 
-    LaunchedEffect(Unit) {
-        AppEventBus.showNodeSelector.collect {
-            showNodeList = true
-        }
-    }
     LaunchedEffect(viewModel) {
         viewModel.uiMessage.collectLatest { message ->
             snackbarHostState.showSnackbar(message)

@@ -48,8 +48,6 @@
     <string name="subscription_traffic">剩余流量</string>
     <string name="subscription_expire">到期时间</string>
     <string name="tile_label">AeroBox</string>
-    <string name="tile_action_open">开启</string>
-    <string name="tile_action_close">关闭</string>
     <string name="tile_status_stopping">正在关闭</string>
     <string name="enable_ipv6">IPv6 支持</string>
     <string name="connection_fix_success">修复已完成，请重试连接</string>

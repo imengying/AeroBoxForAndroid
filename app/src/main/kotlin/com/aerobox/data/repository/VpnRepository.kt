@@ -3,9 +3,7 @@ package com.aerobox.data.repository
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
-import com.aerobox.AeroBoxApplication
 import com.aerobox.core.config.ConfigGenerator
-import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.IPv6Mode
@@ -24,19 +22,13 @@ sealed interface VpnConnectionResult {
 }
 
 class VpnRepository(private val context: Context) {
-    private val nodeDao = AeroBoxApplication.database.proxyNodeDao()
+    private val configResolver = VpnConfigResolver(context)
     private val subscriptionRepository by lazy(LazyThreadSafetyMode.NONE) {
         SubscriptionRepository(context)
     }
 
     suspend fun connectSelectedNode(refreshDueSubscriptions: Boolean = false): VpnConnectionResult {
-        val selectedId = PreferenceManager.lastSelectedNodeIdFlow(context).first()
-        val allNodes = nodeDao.getAllNodes().first()
-        val node = allNodes.firstOrNull { it.id == selectedId } ?: allNodes.firstOrNull()
-            ?: return VpnConnectionResult.NoNodeAvailable
-        if (node.id != selectedId && node.id > 0L) {
-            PreferenceManager.setLastSelectedNodeId(context, node.id)
-        }
+        val node = configResolver.resolveSelectedNode() ?: return VpnConnectionResult.NoNodeAvailable
         return connectNode(node, refreshDueSubscriptions)
     }
 
@@ -55,11 +47,17 @@ class VpnRepository(private val context: Context) {
         }
     }
 
-    fun startVpn(config: String, nodeId: Long? = null) {
+    suspend fun reloadActiveConnection(node: ProxyNode): VpnConnectionResult {
+        return launchNodeAction(node) { config, resolvedNode ->
+            startServiceWithAction(AeroBoxVpnService.ACTION_RELOAD, config, resolvedNode.id)
+        }
+    }
+
+    private fun startVpn(config: String, nodeId: Long? = null) {
         startServiceWithAction(AeroBoxVpnService.ACTION_START, config, nodeId)
     }
 
-    fun switchNode(config: String, nodeId: Long? = null) {
+    private fun switchNode(config: String, nodeId: Long? = null) {
         startServiceWithAction(AeroBoxVpnService.ACTION_SWITCH, config, nodeId)
     }
 
@@ -74,13 +72,13 @@ class VpnRepository(private val context: Context) {
                 subscriptionRepository.refreshDueSubscriptions(subscriptions)
             }
 
-            val resolvedNode = resolveNodeForAction(
+            val resolvedNode = configResolver.resolveNodeForAction(
                 node = node,
                 allowSelectedFallback = refreshDueSubscriptions
             ) ?: return@runCatching VpnConnectionResult.NoNodeAvailable
 
-            val config = buildConfig(resolvedNode)
-            val configError = checkConfig(config)
+            val config = configResolver.buildConfig(resolvedNode)
+            val configError = configResolver.validateConfig(config)
             if (configError != null) {
                 VpnConnectionResult.InvalidConfig(configError)
             } else {
@@ -92,30 +90,12 @@ class VpnRepository(private val context: Context) {
         }
     }
 
-    private suspend fun resolveNodeForAction(
-        node: ProxyNode,
-        allowSelectedFallback: Boolean
-    ): ProxyNode? {
-        subscriptionRepository.resolveNode(node)?.let { return it }
-        nodeDao.getNodeById(node.id)?.let { return it }
-
-        if (allowSelectedFallback) {
-            val selectedId = PreferenceManager.lastSelectedNodeIdFlow(context).first()
-            val allNodes = nodeDao.getAllNodes().first()
-            val fallbackNode = allNodes.firstOrNull { it.id == selectedId } ?: allNodes.firstOrNull()
-            if (fallbackNode != null && fallbackNode.id > 0L && fallbackNode.id != selectedId) {
-                PreferenceManager.setLastSelectedNodeId(context, fallbackNode.id)
-            }
-            return fallbackNode
-        }
-
-        return node.takeIf { it.subscriptionId == 0L }
-    }
-
-    private fun startServiceWithAction(action: String, config: String, nodeId: Long? = null) {
+    private fun startServiceWithAction(action: String, config: String? = null, nodeId: Long? = null) {
         val intent = Intent(context, AeroBoxVpnService::class.java).apply {
             this.action = action
-            putExtra(AeroBoxVpnService.EXTRA_CONFIG, config)
+            config?.takeIf { it.isNotBlank() }?.let {
+                putExtra(AeroBoxVpnService.EXTRA_CONFIG, it)
+            }
             if (nodeId != null && nodeId > 0L) {
                 putExtra(AeroBoxVpnService.EXTRA_NODE_ID, nodeId)
             }
@@ -129,14 +109,6 @@ class VpnRepository(private val context: Context) {
             action = AeroBoxVpnService.ACTION_STOP
         }
         context.startService(intent)
-    }
-
-    fun checkConfig(config: String): String? {
-        val error = SingBoxNative.checkConfig(config)
-        if (error != null) {
-            RuntimeLogBuffer.append("error", "Config check failed: $error")
-        }
-        return error
     }
 
     suspend fun urlTestNode(
@@ -155,7 +127,7 @@ class VpnRepository(private val context: Context) {
                 localDns = safeLocalDns,
                 ipv6Mode = resolvedIpv6Mode
             )
-            val parseError = checkConfig(config)
+            val parseError = configResolver.validateConfig(config)
             if (parseError != null) {
                 RuntimeLogBuffer.append("error", "urlTest parsing aborted: $parseError")
                 return@withContext -1
@@ -169,70 +141,5 @@ class VpnRepository(private val context: Context) {
             )
             result
         }
-    }
-
-    suspend fun buildConfig(node: ProxyNode): String {
-        RuntimeLogBuffer.append(
-            "info",
-            "Generating config for ${node.name.ifBlank { "unnamed node" }}"
-        )
-        withContext(Dispatchers.IO) {
-            GeoAssetManager.ensureBundledAssets(context)
-        }
-
-        val routingMode = PreferenceManager.routingModeFlow(context).first()
-        val remoteDns = PreferenceManager.remoteDnsFlow(context).first()
-        val localDns = PreferenceManager.localDnsFlow(context).first()
-        val enableDoh = PreferenceManager.enableDohFlow(context).first()
-        val enableSocksInbound = PreferenceManager.enableSocksInboundFlow(context).first()
-        val enableHttpInbound = PreferenceManager.enableHttpInboundFlow(context).first()
-        val ipv6Mode = PreferenceManager.ipv6ModeFlow(context).first()
-        val enableGeoRules = PreferenceManager.enableGeoRulesFlow(context).first()
-        val enableGeoCnDomainRule = PreferenceManager.enableGeoCnDomainRuleFlow(context).first()
-        val enableGeoCnIpRule = PreferenceManager.enableGeoCnIpRuleFlow(context).first()
-        val enableGeoAdsBlock = PreferenceManager.enableGeoAdsBlockFlow(context).first()
-        val enableGeoBlockQuic = PreferenceManager.enableGeoBlockQuicFlow(context).first()
-        val geoIpCnRuleSetPath = if (enableGeoRules) {
-            GeoAssetManager
-                .getGeoIpFile(context)
-                .takeIf { it.exists() && it.length() > 0L }
-                ?.absolutePath
-        } else {
-            null
-        }
-        val geoSiteCnRuleSetPath = if (enableGeoRules) {
-            GeoAssetManager
-                .getGeoSiteFile(context)
-                .takeIf { it.exists() && it.length() > 0L }
-                ?.absolutePath
-        } else {
-            null
-        }
-        val geoSiteAdsRuleSetPath = if (enableGeoRules) {
-            GeoAssetManager
-                .getGeoAdsFile(context)
-                .takeIf { it.exists() && it.length() > 0L }
-                ?.absolutePath
-        } else {
-            null
-        }
-
-        return ConfigGenerator.generateSingBoxConfig(
-            node = node,
-            routingMode = routingMode,
-            remoteDns = remoteDns,
-            localDns = localDns,
-            enableDoh = enableDoh,
-            enableSocksInbound = enableSocksInbound,
-            enableHttpInbound = enableHttpInbound,
-            ipv6Mode = ipv6Mode,
-            enableGeoCnDomainRule = enableGeoRules && enableGeoCnDomainRule,
-            enableGeoCnIpRule = enableGeoRules && enableGeoCnIpRule,
-            enableGeoAdsBlock = enableGeoRules && enableGeoAdsBlock,
-            enableGeoBlockQuic = enableGeoRules && enableGeoBlockQuic,
-            geoIpCnRuleSetPath = geoIpCnRuleSetPath,
-            geoSiteCnRuleSetPath = geoSiteCnRuleSetPath,
-            geoSiteAdsRuleSetPath = geoSiteAdsRuleSetPath
-        )
     }
 }
