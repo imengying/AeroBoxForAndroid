@@ -552,6 +552,14 @@ object ConfigGenerator {
                     )
                 }
 
+                if (enableGeoAdsBlock) {
+                    rules.put(
+                        JSONObject()
+                            .put("rule_set", JSONArray().put("geosite-category-ads-all"))
+                            .put("action", "reject")
+                    )
+                }
+
                 if (enableGeoCnDomainRule) {
                     rules.put(
                         JSONObject()
@@ -567,14 +575,6 @@ object ConfigGenerator {
                             .put("rule_set", JSONArray().put("geoip-cn"))
                             .put("action", "route")
                             .put("outbound", "direct")
-                    )
-                }
-
-                if (enableGeoAdsBlock) {
-                    rules.put(
-                        JSONObject()
-                            .put("rule_set", JSONArray().put("geosite-category-ads-all"))
-                            .put("action", "reject")
                     )
                 }
 

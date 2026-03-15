@@ -4,14 +4,36 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aerobox.data.model.IPv6Mode
+import com.aerobox.data.model.InstalledAppInfo
 import com.aerobox.data.model.RoutingMode
+import com.aerobox.data.repository.AppListRepository
+import com.aerobox.data.repository.VpnConnectionResult
+import com.aerobox.data.repository.VpnRepository
+import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.PreferenceManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
+    private val appListRepository = AppListRepository(appContext)
+    private val vpnRepository = VpnRepository(appContext)
+
+    private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
+    val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps.asStateFlow()
+
+    private val _isLoadingInstalledApps = MutableStateFlow(false)
+    val isLoadingInstalledApps: StateFlow<Boolean> = _isLoadingInstalledApps.asStateFlow()
+
+    private val _uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val uiMessage: SharedFlow<String> = _uiMessage.asSharedFlow()
 
     val darkMode: StateFlow<String> = PreferenceManager.darkModeFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "system")
@@ -108,10 +130,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setEnableSocksInbound(enabled: Boolean) {
         PreferenceManager.setEnableSocksInbound(appContext, enabled)
+        refreshActiveConnectionForInboundChange()
     }
 
     suspend fun setEnableHttpInbound(enabled: Boolean) {
         PreferenceManager.setEnableHttpInbound(appContext, enabled)
+        refreshActiveConnectionForInboundChange()
     }
 
     suspend fun setIPv6Mode(mode: IPv6Mode) {
@@ -140,5 +164,47 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setEnableGeoBlockQuic(enabled: Boolean) {
         PreferenceManager.setEnableGeoBlockQuic(appContext, enabled)
+    }
+
+    fun loadInstalledApps(forceRefresh: Boolean = false) {
+        if (_installedApps.value.isNotEmpty() && !forceRefresh) return
+        viewModelScope.launch {
+            _isLoadingInstalledApps.value = true
+            runCatching {
+                appListRepository.getInstalledApps(forceRefresh = forceRefresh)
+            }.onSuccess { apps ->
+                _installedApps.value = apps
+            }.onFailure {
+                _installedApps.value = emptyList()
+            }
+            _isLoadingInstalledApps.value = false
+        }
+    }
+
+    private suspend fun refreshActiveConnectionForInboundChange() {
+        val state = VpnStateManager.vpnState.value
+        val currentNode = state.currentNode ?: return
+        if (!state.isConnected) return
+
+        when (val result = vpnRepository.switchToNode(currentNode)) {
+            is VpnConnectionResult.Success -> {
+                _uiMessage.tryEmit("入站设置已生效")
+            }
+
+            is VpnConnectionResult.InvalidConfig -> {
+                _uiMessage.tryEmit("应用入站设置失败：${result.error}")
+            }
+
+            is VpnConnectionResult.Failure -> {
+                val details = result.throwable.message?.takeIf { it.isNotBlank() }
+                _uiMessage.tryEmit(
+                    details?.let { "应用入站设置失败：$it" } ?: "应用入站设置失败"
+                )
+            }
+
+            VpnConnectionResult.NoNodeAvailable -> {
+                _uiMessage.tryEmit("应用入站设置失败：当前节点不可用")
+            }
+        }
     }
 }

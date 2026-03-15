@@ -3,6 +3,7 @@ package com.aerobox.ui.screens
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -26,14 +27,17 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -43,7 +47,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
 import com.aerobox.data.model.IPv6Mode
+import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.viewmodel.SettingsViewModel
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,25 +76,33 @@ fun SettingsScreen(
     val ipv6Mode by viewModel.ipv6Mode.collectAsStateWithLifecycle()
     val autoReconnect by viewModel.autoReconnect.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var showDnsDialog by remember { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // ── Subscription ──
-        item { SectionHeader(title = "订阅管理") }
-        item {
-            SettingItem(
-                onClick = onNavigateToSubscriptions,
-                icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
-                title = "订阅管理",
-                supporting = "添加、更新和管理订阅",
-                trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
-            )
+    LaunchedEffect(viewModel) {
+        viewModel.uiMessage.collectLatest { message ->
+            snackbarHostState.showSnackbar(message)
         }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+        // ── Subscription ──
+            item { SectionHeader(title = "订阅管理") }
+            item {
+                SettingItem(
+                    onClick = onNavigateToSubscriptions,
+                    icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                    title = "订阅管理",
+                    supporting = "添加、更新和管理订阅",
+                    trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
+                )
+            }
 
         // ── Routing ──
         item { SectionHeader(title = "路由") }
@@ -290,15 +304,21 @@ fun SettingsScreen(
                 trailing = {}
             )
         }
-        item {
-            SettingItem(
-                onClick = onNavigateToLicense,
-                icon = { Icon(AppIcons.Security, contentDescription = null) },
-                title = stringResource(R.string.open_source_licenses),
-                supporting = stringResource(R.string.about),
-                trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
-            )
+            item {
+                SettingItem(
+                    onClick = onNavigateToLicense,
+                    icon = { Icon(AppIcons.Security, contentDescription = null) },
+                    title = stringResource(R.string.open_source_licenses),
+                    supporting = stringResource(R.string.about),
+                    trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
+                )
+            }
         }
+
+        AppSnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 
     // DNS dialog

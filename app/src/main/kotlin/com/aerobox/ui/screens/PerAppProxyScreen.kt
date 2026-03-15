@@ -1,7 +1,5 @@
 package com.aerobox.ui.screens
 
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,16 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.viewmodel.SettingsViewModel
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
-data class AppInfo(
-    val label: String,
-    val packageName: String,
-    val icon: android.graphics.drawable.Drawable,
-    val isSystem: Boolean
-)
 
 
 private fun buildHighlightedText(
@@ -102,35 +91,26 @@ fun PerAppProxyScreen(
     viewModel: SettingsViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val packageManager = context.packageManager
     val scope = rememberCoroutineScope()
     val mode by viewModel.perAppProxyMode.collectAsStateWithLifecycle()
     val selectedPackages by viewModel.perAppProxyPackages.collectAsStateWithLifecycle()
-    var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
+    val apps by viewModel.installedApps.collectAsStateWithLifecycle()
+    val isLoadingApps by viewModel.isLoadingInstalledApps.collectAsStateWithLifecycle()
     var showSystem by remember { mutableStateOf(false) }
+    var showNonInternet by remember { mutableStateOf(false) }
+    var showSelectedOnly by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Load installed apps
     LaunchedEffect(Unit) {
-        val installed = withContext(Dispatchers.IO) {
-            val pm = context.packageManager
-            pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                .filter { it.packageName != context.packageName }
-                .map { info ->
-                    AppInfo(
-                        label = info.loadLabel(pm).toString(),
-                        packageName = info.packageName,
-                        icon = info.loadIcon(pm),
-                        isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                    )
-                }
-                .sortedWith(compareBy<AppInfo> { it.isSystem }.thenBy { it.label })
-        }
-        apps = installed
+        viewModel.loadInstalledApps()
     }
 
     val filteredApps = apps
         .asSequence()
         .filter { if (showSystem) true else !it.isSystem }
+        .filter { if (showNonInternet) true else it.hasInternetPermission }
+        .filter { if (showSelectedOnly) selectedPackages.contains(it.packageName) else true }
         .filter { app ->
             val query = searchQuery.trim()
             if (query.isBlank()) {
@@ -140,11 +120,6 @@ fun PerAppProxyScreen(
                     app.packageName.contains(query, ignoreCase = true)
             }
         }
-        .sortedWith(
-            compareByDescending<AppInfo> { selectedPackages.contains(it.packageName) }
-                .thenBy { it.isSystem }
-                .thenBy { it.label.lowercase() }
-        )
         .toList()
 
     Scaffold(
@@ -185,16 +160,37 @@ fun PerAppProxyScreen(
                     onClick = { scope.launch { viewModel.setPerAppProxyMode("whitelist") } },
                     label = { Text("仅代理选中") }
                 )
-                Spacer(Modifier.weight(1f))
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 FilterChip(
                     selected = showSystem,
                     onClick = { showSystem = !showSystem },
                     label = { Text("显示系统") }
                 )
+                FilterChip(
+                    selected = showNonInternet,
+                    onClick = { showNonInternet = !showNonInternet },
+                    label = { Text("显示无网络") }
+                )
+                FilterChip(
+                    selected = showSelectedOnly,
+                    onClick = { showSelectedOnly = !showSelectedOnly },
+                    label = { Text("只看已选") }
+                )
             }
 
             Text(
-                text = if (mode == "blacklist") "已选中的应用将绕过代理（直连）" else "仅选中的应用会走代理",
+                text = buildString {
+                    append(if (mode == "blacklist") "已选中的应用将绕过代理（直连）" else "仅选中的应用会走代理")
+                    append(" · 已选 ${selectedPackages.size} 个")
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
@@ -226,8 +222,10 @@ fun PerAppProxyScreen(
 
             if (filteredApps.isEmpty()) {
                 Text(
-                    text = if (apps.isEmpty()) {
-                        "未获取到应用列表，可尝试开启“显示系统”或重启应用"
+                    text = if (isLoadingApps) {
+                        "正在加载应用列表..."
+                    } else if (apps.isEmpty()) {
+                        "未获取到应用列表，可稍后重试"
                     } else {
                         "未找到匹配的应用"
                     },
@@ -255,6 +253,9 @@ fun PerAppProxyScreen(
                             }
                             scope.launch { viewModel.setPerAppProxyPackages(updated) }
                         }
+                        val appIcon = remember(app.packageName) {
+                            runCatching { packageManager.getApplicationIcon(app.packageName) }.getOrNull()
+                        }
                         
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -269,7 +270,7 @@ fun PerAppProxyScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Image(
-                                    painter = rememberDrawablePainter(app.icon),
+                                    painter = rememberDrawablePainter(appIcon),
                                     contentDescription = null,
                                     modifier = Modifier.size(40.dp)
                                 )
@@ -288,6 +289,13 @@ fun PerAppProxyScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                    if (!app.hasInternetPermission) {
+                                        Text(
+                                            text = "无网络权限",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
                                 }
                                 Checkbox(
                                     checked = isChecked,
