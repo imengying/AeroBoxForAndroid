@@ -767,9 +767,10 @@ object ConfigGenerator {
         val sniToUse = node.sni?.takeIf { it.isNotBlank() } ?: if (includeReality) node.server else null
         sniToUse?.let { tls.put("server_name", it) }
 
-        if (!node.alpn.isNullOrBlank()) {
+        val alpn = node.alpn
+        if (!alpn.isNullOrBlank()) {
             val alpnArray = JSONArray()
-            node.alpn!!.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { alpnArray.put(it) }
+            alpn.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { alpnArray.put(it) }
             if (alpnArray.length() > 0) {
                 tls.put("alpn", alpnArray)
             }

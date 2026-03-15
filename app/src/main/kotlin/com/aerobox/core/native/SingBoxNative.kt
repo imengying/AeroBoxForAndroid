@@ -73,7 +73,7 @@ object SingBoxNative {
         timeoutMs: Int = 3000
     ): Int {
         return try {
-            Libbox.urlTestOutbound(configContent, outboundTag, testUrl, timeoutMs).toInt()
+            Libbox.urlTestOutbound(configContent, outboundTag, testUrl, timeoutMs)
         } catch (e: Exception) {
             val msg = e.message ?: "unknown error"
             Log.w(TAG, "urlTestOutbound failed: $msg")

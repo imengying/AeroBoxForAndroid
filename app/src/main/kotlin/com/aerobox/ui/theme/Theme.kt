@@ -30,6 +30,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
+@Suppress("DEPRECATION")
 fun SingBoxVPNTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,

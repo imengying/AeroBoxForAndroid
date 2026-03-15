@@ -74,6 +74,7 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         DefaultNetworkMonitor.setListener(null)
     }
 
+    @Suppress("DEPRECATION")
     override fun getInterfaces(): NetworkInterfaceIterator {
         val connectivity = AeroBoxApplication.connectivity
         val networks = connectivity.allNetworks

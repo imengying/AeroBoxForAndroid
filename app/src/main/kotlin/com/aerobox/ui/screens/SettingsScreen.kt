@@ -12,8 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
 import com.aerobox.ui.icons.AppIcons
 import androidx.compose.material3.AlertDialog
@@ -86,7 +86,7 @@ fun SettingsScreen(
                 icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                 title = "订阅管理",
                 supporting = "添加、更新和管理订阅",
-                trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
+                trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
 
@@ -98,7 +98,7 @@ fun SettingsScreen(
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
                 title = "路由",
                 supporting = "当前模式 · ${routingMode.displayName}",
-                trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
+                trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
 
@@ -124,7 +124,7 @@ fun SettingsScreen(
                     icon = { Icon(AppIcons.Speed, contentDescription = null) },
                     title = "配置应用列表",
                     supporting = "选择哪些应用走代理/绕过代理",
-                    trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
+                    trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
                 )
             }
         }
@@ -180,7 +180,7 @@ fun SettingsScreen(
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
                 title = "DNS 服务器",
                 supporting = "远程: $remoteDns · 本地: $localDns",
-                trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
+                trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
         item {
@@ -271,7 +271,7 @@ fun SettingsScreen(
                 icon = { Icon(Icons.Filled.Info, contentDescription = null) },
                 title = "运行日志",
                 supporting = "查看 sing-box 运行日志",
-                trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
+                trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
         item {
@@ -296,7 +296,7 @@ fun SettingsScreen(
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
                 title = stringResource(R.string.open_source_licenses),
                 supporting = stringResource(R.string.about),
-                trailing = { Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null) }
+                trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
     }

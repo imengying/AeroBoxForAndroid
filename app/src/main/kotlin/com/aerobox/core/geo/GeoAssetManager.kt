@@ -132,22 +132,23 @@ object GeoAssetManager {
     private fun downloadFile(url: String, target: File): Boolean {
         return try {
             val request = Request.Builder().url(url).build()
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) return false
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return false
 
-            val tmpFile = File(target.parentFile, "${target.name}.tmp")
-            response.body?.byteStream()?.use { input ->
-                FileOutputStream(tmpFile).use { output ->
-                    input.copyTo(output, bufferSize = 8192)
+                val tmpFile = File(target.parentFile, "${target.name}.tmp")
+                response.body.byteStream().use { input ->
+                    FileOutputStream(tmpFile).use { output ->
+                        input.copyTo(output, bufferSize = 8192)
+                    }
                 }
-            }
 
-            if (tmpFile.exists() && tmpFile.length() > 0) {
-                target.delete()
-                tmpFile.renameTo(target)
-            } else {
-                tmpFile.delete()
-                false
+                if (tmpFile.exists() && tmpFile.length() > 0) {
+                    target.delete()
+                    tmpFile.renameTo(target)
+                } else {
+                    tmpFile.delete()
+                    false
+                }
             }
         } catch (_: Exception) {
             false
@@ -253,7 +254,7 @@ object GeoAssetManager {
             val response = client.newCall(request).execute()
             response.use {
                 if (!it.isSuccessful) return "Unknown-${System.currentTimeMillis()}"
-                val body = it.body?.string().orEmpty()
+                val body = it.body.string()
                 val tag = JSONObject(body).optString("tag_name").trim()
                 if (tag.isNotEmpty()) tag else "Unknown-${System.currentTimeMillis()}"
             }
@@ -264,9 +265,7 @@ object GeoAssetManager {
 
     private fun writeVersionFile(file: File, version: String) {
         runCatching {
-            if (!file.parentFile.exists()) {
-                file.parentFile.mkdirs()
-            }
+            file.parentFile?.takeIf { !it.exists() }?.mkdirs()
             file.writeText(version.trim())
         }
     }

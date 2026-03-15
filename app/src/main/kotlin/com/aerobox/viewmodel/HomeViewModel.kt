@@ -511,7 +511,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     .build()
                 ipDetectClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) return@use null
-                    response.body?.string()?.trim()
+                    response.body.string().trim()
                 }
             }.getOrNull()
             if (!ip.isNullOrBlank() && isLikelyIpAddress(ip)) {

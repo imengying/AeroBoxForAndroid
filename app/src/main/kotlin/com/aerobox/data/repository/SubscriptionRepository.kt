@@ -235,7 +235,7 @@ class SubscriptionRepository(context: Context) {
                         } else {
                             cont.resume(
                                 SubscriptionFetchResult(
-                                    content = it.body?.string().orEmpty(),
+                                    content = it.body.string(),
                                     headers = it.headers
                                 )
                             )
