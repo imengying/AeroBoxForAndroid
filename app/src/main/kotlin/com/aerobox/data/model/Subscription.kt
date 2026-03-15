@@ -6,8 +6,7 @@ import androidx.room.PrimaryKey
 enum class SubscriptionType {
     BASE64,
     JSON,
-    YAML,
-    SIP008
+    YAML
 }
 
 @Entity(tableName = "subscriptions")

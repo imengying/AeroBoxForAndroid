@@ -68,7 +68,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     val isConnecting by viewModel.isConnecting.collectAsStateWithLifecycle()
     val selectedNode by viewModel.selectedNode.collectAsStateWithLifecycle()
     val connectionDuration by viewModel.connectionDuration.collectAsStateWithLifecycle()
-    val allNodes by viewModel.allNodes.collectAsStateWithLifecycle()
+    val displayNodes by viewModel.displayNodes.collectAsStateWithLifecycle()
     val nodeSortOrder by viewModel.nodeSortOrder.collectAsStateWithLifecycle()
     val routingMode by viewModel.routingMode.collectAsStateWithLifecycle()
     val detectedIp by viewModel.detectedIp.collectAsStateWithLifecycle()
@@ -211,7 +211,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     if (showNodeList) {
         val subscriptions by viewModel.subscriptions.collectAsStateWithLifecycle()
         NodeListSheet(
-            nodes = allNodes,
+            nodes = displayNodes,
             subscriptions = subscriptions,
             selectedNodeId = selectedNode?.id ?: -1,
             nodeSortOrder = nodeSortOrder,

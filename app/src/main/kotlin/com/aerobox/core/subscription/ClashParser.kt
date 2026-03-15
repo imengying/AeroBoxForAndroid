@@ -57,6 +57,8 @@ object ClashParser {
             "http", "https" -> ProxyType.HTTP
             else -> return null
         }
+        if (type == ProxyType.SHADOWSOCKS && hasUnsupportedShadowsocksFeature(map)) return null
+        if (type == ProxyType.HYSTERIA2 && hasUnsupportedHysteria2Feature(map)) return null
 
         val security = firstNonBlank(
             stringValue(map, "security"),
@@ -66,6 +68,7 @@ object ClashParser {
 
         val tls = when {
             type == ProxyType.TROJAN || type == ProxyType.HYSTERIA2 || type == ProxyType.TUIC -> true
+            typeStr == "https" -> true
             booleanValue(map, "tls") == true -> true
             security?.lowercase() in listOf("tls", "reality") -> true
             else -> false
@@ -247,5 +250,18 @@ object ClashParser {
 
     private fun firstNonBlank(vararg values: String?): String? {
         return values.firstOrNull { !it.isNullOrBlank() }?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun hasUnsupportedShadowsocksFeature(map: Map<*, *>): Boolean {
+        return stringValue(map, "plugin") != null ||
+            value(map, "plugin-opts") != null ||
+            value(map, "plugin_opts") != null ||
+            stringValue(map, "obfs") != null
+    }
+
+    private fun hasUnsupportedHysteria2Feature(map: Map<*, *>): Boolean {
+        return stringValue(map, "obfs") != null ||
+            stringValue(map, "obfs-password") != null ||
+            stringValue(map, "obfs_password") != null
     }
 }

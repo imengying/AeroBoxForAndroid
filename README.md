@@ -1,5 +1,5 @@
 # AeroBox for Android
-[![API](https://img.shields.io/badge/API-31%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=31) [![Build Check](https://github.com/imengying/AeroBoxForAndroid/actions/workflows/build-check.yml/badge.svg)](https://github.com/imengying/AeroBoxForAndroid/actions/workflows/build-check.yml) [![Releases](https://img.shields.io/github/v/release/imengying/AeroBoxForAndroid)](https://github.com/imengying/AeroBoxForAndroid/releases) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-orange.svg)](./LICENSE)
+[![API](https://img.shields.io/badge/API-31%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=31) [![Build Check](https://github.com/imengying/AeroBoxForAndroid/actions/workflows/build-check.yml/badge.svg)](https://github.com/imengying/AeroBoxForAndroid/actions/workflows/build-check.yml) [![Releases](https://img.shields.io/github/v/release/imengying/AeroBoxForAndroid)](https://github.com/imengying/AeroBoxForAndroid/releases) [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](./LICENSE)
 
 AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 
@@ -58,6 +58,6 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 
 ## License
 
-Apache License 2.0
+GPL-3.0-or-later
 
 See [LICENSE](./LICENSE).

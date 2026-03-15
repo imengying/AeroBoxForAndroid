@@ -6,6 +6,7 @@ import com.aerobox.AeroBoxApplication
 import com.aerobox.core.subscription.SubscriptionParser
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
+import com.aerobox.data.model.SubscriptionType
 import com.aerobox.data.model.connectionFingerprint
 import com.aerobox.data.model.matchScore
 import com.aerobox.data.model.normalizedDisplayName
@@ -51,7 +52,8 @@ class SubscriptionRepository(context: Context) {
         val nodes: List<ProxyNode>,
         val trafficBytes: Long,
         val expireTimestamp: Long,
-        val metadataFromHeader: Boolean
+        val metadataFromHeader: Boolean,
+        val sourceType: SubscriptionType
     )
 
     private data class SubscriptionUserInfo(
@@ -96,6 +98,7 @@ class SubscriptionRepository(context: Context) {
                         id = insertedId,
                         updateTime = updatedAt,
                         nodeCount = nodes.size,
+                        type = prepared.sourceType,
                         trafficBytes = prepared.trafficBytes,
                         expireTimestamp = prepared.expireTimestamp
                     )
@@ -192,6 +195,15 @@ class SubscriptionRepository(context: Context) {
         proxyNodeDao.updateLatency(nodeId, latency)
     }
 
+    suspend fun updateNodeLatencies(latencies: Map<Long, Int>) {
+        if (latencies.isEmpty()) return
+        database.withTransaction {
+            latencies.forEach { (nodeId, latency) ->
+                proxyNodeDao.updateLatency(nodeId, latency)
+            }
+        }
+    }
+
     suspend fun resolveNode(node: ProxyNode): ProxyNode? {
         proxyNodeDao.getNodeById(node.id)?.let { return it }
         if (node.subscriptionId <= 0L) return null
@@ -213,7 +225,8 @@ class SubscriptionRepository(context: Context) {
             nodes = parsed.nodes,
             trafficBytes = remainingBytes ?: parsed.trafficBytes,
             expireTimestamp = expireTimestamp ?: parsed.expireTimestamp,
-            metadataFromHeader = remainingBytes != null || expireTimestamp != null
+            metadataFromHeader = remainingBytes != null || expireTimestamp != null,
+            sourceType = parsed.sourceType
         )
     }
 
@@ -274,6 +287,7 @@ class SubscriptionRepository(context: Context) {
                 subscription.copy(
                     updateTime = updatedAt,
                     nodeCount = stabilizedNodes.size,
+                    type = prepared.sourceType,
                     trafficBytes = prepared.trafficBytes,
                     expireTimestamp = prepared.expireTimestamp
                 )

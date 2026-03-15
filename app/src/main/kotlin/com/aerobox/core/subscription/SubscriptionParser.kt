@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Base64
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
+import com.aerobox.data.model.SubscriptionType
 import com.aerobox.data.model.connectionFingerprint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -20,7 +21,8 @@ import java.util.Locale
 data class ParsedSubscription(
     val nodes: List<ProxyNode>,
     val trafficBytes: Long = 0,
-    val expireTimestamp: Long = 0
+    val expireTimestamp: Long = 0,
+    val sourceType: SubscriptionType = SubscriptionType.BASE64
 )
 
 object SubscriptionParser {
@@ -62,6 +64,44 @@ object SubscriptionParser {
         "expires",
         "expiry",
         "valid until"
+    )
+
+    private val announcementInfoPrefixes = listOf(
+        "官网",
+        "官方网址",
+        "更新地址",
+        "公告",
+        "通知",
+        "官方群",
+        "官方频道",
+        "频道",
+        "群组",
+        "交流群",
+        "客服",
+        "联系",
+        "购买",
+        "续费",
+        "telegram",
+        "tg",
+        "channel",
+        "group",
+        "website",
+        "support",
+        "contact"
+    )
+
+    private val allInformationalPrefixes = (
+        trafficInfoPrefixes +
+            resetInfoPrefixes +
+            expiryInfoPrefixes +
+            announcementInfoPrefixes
+        ).distinct().sortedByDescending { it.length }
+
+    private val announcementValuePattern = Regex(
+        """
+        (?ix)
+        (https?://|t\.me/|telegram|tg[:/\s]|@\w{3,}|qq[:：]?\d{5,}|wechat|wx[:：]?\w+)
+        """.trimIndent()
     )
 
     private val trafficValuePattern = Regex(
@@ -131,6 +171,10 @@ object SubscriptionParser {
                 base64Decoded.contains("://") -> base64Decoded
                 else -> normalized
             }
+            val sourceType = when {
+                targetContent.startsWith("{") || targetContent.startsWith("[") -> SubscriptionType.JSON
+                else -> SubscriptionType.BASE64
+            }
 
             val nodes = when {
                 targetContent.startsWith("{") || targetContent.startsWith("[") -> parseJsonContent(targetContent)
@@ -138,23 +182,27 @@ object SubscriptionParser {
                 else -> emptyList()
             }
 
-            sanitizeParsedNodes(nodes)
+            sanitizeParsedNodes(nodes, sourceType)
         }.getOrDefault(ParsedSubscription(emptyList()))
     }
 
     private fun parseClashSubscription(content: String): ParsedSubscription {
         val rawNodes = ClashParser.parseClashYaml(content)
-        return sanitizeParsedNodes(rawNodes)
+        return sanitizeParsedNodes(rawNodes, SubscriptionType.YAML)
     }
 
-    private fun sanitizeParsedNodes(nodes: List<ProxyNode>): ParsedSubscription {
+    private fun sanitizeParsedNodes(
+        nodes: List<ProxyNode>,
+        sourceType: SubscriptionType
+    ): ParsedSubscription {
         val infoNodes = nodes.filter(::isInformationalNode)
         return ParsedSubscription(
             nodes = nodes
                 .filterNot(::isInformationalNode)
                 .let(::dedupeNodes),
             trafficBytes = infoNodes.mapNotNull { extractTrafficBytes(it.name) }.firstOrNull() ?: 0L,
-            expireTimestamp = infoNodes.mapNotNull { extractExpireTimestamp(it.name) }.firstOrNull() ?: 0L
+            expireTimestamp = infoNodes.mapNotNull { extractExpireTimestamp(it.name) }.firstOrNull() ?: 0L,
+            sourceType = sourceType
         )
     }
 
@@ -173,6 +221,7 @@ object SubscriptionParser {
                 dateValuePattern.matches(info.value) || relativeTimeValuePattern.matches(info.value) || timestampValuePattern.matches(info.value)
             }
             info.prefix.matchesAnyPrefix(trafficInfoPrefixes) -> trafficValuePattern.matches(info.value)
+            info.prefix.matchesAnyPrefix(announcementInfoPrefixes) -> announcementValuePattern.containsMatchIn(info.value)
             else -> false
         }
     }
@@ -192,17 +241,33 @@ object SubscriptionParser {
     private fun parseInformationalNode(name: String): InformationalNode? {
         val normalizedName = name
             .replace('：', ':')
+            .replace('｜', '|')
             .trim()
             .trimStart { it.isWhitespace() || !it.isLetterOrDigit() }
 
-        val separatorIndex = normalizedName.indexOf(':')
-        if (separatorIndex <= 0 || separatorIndex >= normalizedName.lastIndex) return null
+        listOf(':', '|').forEach { separator ->
+            val separatorIndex = normalizedName.indexOf(separator)
+            if (separatorIndex > 0 && separatorIndex < normalizedName.lastIndex) {
+                val prefix = normalizedName.substring(0, separatorIndex).trim()
+                val value = normalizedName.substring(separatorIndex + 1).trim()
+                if (prefix.isNotBlank() && value.isNotBlank()) {
+                    return InformationalNode(prefix = prefix, value = value)
+                }
+            }
+        }
 
-        val prefix = normalizedName.substring(0, separatorIndex).trim()
-        val value = normalizedName.substring(separatorIndex + 1).trim()
-        if (prefix.isBlank() || value.isBlank()) return null
+        allInformationalPrefixes.forEach { prefix ->
+            if (normalizedName.startsWith(prefix, ignoreCase = true)) {
+                val value = normalizedName.substring(prefix.length)
+                    .trimStart(' ', ':', '|', '-', '_', '/', '(', '[', '【')
+                    .trim()
+                if (value.isNotBlank()) {
+                    return InformationalNode(prefix = prefix, value = value)
+                }
+            }
+        }
 
-        return InformationalNode(prefix = prefix, value = value)
+        return null
     }
 
     private fun parseTrafficBytes(value: String): Long? {
@@ -313,8 +378,8 @@ object SubscriptionParser {
                 uri.startsWith("hysteria2://", ignoreCase = true) || uri.startsWith("hy2://", ignoreCase = true) -> parseHysteria2Uri(uri)
                 uri.startsWith("tuic://", ignoreCase = true) -> parseTuicUri(uri)
                 uri.startsWith("socks://", ignoreCase = true) || uri.startsWith("socks5://", ignoreCase = true) -> parseSocksUri(uri)
-                uri.startsWith("http://", ignoreCase = true) && uri.contains("@") -> parseHttpProxyUri(uri)
-                uri.startsWith("https://", ignoreCase = true) && uri.contains("@") -> parseHttpProxyUri(uri)
+                uri.startsWith("http://", ignoreCase = true) -> parseHttpProxyUri(uri)
+                uri.startsWith("https://", ignoreCase = true) -> parseHttpProxyUri(uri)
                 else -> null
             }
         }.getOrNull()
@@ -324,6 +389,8 @@ object SubscriptionParser {
         val raw = uri.removePrefix("ss://")
         val mainAndQuery = raw.substringBefore('#')
         val name = decodeName(raw.substringAfter('#', "Shadowsocks"))
+        val params = parseUriParams(mainAndQuery.substringAfter('?', ""))
+        if (hasUnsupportedShadowsocksFeature(params["plugin"])) return null
 
         val core = mainAndQuery.substringBefore('?')
         val normalizedCore = if (core.contains('@')) {
@@ -487,6 +554,9 @@ object SubscriptionParser {
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
         val params = parseUriParams(parsed.query)
+        if (hasUnsupportedHysteria2Feature(params["obfs"], params["obfs-password"], params["obfs_password"])) {
+            return null
+        }
 
         return ProxyNode(
             name = decodeName(parsed.fragment ?: "Hysteria2"),
@@ -569,6 +639,24 @@ object SubscriptionParser {
                 typeRaw == "http" || typeRaw == "https" -> ProxyType.HTTP
                 else -> continue
             }
+            if (type == ProxyType.SHADOWSOCKS && hasUnsupportedShadowsocksFeature(
+                    obj.optString("plugin", "").ifBlank { null },
+                    obj.optString("plugin_opts", "").ifBlank { null },
+                    obj.optString("plugin-opts", "").ifBlank { null },
+                    obj.optJSONObject("plugin_opts")?.toString(),
+                    obj.optJSONObject("plugin-opts")?.toString()
+                )
+            ) {
+                continue
+            }
+            if (type == ProxyType.HYSTERIA2 && hasUnsupportedHysteria2Feature(
+                    obj.optString("obfs", "").ifBlank { null },
+                    obj.optString("obfs_password", "").ifBlank { null },
+                    obj.optString("obfs-password", "").ifBlank { null }
+                )
+            ) {
+                continue
+            }
 
             val server = obj.optString("server", obj.optString("address", ""))
             val port = obj.optInt("server_port", obj.optInt("port", -1))
@@ -590,7 +678,8 @@ object SubscriptionParser {
                 flow = obj.optString("flow", "").ifBlank { null },
                 security = obj.optString("security", "").ifBlank { null },
                 network = network,
-                tls = obj.optBoolean("tls", false)
+                tls = typeRaw == "https"
+                        || obj.optBoolean("tls", false)
                         || tlsObject?.optBoolean("enabled", false) == true
                         || realityObject?.optBoolean("enabled", false) == true,
                 sni = firstNonBlank(
@@ -675,6 +764,9 @@ object SubscriptionParser {
         val parsed = Uri.parse(uri)
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
+        val path = parsed.path.orEmpty()
+        if (path.isNotBlank() && path != "/") return null
+        if (!parsed.query.isNullOrBlank()) return null
         val userInfo = extractUserInfo(parsed)
         val username = userInfo?.substringBefore(':', userInfo)
         val password = userInfo?.substringAfter(':', "")?.ifBlank { null }
@@ -771,5 +863,13 @@ object SubscriptionParser {
         return values.any { v ->
             v != null && (v == "1" || v.equals("true", true))
         }
+    }
+
+    private fun hasUnsupportedShadowsocksFeature(vararg values: String?): Boolean {
+        return values.any { !it.isNullOrBlank() }
+    }
+
+    private fun hasUnsupportedHysteria2Feature(vararg values: String?): Boolean {
+        return values.any { !it.isNullOrBlank() }
     }
 }

@@ -8,6 +8,7 @@ import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.native.SingBoxNative
+import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.utils.PreferenceManager
@@ -141,16 +142,18 @@ class VpnRepository(private val context: Context) {
     suspend fun urlTestNode(
         node: ProxyNode,
         testUrl: String = "http://cp.cloudflare.com/",
-        timeoutMs: Int = 5000
+        timeoutMs: Int = 5000,
+        localDns: String? = null,
+        ipv6Mode: IPv6Mode? = null
     ): Int {
         return withContext(Dispatchers.IO) {
-            val userLocalDns = PreferenceManager.localDnsFlow(context).first()
-            val ipv6Mode = PreferenceManager.ipv6ModeFlow(context).first()
-            val safeLocalDns = if (userLocalDns.contains("[")) "223.5.5.5" else userLocalDns
+            val resolvedLocalDns = localDns ?: PreferenceManager.localDnsFlow(context).first()
+            val resolvedIpv6Mode = ipv6Mode ?: PreferenceManager.ipv6ModeFlow(context).first()
+            val safeLocalDns = if (resolvedLocalDns.contains("[")) "223.5.5.5" else resolvedLocalDns
             val config = ConfigGenerator.generateUrlTestConfig(
                 node = node,
                 localDns = safeLocalDns,
-                ipv6Mode = ipv6Mode
+                ipv6Mode = resolvedIpv6Mode
             )
             val parseError = checkConfig(config)
             if (parseError != null) {
