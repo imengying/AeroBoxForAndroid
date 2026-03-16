@@ -100,20 +100,16 @@ fun PerAppProxyScreen(
     val apps by viewModel.installedApps.collectAsStateWithLifecycle()
     val isLoadingApps by viewModel.isLoadingInstalledApps.collectAsStateWithLifecycle()
     var showSystem by remember { mutableStateOf(false) }
-    var showNonInternet by remember { mutableStateOf(false) }
-    var showSelectedOnly by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         viewModel.loadInstalledApps()
     }
 
-    val filteredApps = remember(apps, showSystem, showNonInternet, showSelectedOnly, searchQuery, selectedPackages) {
+    val filteredApps = remember(apps, showSystem, searchQuery, selectedPackages) {
         apps
             .asSequence()
             .filter { if (showSystem) true else !it.isSystem }
-            .filter { if (showNonInternet) true else it.hasInternetPermission }
-            .filter { if (showSelectedOnly) selectedPackages.contains(it.packageName) else true }
             .filter { app ->
                 val query = searchQuery.trim()
                 if (query.isBlank()) {
@@ -164,29 +160,10 @@ fun PerAppProxyScreen(
                     onClick = { scope.launch { viewModel.setPerAppProxyMode("whitelist") } },
                     label = { Text("仅代理选中") }
                 )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
                 FilterChip(
                     selected = showSystem,
                     onClick = { showSystem = !showSystem },
                     label = { Text("显示系统") }
-                )
-                FilterChip(
-                    selected = showNonInternet,
-                    onClick = { showNonInternet = !showNonInternet },
-                    label = { Text("显示无网络") }
-                )
-                FilterChip(
-                    selected = showSelectedOnly,
-                    onClick = { showSelectedOnly = !showSelectedOnly },
-                    label = { Text("只看已选") }
                 )
             }
 
