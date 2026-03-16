@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.IpPrefix
+import android.net.Network
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
@@ -155,6 +156,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+                    DefaultNetworkMonitor.setNetworkChangedCallback(::updateUnderlyingNetwork)
                     DefaultNetworkMonitor.start()
                 }
 
@@ -361,6 +363,18 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
         val hasIpv6 = inet6Addresses.isNotEmpty()
         builder.setMetered(false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            DefaultNetworkMonitor.defaultNetwork?.let { network ->
+                runCatching {
+                    builder.setUnderlyingNetworks(arrayOf(network))
+                }.onFailure {
+                    RuntimeLogBuffer.append(
+                        "debug",
+                        "Builder setUnderlyingNetworks skipped: ${it.message ?: it}"
+                    )
+                }
+            }
+        }
 
         if (options.autoRoute) {
             val inet4Routes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -445,7 +459,22 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         val initialSpeedText = "↑ 0 B/s  ↓ 0 B/s"
         val notification = buildNotification(contentText = initialSpeedText, connected = true)
         notificationManager.notify(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            updateUnderlyingNetwork(DefaultNetworkMonitor.defaultNetwork)
+        }
         return pfd.fd
+    }
+
+    private fun updateUnderlyingNetwork(network: Network?) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return
+        runCatching {
+            setUnderlyingNetworks(network?.let { arrayOf(it) })
+        }.onFailure {
+            RuntimeLogBuffer.append(
+                "debug",
+                "setUnderlyingNetworks skipped: ${it.message ?: it}"
+            )
+        }
     }
 
     private fun Builder.addRouteCompat(address: String, prefix: Int) {

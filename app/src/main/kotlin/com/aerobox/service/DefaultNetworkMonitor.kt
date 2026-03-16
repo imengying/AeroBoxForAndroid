@@ -28,6 +28,7 @@ object DefaultNetworkMonitor {
         private set
 
     private var listener: InterfaceUpdateListener? = null
+    private var networkChangedCallback: ((Network?) -> Unit)? = null
     private var registered = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private var pendingLossLog: Runnable? = null
@@ -41,6 +42,7 @@ object DefaultNetworkMonitor {
         override fun onAvailable(network: Network) {
             cancelPendingLossLog()
             defaultNetwork = network
+            networkChangedCallback?.invoke(network)
             notifyInterfaceUpdate(network)
         }
 
@@ -50,6 +52,7 @@ object DefaultNetworkMonitor {
         ) {
             if (network == defaultNetwork) {
                 cancelPendingLossLog()
+                networkChangedCallback?.invoke(network)
                 notifyInterfaceUpdate(network)
             }
         }
@@ -58,6 +61,7 @@ object DefaultNetworkMonitor {
             if (network == defaultNetwork) {
                 defaultNetwork = null
                 scheduleLossLog(network)
+                networkChangedCallback?.invoke(null)
                 listener?.runCatching {
                     updateDefaultInterface("", -1, false, false)
                 }
@@ -77,6 +81,7 @@ object DefaultNetworkMonitor {
             Log.w(TAG, "Failed to register network callback", e)
         }
         defaultNetwork = cm.activeNetwork
+        networkChangedCallback?.invoke(defaultNetwork)
         defaultNetwork?.let { notifyInterfaceUpdate(it) }
     }
 
@@ -89,6 +94,7 @@ object DefaultNetworkMonitor {
         registered = false
         defaultNetwork = null
         listener = null
+        networkChangedCallback = null
     }
 
     fun setListener(listener: InterfaceUpdateListener?) {
@@ -96,6 +102,11 @@ object DefaultNetworkMonitor {
         if (listener != null) {
             defaultNetwork?.let { notifyInterfaceUpdate(it) }
         }
+    }
+
+    fun setNetworkChangedCallback(callback: ((Network?) -> Unit)?) {
+        networkChangedCallback = callback
+        callback?.invoke(defaultNetwork)
     }
 
     private fun cancelPendingLossLog() {
