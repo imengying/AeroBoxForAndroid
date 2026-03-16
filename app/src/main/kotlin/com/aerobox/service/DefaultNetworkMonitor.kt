@@ -21,6 +21,7 @@ import java.net.NetworkInterface
 object DefaultNetworkMonitor {
 
     private const val TAG = "DefaultNetworkMonitor"
+    private const val LOSS_LOG_DELAY_MS = 1500L
 
     @Volatile
     var defaultNetwork: Network? = null
@@ -29,6 +30,7 @@ object DefaultNetworkMonitor {
     private var listener: InterfaceUpdateListener? = null
     private var registered = false
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingLossLog: Runnable? = null
 
     private val networkRequest: NetworkRequest = NetworkRequest.Builder()
         .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
@@ -37,6 +39,7 @@ object DefaultNetworkMonitor {
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
+            cancelPendingLossLog()
             defaultNetwork = network
             notifyInterfaceUpdate(network)
         }
@@ -46,6 +49,7 @@ object DefaultNetworkMonitor {
             capabilities: NetworkCapabilities
         ) {
             if (network == defaultNetwork) {
+                cancelPendingLossLog()
                 notifyInterfaceUpdate(network)
             }
         }
@@ -53,7 +57,7 @@ object DefaultNetworkMonitor {
         override fun onLost(network: Network) {
             if (network == defaultNetwork) {
                 defaultNetwork = null
-                RuntimeLogBuffer.append("warn", "Default network lost: $network")
+                scheduleLossLog(network)
                 listener?.runCatching {
                     updateDefaultInterface("", -1, false, false)
                 }
@@ -78,6 +82,7 @@ object DefaultNetworkMonitor {
 
     fun stop() {
         if (!registered) return
+        cancelPendingLossLog()
         runCatching {
             AeroBoxApplication.connectivity.unregisterNetworkCallback(networkCallback)
         }
@@ -91,6 +96,23 @@ object DefaultNetworkMonitor {
         if (listener != null) {
             defaultNetwork?.let { notifyInterfaceUpdate(it) }
         }
+    }
+
+    private fun cancelPendingLossLog() {
+        pendingLossLog?.let(mainHandler::removeCallbacks)
+        pendingLossLog = null
+    }
+
+    private fun scheduleLossLog(network: Network) {
+        cancelPendingLossLog()
+        val logTask = Runnable {
+            if (defaultNetwork == null) {
+                RuntimeLogBuffer.append("info", "Default network lost: $network")
+            }
+            pendingLossLog = null
+        }
+        pendingLossLog = logTask
+        mainHandler.postDelayed(logTask, LOSS_LOG_DELAY_MS)
     }
 
     private fun notifyInterfaceUpdate(network: Network) {

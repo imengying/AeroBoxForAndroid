@@ -53,6 +53,7 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -144,11 +145,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private var detectIpJob: Job? = null
     private var connectWatchdogJob: Job? = null
-    private val ipDetectClient = OkHttpClient.Builder()
-        .callTimeout(5, TimeUnit.SECONDS)
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(3, TimeUnit.SECONDS)
-        .build()
 
     init {
         observeSelectedNode()
@@ -513,6 +509,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun fetchPublicIp(): String = withContext(Dispatchers.IO) {
+        val client = OkHttpClient.Builder()
+            .callTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(3, TimeUnit.SECONDS)
+            // Always use fresh sockets for IP detection so requests do not
+            // accidentally reuse connections opened before VPN routing changed.
+            .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+            .retryOnConnectionFailure(false)
+            .build()
         val endpoints = if (vpnState.value.isConnected) {
             listOf(
                 "https://ipv4.icanhazip.com",
@@ -532,36 +537,43 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        supervisorScope {
-            val resultChannel = Channel<String?>(capacity = endpoints.size)
-            val jobs = endpoints.distinct().map { endpoint ->
-                launch {
-                    resultChannel.trySend(fetchIpFromEndpoint(endpoint))
-                }
-            }
-
-            try {
-                repeat(jobs.size) {
-                    val ip = resultChannel.receive()
-                    if (!ip.isNullOrBlank()) {
-                        return@supervisorScope ip
+        try {
+            supervisorScope {
+                val resultChannel = Channel<String?>(capacity = endpoints.size)
+                val jobs = endpoints.distinct().map { endpoint ->
+                    launch {
+                        resultChannel.trySend(fetchIpFromEndpoint(client, endpoint))
                     }
                 }
-                null
-            } finally {
-                jobs.forEach { it.cancel() }
-                resultChannel.close()
+
+                try {
+                    repeat(jobs.size) {
+                        val ip = resultChannel.receive()
+                        if (!ip.isNullOrBlank()) {
+                            return@supervisorScope ip
+                        }
+                    }
+                    null
+                } finally {
+                    jobs.forEach { it.cancel() }
+                    resultChannel.close()
+                }
             }
+        } finally {
+            client.dispatcher.cancelAll()
+            client.connectionPool.evictAll()
+            client.dispatcher.executorService.shutdown()
         } ?: "检测失败，点击重试"
     }
 
-    private suspend fun fetchIpFromEndpoint(endpoint: String): String? =
+    private suspend fun fetchIpFromEndpoint(client: OkHttpClient, endpoint: String): String? =
         kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
             val request = Request.Builder()
                 .url(endpoint)
                 .header("User-Agent", "AeroBox/IP-Check")
+                .header("Connection", "close")
                 .build()
-            val call = ipDetectClient.newCall(request)
+            val call = client.newCall(request)
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {
@@ -607,7 +619,5 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        ipDetectClient.dispatcher.executorService.shutdown()
-        ipDetectClient.connectionPool.evictAll()
     }
 }
