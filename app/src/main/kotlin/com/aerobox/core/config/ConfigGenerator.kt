@@ -477,9 +477,10 @@ object ConfigGenerator {
             .put("address", tunAddresses)
             .put("mtu", 1280)
             .put("auto_route", true)
-            .put("strict_route", true)
             .put("stack", "system")
             .put("domain_strategy", ipv6Mode.domainStrategy())
+            .put("sniff", true)
+            .put("sniff_override_destination", true)
 
         inbounds.put(tunInbound)
 
@@ -492,6 +493,8 @@ object ConfigGenerator {
                     .put("listen", inboundListen)
                     .put("listen_port", 2080)
                     .put("domain_strategy", ipv6Mode.domainStrategy())
+                    .put("sniff", true)
+                    .put("sniff_override_destination", true)
             )
         }
 
@@ -504,6 +507,8 @@ object ConfigGenerator {
                     .put("listen", inboundListen)
                     .put("listen_port", 2081)
                     .put("domain_strategy", ipv6Mode.domainStrategy())
+                    .put("sniff", true)
+                    .put("sniff_override_destination", true)
             )
         }
 
@@ -526,14 +531,6 @@ object ConfigGenerator {
     ): JSONObject {
         val route = JSONObject()
             .put("auto_detect_interface", true)
-            .put(
-                "default_domain_resolver",
-                buildDestinationDomainResolver(
-                    serverTag = if (nodeIsIpv6Only) DNS_REMOTE_TAG else DNS_DIRECT_TAG,
-                    nodeIsIpv6Only = nodeIsIpv6Only,
-                    ipv6Mode = ipv6Mode
-                )
-            )
 
         val ruleSets = JSONArray()
         if (!geoIpCnRuleSetPath.isNullOrBlank()) {
@@ -626,10 +623,6 @@ object ConfigGenerator {
 
     private fun buildBaseRouteRules(): JSONArray {
         return JSONArray()
-            .put(
-                JSONObject()
-                    .put("action", "sniff")
-            )
             .put(
                 JSONObject()
                     .put("port", JSONArray().put(53))
