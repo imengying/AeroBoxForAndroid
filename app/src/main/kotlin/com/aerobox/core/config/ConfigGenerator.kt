@@ -502,7 +502,7 @@ object ConfigGenerator {
             .put("stack", "system")
             .put("domain_strategy", ipv6Mode.domainStrategy())
             .put("sniff", true)
-            .put("sniff_override_destination", false)
+            .put("sniff_override_destination", true)
 
         inbounds.put(tunInbound)
 
@@ -516,7 +516,7 @@ object ConfigGenerator {
                     .put("listen_port", 2080)
                     .put("domain_strategy", ipv6Mode.domainStrategy())
                     .put("sniff", true)
-                    .put("sniff_override_destination", false)
+                    .put("sniff_override_destination", true)
             )
         }
 
@@ -530,7 +530,7 @@ object ConfigGenerator {
                     .put("listen_port", 2081)
                     .put("domain_strategy", ipv6Mode.domainStrategy())
                     .put("sniff", true)
-                    .put("sniff_override_destination", false)
+                    .put("sniff_override_destination", true)
             )
         }
 
