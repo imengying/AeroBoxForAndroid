@@ -131,6 +131,18 @@ object SubscriptionParser {
         """.trimIndent()
     )
 
+    private val permanentValidityValuePattern = Regex(
+        """
+        (?ix)
+        ^
+        (?:
+            长期有效|永久有效|长期|永久|永不过期|不过期|
+            forever|permanent|permanently|never\s+expire(?:s|d)?|no\s+expiry|unlimited
+        )
+        $
+        """.trimIndent()
+    )
+
     private val dateValuePattern = Regex(
         """
         ^
@@ -216,7 +228,10 @@ object SubscriptionParser {
                 relativeTimeValuePattern.matches(info.value) || dateValuePattern.matches(info.value) || timestampValuePattern.matches(info.value)
             }
             info.prefix.matchesAnyPrefix(expiryInfoPrefixes) -> {
-                dateValuePattern.matches(info.value) || relativeTimeValuePattern.matches(info.value) || timestampValuePattern.matches(info.value)
+                dateValuePattern.matches(info.value) ||
+                    relativeTimeValuePattern.matches(info.value) ||
+                    timestampValuePattern.matches(info.value) ||
+                    permanentValidityValuePattern.matches(info.value)
             }
             info.prefix.matchesAnyPrefix(trafficInfoPrefixes) -> trafficValuePattern.matches(info.value)
             info.prefix.matchesAnyPrefix(announcementInfoPrefixes) -> announcementValuePattern.containsMatchIn(info.value)
@@ -233,6 +248,7 @@ object SubscriptionParser {
     private fun extractExpireTimestamp(name: String): Long? {
         val info = parseInformationalNode(name) ?: return null
         if (!info.prefix.matchesAnyPrefix(expiryInfoPrefixes)) return null
+        if (permanentValidityValuePattern.matches(info.value)) return 0L
         return parseExpireTimestamp(info.value)
     }
 
@@ -240,10 +256,12 @@ object SubscriptionParser {
         val normalizedName = name
             .replace('：', ':')
             .replace('｜', '|')
+            .replace('；', ';')
+            .replace('，', ',')
             .trim()
             .trimStart { it.isWhitespace() || !it.isLetterOrDigit() }
 
-        listOf(':', '|').forEach { separator ->
+        listOf(':', '|', ';', ',').forEach { separator ->
             val separatorIndex = normalizedName.indexOf(separator)
             if (separatorIndex > 0 && separatorIndex < normalizedName.lastIndex) {
                 val prefix = normalizedName.substring(0, separatorIndex).trim()
@@ -257,7 +275,7 @@ object SubscriptionParser {
         allInformationalPrefixes.forEach { prefix ->
             if (normalizedName.startsWith(prefix, ignoreCase = true)) {
                 val value = normalizedName.substring(prefix.length)
-                    .trimStart(' ', ':', '|', '-', '_', '/', '(', '[', '【')
+                    .trimStart(' ', ':', '|', ';', ',', '-', '_', '/', '(', '[', '【', '；', '，', '。')
                     .trim()
                 if (value.isNotBlank()) {
                     return InformationalNode(prefix = prefix, value = value)

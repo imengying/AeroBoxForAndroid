@@ -513,7 +513,11 @@ object ConfigGenerator {
             .put("auto_detect_interface", true)
             .put(
                 "default_domain_resolver",
-                buildDestinationDomainResolver("local", nodeIsIpv6Only, ipv6Mode)
+                buildDestinationDomainResolver(
+                    serverTag = if (nodeIsIpv6Only) "remote" else "local",
+                    nodeIsIpv6Only = nodeIsIpv6Only,
+                    ipv6Mode = ipv6Mode
+                )
             )
 
         val ruleSets = JSONArray()
