@@ -125,7 +125,7 @@ interface PlatformInterfaceWrapper : PlatformInterface {
 
     override fun readWIFIState(): WIFIState? = null
 
-    override fun localDNSTransport(): LocalDNSTransport? = null
+    override fun localDNSTransport(): LocalDNSTransport? = LocalResolverTransport
 
     override fun systemCertificates(): StringIterator {
         val certificates = mutableListOf<String>()

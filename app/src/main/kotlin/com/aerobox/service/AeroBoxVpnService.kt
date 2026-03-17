@@ -370,25 +370,14 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         hasIpv6Tun = inet6Addresses.isNotEmpty()
         builder.setMetered(false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-            if (hasIpv6Tun) {
+            DefaultNetworkMonitor.defaultNetwork?.let { network ->
                 runCatching {
-                    builder.setUnderlyingNetworks(null)
+                    builder.setUnderlyingNetworks(arrayOf(network))
                 }.onFailure {
                     RuntimeLogBuffer.append(
                         "debug",
-                        "Builder setUnderlyingNetworks(null) skipped: ${it.message ?: it}"
+                        "Builder setUnderlyingNetworks skipped: ${it.message ?: it}"
                     )
-                }
-            } else {
-                DefaultNetworkMonitor.defaultNetwork?.let { network ->
-                    runCatching {
-                        builder.setUnderlyingNetworks(arrayOf(network))
-                    }.onFailure {
-                        RuntimeLogBuffer.append(
-                            "debug",
-                            "Builder setUnderlyingNetworks skipped: ${it.message ?: it}"
-                        )
-                    }
                 }
             }
         }
@@ -477,28 +466,13 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         val notification = buildNotification(contentText = initialSpeedText, connected = true)
         notificationManager.notify(NOTIFICATION_ID, notification)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-            if (hasIpv6Tun) {
-                runCatching { setUnderlyingNetworks(null) }
-            } else {
-                updateUnderlyingNetwork(DefaultNetworkMonitor.defaultNetwork)
-            }
+            updateUnderlyingNetwork(DefaultNetworkMonitor.defaultNetwork)
         }
         return pfd.fd
     }
 
     private fun updateUnderlyingNetwork(network: Network?) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return
-        if (hasIpv6Tun) {
-            runCatching {
-                setUnderlyingNetworks(null)
-            }.onFailure {
-                RuntimeLogBuffer.append(
-                    "debug",
-                    "setUnderlyingNetworks(null) skipped: ${it.message ?: it}"
-                )
-            }
-            return
-        }
         runCatching {
             setUnderlyingNetworks(network?.let { arrayOf(it) })
         }.onFailure {
