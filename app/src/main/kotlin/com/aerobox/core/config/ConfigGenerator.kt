@@ -477,8 +477,8 @@ object ConfigGenerator {
             .put("address", tunAddresses)
             .put("mtu", 1400)
             .put("auto_route", true)
-            .put("strict_route", true)
-            .put("stack", "system")
+            .put("endpoint_independent_nat", true)
+            .put("stack", "gvisor")
             .put("domain_strategy", ipv6Mode.domainStrategy())
 
         inbounds.put(tunInbound)
