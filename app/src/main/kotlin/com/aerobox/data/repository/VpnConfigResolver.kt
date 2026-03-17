@@ -1,6 +1,7 @@
 package com.aerobox.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.aerobox.AeroBoxApplication
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.geo.GeoAssetManager
@@ -14,6 +15,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 class VpnConfigResolver(private val context: Context) {
+    companion object {
+        private const val TAG = "VpnConfigResolver"
+    }
+
     private val nodeDao = AeroBoxApplication.database.proxyNodeDao()
     private val subscriptionRepository by lazy {
         SubscriptionRepository(context)
@@ -54,10 +59,9 @@ class VpnConfigResolver(private val context: Context) {
     }
 
     suspend fun buildConfig(node: ProxyNode): String {
-        RuntimeLogBuffer.append(
-            "info",
-            "Generating config for ${node.name.ifBlank { "unnamed node" }}"
-        )
+        val nodeName = node.name.ifBlank { "unnamed node" }
+        Log.i(TAG, "Generating config for $nodeName [${node.type.name}]")
+        RuntimeLogBuffer.append("info", "Generating config for $nodeName")
         withContext(Dispatchers.IO) {
             GeoAssetManager.ensureBundledAssets(context)
         }
@@ -117,6 +121,7 @@ class VpnConfigResolver(private val context: Context) {
     fun validateConfig(config: String): String? {
         val error = SingBoxNative.checkConfig(config)
         if (error != null) {
+            Log.e(TAG, "Config check failed: $error")
             RuntimeLogBuffer.append("error", "Config check failed: $error")
         }
         return error
