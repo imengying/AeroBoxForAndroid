@@ -67,7 +67,7 @@ object ConfigGenerator {
         )
         config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, ipv6Mode))
 
-        val proxyOutbound = buildProxyOutbound(node, ipv6Mode).put("tag", PROXY_OUTBOUND_TAG)
+        val proxyOutbound = buildProxyOutbound(node).put("tag", PROXY_OUTBOUND_TAG)
         config.put(
             "outbounds",
             JSONArray()
@@ -122,17 +122,13 @@ object ConfigGenerator {
         config.put(
             "outbounds",
             JSONArray()
-                .put(buildProxyOutbound(node, ipv6Mode).put("tag", PROXY_OUTBOUND_TAG))
+                .put(buildProxyOutbound(node).put("tag", PROXY_OUTBOUND_TAG))
                 .put(JSONObject().put("type", "direct").put("tag", "direct"))
         )
         config.put(
             "route",
             JSONObject()
                 .put("auto_detect_interface", false)
-                .put(
-                    "default_domain_resolver",
-                    buildDestinationDomainResolver(DNS_DIRECT_TAG, isIpv6Literal(node.server), ipv6Mode)
-                )
                 .put("final", PROXY_OUTBOUND_TAG)
         )
         return config.toString()
@@ -674,7 +670,7 @@ object ConfigGenerator {
 
     // ── Proxy Outbound ───────────────────────────────────────────────
 
-    private fun buildProxyOutbound(node: ProxyNode, ipv6Mode: IPv6Mode): JSONObject {
+    private fun buildProxyOutbound(node: ProxyNode): JSONObject {
         val cleanServer = normalizeOutboundServer(node.server)
         val outbound = JSONObject()
             .put("server", cleanServer.ifBlank { "127.0.0.1" })
@@ -747,10 +743,7 @@ object ConfigGenerator {
             }
         }
         if (!isIpLiteral(cleanServer)) {
-            outbound.put(
-                "domain_resolver",
-                buildDialDomainResolver(DNS_DIRECT_TAG)
-            )
+            outbound.put("domain_strategy", "prefer_ipv4")
         }
         return outbound
     }
@@ -766,29 +759,10 @@ object ConfigGenerator {
             .trim()
     }
 
-    private fun buildDialDomainResolver(serverTag: String): JSONObject {
-        // Proxy server resolution always allows IPv6 so that IPv6-only nodes
-        // work regardless of the user's IPv6 toggle (which controls user traffic only).
-        return JSONObject()
-            .put("server", serverTag)
-            .put("strategy", "prefer_ipv4")
-    }
-
     private fun isIpv6Literal(server: String): Boolean {
         val normalized = server.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
         return normalized.contains(':') &&
             normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
-    }
-
-    private fun buildDestinationDomainResolver(serverTag: String, nodeIsIpv6Only: Boolean, ipv6Mode: IPv6Mode = IPv6Mode.DISABLE): JSONObject {
-        val strategy = when {
-            nodeIsIpv6Only -> "prefer_ipv6"
-            ipv6Mode == IPv6Mode.ENABLE -> "prefer_ipv4"
-            else -> "ipv4_only"
-        }
-        return JSONObject()
-            .put("server", serverTag)
-            .put("strategy", strategy)
     }
 
     private fun JSONObject.putDestinationDomainStrategy(nodeIsIpv6Only: Boolean, ipv6Mode: IPv6Mode = IPv6Mode.DISABLE): JSONObject {
