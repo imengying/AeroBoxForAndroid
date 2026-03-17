@@ -10,6 +10,10 @@ import java.net.URI
 
 object ConfigGenerator {
     private const val PROXY_OUTBOUND_TAG = "proxy"
+    private const val DNS_LOCAL_TAG = "dns-local"
+    private const val DNS_DIRECT_TAG = "dns-direct"
+    private const val DNS_REMOTE_TAG = "dns-remote"
+    private const val DNS_BOOTSTRAP_TAG = "dns-bootstrap"
     const val V2RAY_API_LISTEN = "127.0.0.1:10085"
 
     private data class DnsServerSpec(
@@ -127,7 +131,7 @@ object ConfigGenerator {
                 .put("auto_detect_interface", false)
                 .put(
                     "default_domain_resolver",
-                    buildDestinationDomainResolver("direct", isIpv6Literal(node.server), ipv6Mode)
+                    buildDestinationDomainResolver(DNS_DIRECT_TAG, isIpv6Literal(node.server), ipv6Mode)
                 )
                 .put("final", PROXY_OUTBOUND_TAG)
         )
@@ -162,17 +166,19 @@ object ConfigGenerator {
         // When proxy is IPv6-only, remote DNS domain resolution must prefer IPv6
         // so DoH endpoints resolve to IPv6 addresses reachable through the proxy.
         val remoteDnsStrategy = if (nodeIsIpv6Only) "prefer_ipv6" else ipv6Mode.domainStrategy()
-        val localResolverServer = buildLocalPlatformDnsServer("local")
+        val localResolverServer = buildLocalPlatformDnsServer(DNS_LOCAL_TAG)
         val bootstrapServer = buildDnsServer(
-            tag = "bootstrap",
+            tag = DNS_BOOTSTRAP_TAG,
             dns = bootstrapDnsAddress(),
+            detour = "direct",
             ipv6Mode = ipv6Mode
         )
 
         val directServer = buildDnsServer(
-            tag = "direct",
+            tag = DNS_DIRECT_TAG,
             dns = normalizeLocalDnsAddress(localDns),
-            resolverTag = "local",
+            detour = "direct",
+            resolverTag = DNS_LOCAL_TAG,
             ipv6Mode = ipv6Mode
         )
 
@@ -180,15 +186,15 @@ object ConfigGenerator {
         if (routingMode == RoutingMode.DIRECT) {
             return JSONObject()
                 .put("servers", JSONArray().put(directServer).put(localResolverServer).put(bootstrapServer))
-                .put("final", "direct")
+                .put("final", DNS_DIRECT_TAG)
                 .putDestinationDomainStrategy(nodeIsIpv6Only, ipv6Mode)
         }
 
         val remoteServer = buildDnsServer(
-            tag = "remote",
+            tag = DNS_REMOTE_TAG,
             dns = normalizeRemoteDnsAddress(remoteDns, enableDoh, nodeIsIpv6Only),
             detour = "proxy",
-            resolverTag = "direct",
+            resolverTag = DNS_DIRECT_TAG,
             ipv6Mode = ipv6Mode,
             dialStrategyOverride = remoteDnsStrategy
         )
@@ -202,7 +208,7 @@ object ConfigGenerator {
                     .put(localResolverServer)
                     .put(bootstrapServer)
             )
-            .put("final", "remote")
+            .put("final", DNS_REMOTE_TAG)
             .putDestinationDomainStrategy(nodeIsIpv6Only, ipv6Mode)
 
         // Only add DNS routing rules for rule-based modes
@@ -213,7 +219,7 @@ object ConfigGenerator {
                     JSONObject()
                         .put("rule_set", JSONArray().put("geosite-$country"))
                         .put("action", "route")
-                        .put("server", "direct")
+                        .put("server", DNS_DIRECT_TAG)
                 )
             }
 
@@ -259,7 +265,7 @@ object ConfigGenerator {
                     put(
                         "domain_resolver",
                         JSONObject()
-                            .put("server", resolverTag ?: "bootstrap")
+                            .put("server", resolverTag ?: DNS_BOOTSTRAP_TAG)
                             .put("strategy", strategy)
                     )
                 }
@@ -525,7 +531,7 @@ object ConfigGenerator {
             .put(
                 "default_domain_resolver",
                 buildDestinationDomainResolver(
-                    serverTag = if (nodeIsIpv6Only) "remote" else "direct",
+                    serverTag = if (nodeIsIpv6Only) DNS_REMOTE_TAG else DNS_DIRECT_TAG,
                     nodeIsIpv6Only = nodeIsIpv6Only,
                     ipv6Mode = ipv6Mode
                 )
@@ -752,7 +758,7 @@ object ConfigGenerator {
         if (!isIpLiteral(cleanServer)) {
             outbound.put(
                 "domain_resolver",
-                buildDialDomainResolver("direct")
+                buildDialDomainResolver(DNS_DIRECT_TAG)
             )
         }
         return outbound
