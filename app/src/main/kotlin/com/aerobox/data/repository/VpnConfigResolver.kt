@@ -60,7 +60,7 @@ class VpnConfigResolver(private val context: Context) {
 
     suspend fun buildConfig(node: ProxyNode): String {
         val nodeName = node.name.ifBlank { "unnamed node" }
-        Log.i(TAG, "Generating config for $nodeName [${node.type.name}]")
+        Log.w(TAG, "Generating config for $nodeName [${node.type.name}]")
         RuntimeLogBuffer.append("info", "Generating config for $nodeName")
         withContext(Dispatchers.IO) {
             GeoAssetManager.ensureBundledAssets(context)

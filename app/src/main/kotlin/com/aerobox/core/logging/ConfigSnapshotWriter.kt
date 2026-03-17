@@ -42,7 +42,7 @@ object ConfigSnapshotWriter {
                     .toString(2)
             )
 
-            Log.i(TAG, "Saved current config snapshot to ${configFile.absolutePath}")
+            Log.w(TAG, "Saved current config snapshot to ${configFile.absolutePath}")
             RuntimeLogBuffer.append("info", "Config snapshot saved: ${configFile.absolutePath}")
             configFile
         }.onFailure {

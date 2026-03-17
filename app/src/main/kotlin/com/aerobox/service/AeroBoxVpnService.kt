@@ -98,7 +98,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
 
     private fun logInfo(message: String) {
-        Log.i(TAG, message)
+        Log.w(TAG, message)
         RuntimeLogBuffer.append("info", message)
     }
 
