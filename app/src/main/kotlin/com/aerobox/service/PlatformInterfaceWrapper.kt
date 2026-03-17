@@ -3,7 +3,6 @@ package com.aerobox.service
 import android.annotation.SuppressLint
 import android.net.NetworkCapabilities
 import android.os.Process
-import android.util.Log
 import io.nekohasekai.libbox.ConnectionOwner
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.Libbox
@@ -46,23 +45,24 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         destinationAddress: String,
         destinationPort: Int,
     ): ConnectionOwner {
-        try {
+        return runCatching {
             val connectivity = AeroBoxApplication.connectivity
             val uid = connectivity.getConnectionOwnerUid(
                 ipProtocol,
                 InetSocketAddress(sourceAddress, sourcePort),
                 InetSocketAddress(destinationAddress, destinationPort),
             )
-            if (uid == Process.INVALID_UID) error("android: connection owner not found")
+            if (uid == Process.INVALID_UID) {
+                return emptyConnectionOwner()
+            }
             val packages = AeroBoxApplication.appInstance.packageManager.getPackagesForUid(uid)
             val owner = ConnectionOwner()
             owner.userId = uid
             owner.userName = packages?.firstOrNull() ?: ""
             owner.androidPackageName = packages?.firstOrNull() ?: ""
             return owner
-        } catch (e: Exception) {
-            Log.e("PlatformInterface", "findConnectionOwner", e)
-            throw e
+        }.getOrElse {
+            emptyConnectionOwner()
         }
     }
 
@@ -158,6 +158,14 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         override fun len(): Int = 0 // not used by core
         override fun hasNext(): Boolean = iterator.hasNext()
         override fun next(): String = iterator.next()
+    }
+
+    private fun emptyConnectionOwner(): ConnectionOwner {
+        return ConnectionOwner().apply {
+            userId = Process.INVALID_UID
+            userName = ""
+            androidPackageName = ""
+        }
     }
 }
 
