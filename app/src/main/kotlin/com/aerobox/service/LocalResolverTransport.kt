@@ -20,14 +20,6 @@ object LocalResolverTransport : LocalDNSTransport {
 
     override fun raw(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
-    override fun networkHandle(): Long {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            DefaultNetworkMonitor.defaultNetwork?.networkHandle ?: 0L
-        } else {
-            0L
-        }
-    }
-
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun exchange(ctx: ExchangeContext, message: ByteArray) {
         val signal = CancellationSignal()
