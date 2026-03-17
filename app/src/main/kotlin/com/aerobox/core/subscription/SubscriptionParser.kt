@@ -2,6 +2,7 @@ package com.aerobox.core.subscription
 
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
 import com.aerobox.data.model.SubscriptionType
@@ -26,6 +27,7 @@ data class ParsedSubscription(
 )
 
 object SubscriptionParser {
+    private const val TAG = "SubscriptionParser"
     private val supportedTransportNetworks = setOf("tcp", "ws", "grpc", "http", "h2", "httpupgrade")
 
     private val trafficInfoPrefixes = listOf(
@@ -205,11 +207,12 @@ object SubscriptionParser {
         nodes: List<ProxyNode>,
         sourceType: SubscriptionType
     ): ParsedSubscription {
-        val infoNodes = nodes.filter(::isInformationalNode)
+        val (infoNodes, validNodes) = nodes.partition(::isInformationalNode)
+        if (infoNodes.isNotEmpty()) {
+            Log.i(TAG, "Filtered ${infoNodes.size} informational nodes: ${infoNodes.joinToString { it.name }}")
+        }
         return ParsedSubscription(
-            nodes = nodes
-                .filterNot(::isInformationalNode)
-                .let(::dedupeNodes),
+            nodes = dedupeNodes(validNodes),
             trafficBytes = infoNodes.mapNotNull { extractTrafficBytes(it.name) }.firstOrNull() ?: 0L,
             expireTimestamp = infoNodes.mapNotNull { extractExpireTimestamp(it.name) }.firstOrNull() ?: 0L,
             sourceType = sourceType
@@ -231,7 +234,7 @@ object SubscriptionParser {
                 dateValuePattern.matches(info.value) ||
                     relativeTimeValuePattern.matches(info.value) ||
                     timestampValuePattern.matches(info.value) ||
-                    permanentValidityValuePattern.matches(info.value)
+                    isPermanentValidityValue(info.value)
             }
             info.prefix.matchesAnyPrefix(trafficInfoPrefixes) -> trafficValuePattern.matches(info.value)
             info.prefix.matchesAnyPrefix(announcementInfoPrefixes) -> announcementValuePattern.containsMatchIn(info.value)
@@ -248,12 +251,13 @@ object SubscriptionParser {
     private fun extractExpireTimestamp(name: String): Long? {
         val info = parseInformationalNode(name) ?: return null
         if (!info.prefix.matchesAnyPrefix(expiryInfoPrefixes)) return null
-        if (permanentValidityValuePattern.matches(info.value)) return 0L
+        if (isPermanentValidityValue(info.value)) return 0L
         return parseExpireTimestamp(info.value)
     }
 
     private fun parseInformationalNode(name: String): InformationalNode? {
         val normalizedName = name
+            .replace(Regex("[\\u00A0\\u200B-\\u200D\\u2060\\uFEFF]"), "")
             .replace('：', ':')
             .replace('｜', '|')
             .replace('；', ';')
@@ -284,6 +288,16 @@ object SubscriptionParser {
         }
 
         return null
+    }
+
+    private fun isPermanentValidityValue(value: String): Boolean {
+        val normalizedValue = value
+            .replace(Regex("[\\u00A0\\u200B-\\u200D\\u2060\\uFEFF]"), "")
+            .trim()
+            .trim(' ', ':', '|', ';', ',', '-', '_', '/', '\\', '(', ')', '[', ']', '【', '】', '。', '.', '!', '！')
+
+        return permanentValidityValuePattern.matches(normalizedValue) ||
+            permanentValidityValuePattern.containsMatchIn(normalizedValue)
     }
 
     private fun parseTrafficBytes(value: String): Long? {

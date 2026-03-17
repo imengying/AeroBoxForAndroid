@@ -467,6 +467,7 @@ object ConfigGenerator {
             .put("auto_route", true)
             .put("strict_route", true)
             .put("stack", "system")
+            .put("domain_strategy", ipv6Mode.domainStrategy())
 
         inbounds.put(tunInbound)
 
@@ -478,6 +479,7 @@ object ConfigGenerator {
                     .put("tag", "socks-in")
                     .put("listen", inboundListen)
                     .put("listen_port", 2080)
+                    .put("domain_strategy", ipv6Mode.domainStrategy())
             )
         }
 
@@ -489,6 +491,7 @@ object ConfigGenerator {
                     .put("tag", "http-in")
                     .put("listen", inboundListen)
                     .put("listen_port", 2081)
+                    .put("domain_strategy", ipv6Mode.domainStrategy())
             )
         }
 
