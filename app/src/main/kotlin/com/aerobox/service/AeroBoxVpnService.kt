@@ -44,9 +44,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
-import java.net.Proxy
 import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Proxy
+import java.net.Socket
 import java.util.concurrent.TimeUnit
 
 /**
@@ -521,43 +524,66 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         connectivityProbeJob = serviceScope.launch {
             delay(1500)
             logInfo("Connectivity probe starting")
+            // DNS probes — log resolved addresses for each target
             runDnsProbe("probe-dns-example", "example.com")
             runDnsProbe("probe-dns-cloudflare", "cloudflare.com")
+            runDnsProbe("probe-dns-google", "www.google.com")
             runDnsProbe("probe-dns-ipv6-google", "ipv6.google.com")
+
+            // HTTPS probes — known-good targets
             runHttpsProbe("probe-https-example", "https://example.com")
             runHttpsProbe("probe-https-trace", "https://cloudflare.com/cdn-cgi/trace")
-            runHttpsProbe("probe-https-ipv6-google", "https://ipv6.google.com")
             runHttpsProbe("probe-https-google-204", "https://www.google.com/generate_204")
+            runHttpsProbe("probe-https-gstatic-204", "https://www.gstatic.com/generate_204")
+            runHttpsProbe("probe-https-google-main", "https://www.google.com")
+
+            // Raw TCP connect to ipv6.google.com — tests IPv6 reachability through proxy
+            // If this fails, the VLESS server cannot reach IPv6 destinations at all.
+            runTcpConnectProbe("probe-tcp-ipv6-google", "ipv6.google.com", 443)
+
+            // HTTPS probes — the problematic target
+            runHttpsProbe("probe-https-ipv6-google", "https://ipv6.google.com")
+            // Same target forced HTTP/1.1 — rules out H2/ALPN negotiation issue
+            runHttpsProbe("probe-https-ipv6-google-h1", "https://ipv6.google.com", forceHttp1 = true)
         }
     }
 
     private fun runDnsProbe(label: String, host: String) {
         runCatching {
             val addresses = InetAddress.getAllByName(host).toList()
-            val ipv4Count = addresses.count { !it.hostAddress.contains(':') }
-            val ipv6Count = addresses.count { it.hostAddress.contains(':') }
-            logInfo("$label ok: ipv4=$ipv4Count ipv6=$ipv6Count total=${addresses.size}")
+            val ipv4Count = addresses.count { !it.hostAddress.orEmpty().contains(':') }
+            val ipv6Count = addresses.count { it.hostAddress.orEmpty().contains(':') }
+            val addrs = addresses.joinToString(",") { it.hostAddress ?: "?" }
+            logInfo("$label ok: ipv4=$ipv4Count ipv6=$ipv6Count total=${addresses.size} addrs=[$addrs]")
         }.onFailure { error ->
             logWarn("$label failed: ${error.javaClass.simpleName}: ${error.message ?: error}")
         }
     }
 
-    private fun runHttpsProbe(label: String, url: String) {
-        val client = OkHttpClient.Builder()
+    private fun runHttpsProbe(label: String, url: String, forceHttp1: Boolean = false) {
+        val builder = OkHttpClient.Builder()
             .proxy(Proxy.NO_PROXY)
-            .callTimeout(8, TimeUnit.SECONDS)
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(5, TimeUnit.SECONDS)
+            .callTimeout(10, TimeUnit.SECONDS)
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
             .retryOnConnectionFailure(false)
             .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
-            .build()
+        if (forceHttp1) {
+            builder.protocols(listOf(Protocol.HTTP_1_1))
+        }
+        val client = builder.build()
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", "AeroBoxProbe/1.0")
             .build()
         runCatching {
             client.newCall(request).execute().use { response ->
-                val protocol = response.protocol.toString()
+                val proto = response.protocol.toString()
+                val hs = response.handshake
+                val tlsVer = hs?.tlsVersion?.javaName ?: "?"
+                val cipher = hs?.cipherSuite?.javaName
+                    ?.substringAfterLast('.')
+                    ?.takeIf { it.isNotBlank() } ?: "?"
                 if (label == "probe-https-trace") {
                     val trace = response.body?.string().orEmpty()
                     val fields = trace
@@ -571,14 +597,42 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                     val tls = fields["tls"] ?: "?"
                     val loc = fields["loc"] ?: "?"
                     val warp = fields["warp"] ?: "?"
-                    logInfo("$label ok: code=${response.code} protocol=$protocol http=$http tls=$tls loc=$loc warp=$warp")
+                    logInfo("$label ok: code=${response.code} proto=$proto tls=$tlsVer http=$http loc=$loc warp=$warp")
                 } else {
                     val bodySize = response.body?.contentLength()?.takeIf { it >= 0 } ?: -1
-                    logInfo("$label ok: code=${response.code} protocol=$protocol bodySize=$bodySize")
+                    logInfo("$label ok: code=${response.code} proto=$proto tls=$tlsVer cipher=$cipher bodySize=$bodySize")
                 }
             }
         }.onFailure { error ->
-            logWarn("$label failed: ${error.javaClass.simpleName}: ${error.message ?: error}")
+            logWarn("$label failed: ${formatErrorChain(error)}")
+        }
+    }
+
+    private fun runTcpConnectProbe(label: String, host: String, port: Int) {
+        runCatching {
+            val addresses = InetAddress.getAllByName(host)
+            val addr = addresses.firstOrNull() ?: error("no addresses for $host")
+            logInfo("$label connecting to ${addr.hostAddress}:$port")
+            val socket = Socket()
+            socket.connect(InetSocketAddress(addr, port), 8000)
+            val remoteAddr = socket.inetAddress.hostAddress
+            socket.close()
+            logInfo("$label ok: tcp connected to $remoteAddr:$port")
+        }.onFailure { error ->
+            logWarn("$label failed: ${formatErrorChain(error)}")
+        }
+    }
+
+    private fun formatErrorChain(error: Throwable): String {
+        return buildString {
+            append("${error.javaClass.simpleName}: ${error.message}")
+            var cause = error.cause
+            var depth = 0
+            while (cause != null && depth < 4) {
+                append(" -> ${cause.javaClass.simpleName}: ${cause.message}")
+                cause = cause.cause
+                depth++
+            }
         }
     }
 
