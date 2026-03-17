@@ -205,9 +205,16 @@ object ConfigGenerator {
             .put("final", DNS_REMOTE_TAG)
             .putDestinationDomainStrategy(nodeIsIpv6Only, ipv6Mode)
 
-        // Only add DNS routing rules for rule-based modes
+        val dnsRules = JSONArray()
+            .put(
+                JSONObject()
+                    .put("outbound", JSONArray().put("any"))
+                    .put("action", "route")
+                    .put("server", DNS_DIRECT_TAG)
+            )
+
+        // Only add Geo-specific DNS routing rules for rule-based modes
         if (routingMode == RoutingMode.RULE_BASED) {
-            val dnsRules = JSONArray()
             fun addDnsLocalRule(country: String) {
                 dnsRules.put(
                     JSONObject()
@@ -219,9 +226,10 @@ object ConfigGenerator {
 
             if (enableGeoCnDomainRule) addDnsLocalRule("cn")
 
-            if (dnsRules.length() > 0) {
-                dns.put("rules", dnsRules)
-            }
+        }
+
+        if (dnsRules.length() > 0) {
+            dns.put("rules", dnsRules)
         }
 
         return dns
@@ -743,7 +751,10 @@ object ConfigGenerator {
             }
         }
         if (!isIpLiteral(cleanServer)) {
-            outbound.put("domain_strategy", "prefer_ipv4")
+            outbound.put(
+                "domain_resolver",
+                buildDialDomainResolver(DNS_DIRECT_TAG)
+            )
         }
         return outbound
     }
@@ -763,6 +774,12 @@ object ConfigGenerator {
         val normalized = server.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
         return normalized.contains(':') &&
             normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
+    }
+
+    private fun buildDialDomainResolver(serverTag: String): JSONObject {
+        return JSONObject()
+            .put("server", serverTag)
+            .put("strategy", "prefer_ipv4")
     }
 
     private fun JSONObject.putDestinationDomainStrategy(nodeIsIpv6Only: Boolean, ipv6Mode: IPv6Mode = IPv6Mode.DISABLE): JSONObject {
