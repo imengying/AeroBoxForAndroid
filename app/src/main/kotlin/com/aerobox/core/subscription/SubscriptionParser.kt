@@ -52,6 +52,40 @@ data class ParseDiagnostics(
     }
 }
 
+internal fun parseUdpOverTcpValue(value: Any?): Pair<Boolean?, Int?> {
+    return when (value) {
+        null, JSONObject.NULL -> null to null
+        is Boolean -> value to null
+        is JSONObject -> {
+            val enabled = if (value.has("enabled")) value.optBoolean("enabled") else true
+            val version = value.optInt("version", -1).takeIf { it >= 0 }
+            enabled to version
+        }
+        is Map<*, *> -> {
+            val enabled = value.entries.firstOrNull {
+                it.key?.toString()?.equals("enabled", ignoreCase = true) == true
+            }?.value?.toString()?.toBooleanStrictOrNull() ?: true
+            val version = value.entries.firstOrNull {
+                it.key?.toString()?.equals("version", ignoreCase = true) == true
+            }?.value?.toString()?.toIntOrNull()
+            enabled to version
+        }
+        is Number -> true to value.toInt()
+        is String -> {
+            val trimmed = value.trim()
+            when {
+                trimmed.isEmpty() -> null to null
+                trimmed == "1" -> true to null
+                trimmed == "0" -> false to null
+                trimmed.equals("true", ignoreCase = true) ||
+                    trimmed.equals("false", ignoreCase = true) -> trimmed.toBoolean() to null
+                else -> true to trimmed.toIntOrNull()
+            }
+        }
+        else -> null to null
+    }
+}
+
 object SubscriptionParser {
     private const val TAG = "SubscriptionParser"
     internal val supportedTransportTypes = setOf("ws", "grpc", "http", "h2", "httpupgrade", "quic")
@@ -1174,29 +1208,7 @@ object SubscriptionParser {
         return parts.takeIf { it.isNotEmpty() }?.joinToString(";")
     }
 
-    private fun parseUdpOverTcp(value: Any?): Pair<Boolean?, Int?> {
-        return when (value) {
-            null, JSONObject.NULL -> null to null
-            is Boolean -> value to null
-            is JSONObject -> {
-                val enabled = if (value.has("enabled")) value.optBoolean("enabled") else true
-                val version = value.optInt("version", -1).takeIf { it >= 0 }
-                enabled to version
-            }
-            is Number -> true to value.toInt()
-            is String -> {
-                val trimmed = value.trim()
-                when {
-                    trimmed.isEmpty() -> null to null
-                    trimmed == "1" -> true to null
-                    trimmed == "0" -> false to null
-                    trimmed == "true" || trimmed == "false" -> trimmed.toBoolean() to null
-                    else -> true to trimmed.toIntOrNull()
-                }
-            }
-            else -> null to null
-        }
-    }
+    private fun parseUdpOverTcp(value: Any?): Pair<Boolean?, Int?> = parseUdpOverTcpValue(value)
 
     private fun parseBooleanOrNull(vararg values: String?): Boolean? {
         return values.firstNotNullOfOrNull { value ->

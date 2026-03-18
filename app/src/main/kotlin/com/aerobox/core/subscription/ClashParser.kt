@@ -403,31 +403,5 @@ object ClashParser {
         }
     }
 
-    private fun parseUdpOverTcp(value: Any?): Pair<Boolean?, Int?> {
-        return when (value) {
-            null -> null to null
-            is Boolean -> value to null
-            is Number -> true to value.toInt()
-            is String -> {
-                val normalized = value.trim().lowercase()
-                when {
-                    normalized.isEmpty() -> null to null
-                    normalized == "1" -> true to null
-                    normalized == "0" -> false to null
-                    normalized == "true" || normalized == "false" -> normalized.toBoolean() to null
-                    else -> true to normalized.toIntOrNull()
-                }
-            }
-            is Map<*, *> -> {
-                val enabled = value.entries.firstOrNull {
-                    it.key?.toString()?.equals("enabled", ignoreCase = true) == true
-                }?.value?.toString()?.toBooleanStrictOrNull() ?: true
-                val version = value.entries.firstOrNull {
-                    it.key?.toString()?.equals("version", ignoreCase = true) == true
-                }?.value?.toString()?.toIntOrNull()
-                enabled to version
-            }
-            else -> null to null
-        }
-    }
+    private fun parseUdpOverTcp(value: Any?): Pair<Boolean?, Int?> = parseUdpOverTcpValue(value)
 }
