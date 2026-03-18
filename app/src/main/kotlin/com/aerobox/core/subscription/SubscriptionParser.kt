@@ -1292,22 +1292,4 @@ object SubscriptionParser {
         return plugin to options
     }
 
-    private fun buildDiagnostics(block: ParseDiagnosticsBuilder.() -> Unit): ParseDiagnostics {
-        return ParseDiagnosticsBuilder().apply(block).build()
-    }
-
-    private class ParseDiagnosticsBuilder {
-        private var diagnostics = ParseDiagnostics()
-
-        fun append(other: ParseDiagnostics) {
-            diagnostics += other
-        }
-
-        fun appendIgnored(reason: String) {
-            diagnostics = diagnostics.withIgnored(reason)
-        }
-
-        fun build(): ParseDiagnostics = diagnostics
-    }
-
 }
