@@ -249,10 +249,12 @@ object SubscriptionParser {
         }
         val dedupedNodes = dedupeNodes(validNodes)
         val duplicateCount = (validNodes.size - dedupedNodes.size).coerceAtLeast(0)
-        val finalDiagnostics = buildDiagnostics {
-            append(diagnostics)
-            repeat(infoNodes.size) { appendIgnored("informational_entry") }
-            repeat(duplicateCount) { appendIgnored("duplicate_entry") }
+        var finalDiagnostics = diagnostics
+        repeat(infoNodes.size) {
+            finalDiagnostics = finalDiagnostics.withIgnored("informational_entry")
+        }
+        repeat(duplicateCount) {
+            finalDiagnostics = finalDiagnostics.withIgnored("duplicate_entry")
         }
         return ParsedSubscription(
             nodes = dedupedNodes,
