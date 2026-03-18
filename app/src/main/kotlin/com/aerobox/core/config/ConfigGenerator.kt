@@ -722,8 +722,6 @@ object ConfigGenerator {
                 outbound.put("security", node.security ?: "auto")
                 outbound.put("alter_id", node.alterId)
                 node.packetEncoding?.takeIf { it.isNotBlank() }?.let { outbound.put("packet_encoding", it) }
-                node.globalPadding?.let { outbound.put("global_padding", it) }
-                node.authenticatedLength?.let { outbound.put("authenticated_length", it) }
                 outbound.put("tls", buildTlsObject(node))
                 enabledNetwork?.let { outbound.put("network", it) }
             }
@@ -779,8 +777,6 @@ object ConfigGenerator {
                 node.congestionControl?.takeIf { it.isNotBlank() }?.let { outbound.put("congestion_control", it) }
                 node.udpRelayMode?.takeIf { it.isNotBlank() }?.let { outbound.put("udp_relay_mode", it) }
                 node.udpOverStream?.let { outbound.put("udp_over_stream", it) }
-                node.zeroRttHandshake?.let { outbound.put("zero_rtt_handshake", it) }
-                node.heartbeat?.takeIf { it.isNotBlank() }?.let { outbound.put("heartbeat", it) }
                 outbound.put("tls", buildTlsObject(node))
                 enabledNetwork?.let { outbound.put("network", it) }
             }
@@ -804,7 +800,7 @@ object ConfigGenerator {
                     outbound.put("tls", buildTlsObject(node))
                 }
                 normalizedTransportPath(node.transportPath)?.let { outbound.put("path", it) }
-                mergeHeaderJson(node.httpHeaders, node.transportHost)?.let { headers ->
+                mergeHeaderJson(node.transportHost)?.let { headers ->
                     outbound.put("headers", headers)
                 }
             }
@@ -835,62 +831,17 @@ object ConfigGenerator {
     }
 
     private fun applyDialFields(outbound: JSONObject, node: ProxyNode) {
-        node.detour?.takeIf { it.isNotBlank() }?.let { outbound.put("detour", it) }
         node.bindInterface?.takeIf { it.isNotBlank() }?.let { outbound.put("bind_interface", it) }
-        node.inet4BindAddress?.takeIf { it.isNotBlank() }?.let { outbound.put("inet4_bind_address", it) }
-        node.inet6BindAddress?.takeIf { it.isNotBlank() }?.let { outbound.put("inet6_bind_address", it) }
-        node.bindAddressNoPort?.let { outbound.put("bind_address_no_port", it) }
-        node.routingMark?.takeIf { it.isNotBlank() }?.let { value ->
-            outbound.put("routing_mark", value.toLongOrNull() ?: value)
-        }
-        node.reuseAddr?.let { outbound.put("reuse_addr", it) }
-        node.netns?.takeIf { it.isNotBlank() }?.let { outbound.put("netns", it) }
         node.connectTimeout?.takeIf { it.isNotBlank() }?.let { outbound.put("connect_timeout", it) }
         node.tcpFastOpen?.let { outbound.put("tcp_fast_open", it) }
-        node.tcpMultiPath?.let { outbound.put("tcp_multi_path", it) }
-        node.disableTcpKeepAlive?.let { outbound.put("disable_tcp_keep_alive", it) }
-        node.tcpKeepAlive?.takeIf { it.isNotBlank() }?.let { outbound.put("tcp_keep_alive", it) }
-        node.tcpKeepAliveInterval?.takeIf { it.isNotBlank() }?.let { outbound.put("tcp_keep_alive_interval", it) }
         node.udpFragment?.let { outbound.put("udp_fragment", it) }
-        parseJsonValue(node.domainResolver)?.let { outbound.put("domain_resolver", it) }
-        node.networkStrategy?.takeIf { it.isNotBlank() }?.let { outbound.put("network_strategy", it) }
-        csvToJsonArray(node.networkType)?.let { outbound.put("network_type", it) }
-        csvToJsonArray(node.fallbackNetworkType)?.let { outbound.put("fallback_network_type", it) }
-        node.fallbackDelay?.takeIf { it.isNotBlank() }?.let { outbound.put("fallback_delay", it) }
-        node.domainStrategy?.takeIf { it.isNotBlank() }?.let { outbound.put("domain_strategy", it) }
     }
 
     private fun applyMultiplex(outbound: JSONObject, node: ProxyNode) {
-        val hasMuxSettings = node.muxEnabled != null ||
-            !node.muxProtocol.isNullOrBlank() ||
-            node.muxMaxConnections != null ||
-            node.muxMinStreams != null ||
-            node.muxMaxStreams != null ||
-            node.muxPadding != null ||
-            node.muxBrutalEnabled != null ||
-            node.muxBrutalUpMbps != null ||
-            node.muxBrutalDownMbps != null
-        if (!hasMuxSettings) return
+        val enabled = node.muxEnabled ?: return
 
         val multiplex = JSONObject()
-        multiplex.put("enabled", node.muxEnabled ?: true)
-        node.muxProtocol?.takeIf { it.isNotBlank() }?.let { multiplex.put("protocol", it) }
-        node.muxMaxConnections?.let { multiplex.put("max_connections", it) }
-        node.muxMinStreams?.let { multiplex.put("min_streams", it) }
-        node.muxMaxStreams?.let { multiplex.put("max_streams", it) }
-        node.muxPadding?.let { multiplex.put("padding", it) }
-
-        val hasBrutal = node.muxBrutalEnabled != null ||
-            node.muxBrutalUpMbps != null ||
-            node.muxBrutalDownMbps != null
-        if (hasBrutal) {
-            val brutal = JSONObject()
-            brutal.put("enabled", node.muxBrutalEnabled ?: true)
-            node.muxBrutalUpMbps?.let { brutal.put("up_mbps", it) }
-            node.muxBrutalDownMbps?.let { brutal.put("down_mbps", it) }
-            multiplex.put("brutal", brutal)
-        }
-
+        multiplex.put("enabled", enabled)
         outbound.put("multiplex", multiplex)
     }
 
@@ -971,7 +922,7 @@ object ConfigGenerator {
             "ws", "websocket" -> {
                 transport.put("type", "ws")
                 normalizedTransportPath(node.transportPath)?.let { transport.put("path", it) }
-                mergeHeaderJson(node.transportHeaders, firstTransportHost(node))?.let {
+                mergeHeaderJson(firstTransportHost(node))?.let {
                     transport.put("headers", it)
                 }
                 node.wsMaxEarlyData?.let { transport.put("max_early_data", it) }
@@ -983,15 +934,6 @@ object ConfigGenerator {
                 transport.put("type", "grpc")
                 node.transportServiceName?.takeIf { it.isNotBlank() }?.let {
                     transport.put("service_name", it)
-                }
-                node.transportIdleTimeout?.takeIf { it.isNotBlank() }?.let {
-                    transport.put("idle_timeout", it)
-                }
-                node.transportPingTimeout?.takeIf { it.isNotBlank() }?.let {
-                    transport.put("ping_timeout", it)
-                }
-                node.transportPermitWithoutStream?.let {
-                    transport.put("permit_without_stream", it)
                 }
             }
             "h2", "http" -> {
@@ -1007,26 +949,11 @@ object ConfigGenerator {
                         transport.put("host", hostArray)
                     }
                 }
-                node.transportMethod?.takeIf { it.isNotBlank() }?.let {
-                    transport.put("method", it)
-                }
-                parseJsonObject(node.transportHeaders)?.takeIf { it.length() > 0 }?.let {
-                    transport.put("headers", it)
-                }
-                node.transportIdleTimeout?.takeIf { it.isNotBlank() }?.let {
-                    transport.put("idle_timeout", it)
-                }
-                node.transportPingTimeout?.takeIf { it.isNotBlank() }?.let {
-                    transport.put("ping_timeout", it)
-                }
             }
             "httpupgrade", "http-upgrade" -> {
                 transport.put("type", "httpupgrade")
                 normalizedTransportPath(node.transportPath)?.let { transport.put("path", it) }
                 firstTransportHost(node)?.let { transport.put("host", it) }
-                parseJsonObject(node.transportHeaders)?.takeIf { it.length() > 0 }?.let {
-                    transport.put("headers", it)
-                }
             }
             "quic" -> {
                 transport.put("type", "quic")
@@ -1045,36 +972,8 @@ object ConfigGenerator {
         return enabled
     }
 
-    private fun csvToJsonArray(value: String?): JSONArray? {
-        val normalized = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val items = normalized
-            .split(",")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-        if (items.isEmpty()) return null
-        return JSONArray().apply {
-            items.forEach(::put)
-        }
-    }
-
-    private fun parseJsonValue(raw: String?): Any? {
-        val normalized = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        return when {
-            normalized.startsWith("{") -> runCatching { JSONObject(normalized) }.getOrNull()
-            normalized.startsWith("[") -> runCatching { JSONArray(normalized) }.getOrNull()
-            normalized == "true" || normalized == "false" -> normalized.toBoolean()
-            normalized.toLongOrNull() != null -> normalized.toLong()
-            else -> normalized
-        }
-    }
-
-    private fun parseJsonObject(raw: String?): JSONObject? {
-        val text = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        return runCatching { JSONObject(text) }.getOrNull()
-    }
-
-    private fun mergeHeaderJson(raw: String?, host: String?): JSONObject? {
-        val headers = parseJsonObject(raw) ?: JSONObject()
+    private fun mergeHeaderJson(host: String?): JSONObject? {
+        val headers = JSONObject()
         host?.takeIf { it.isNotBlank() }?.let { headers.put("Host", it) }
         return headers.takeIf { it.length() > 0 }
     }

@@ -1,5 +1,7 @@
 package com.aerobox.data.repository
 
+import com.aerobox.core.subscription.ParseDiagnostics
+
 data class SubscriptionUpdateSummary(
     val addedCount: Int = 0,
     val updatedCount: Int = 0,
@@ -16,5 +18,6 @@ data class SubscriptionUpdateResult(
     val trafficBytes: Long,
     val expireTimestamp: Long,
     val summary: SubscriptionUpdateSummary,
-    val metadataFromHeader: Boolean
+    val metadataFromHeader: Boolean,
+    val diagnostics: ParseDiagnostics = ParseDiagnostics()
 )

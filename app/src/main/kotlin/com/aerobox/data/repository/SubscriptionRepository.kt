@@ -3,6 +3,8 @@ package com.aerobox.data.repository
 import android.content.Context
 import androidx.room.withTransaction
 import com.aerobox.AeroBoxApplication
+import com.aerobox.core.logging.RuntimeLogBuffer
+import com.aerobox.core.subscription.ParseDiagnostics
 import com.aerobox.core.subscription.SubscriptionParser
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
@@ -31,8 +33,13 @@ data class SubscriptionImportResult(
     val subscriptionId: Long,
     val nodeCount: Int,
     val error: Throwable? = null,
-    val metadataFromHeader: Boolean = false
+    val metadataFromHeader: Boolean = false,
+    val diagnostics: ParseDiagnostics = ParseDiagnostics()
 )
+
+private class NoValidNodesException(
+    val diagnostics: ParseDiagnostics
+) : IllegalStateException(SubscriptionRepository.NO_VALID_NODES_ERROR)
 
 class SubscriptionRepository(context: Context) {
     private val appContext = context.applicationContext
@@ -65,7 +72,8 @@ class SubscriptionRepository(context: Context) {
         val trafficBytes: Long,
         val expireTimestamp: Long,
         val metadataFromHeader: Boolean,
-        val sourceType: SubscriptionType
+        val sourceType: SubscriptionType,
+        val diagnostics: ParseDiagnostics
     )
 
     private data class SubscriptionUserInfo(
@@ -118,18 +126,31 @@ class SubscriptionRepository(context: Context) {
                 insertedId
             }
             SubscriptionUpdateScheduler.reconfigure(appContext)
+            logImportDiagnostics(
+                action = "import",
+                subscriptionName = name,
+                diagnostics = prepared.diagnostics
+            )
             SubscriptionImportResult(
                 subscriptionId = subscriptionId,
                 nodeCount = prepared.nodes.size,
                 error = null,
-                metadataFromHeader = prepared.metadataFromHeader
+                metadataFromHeader = prepared.metadataFromHeader,
+                diagnostics = prepared.diagnostics
             )
         }.getOrElse { error ->
+            val diagnostics = (error as? NoValidNodesException)?.diagnostics ?: ParseDiagnostics()
+            logImportDiagnostics(
+                action = "import",
+                subscriptionName = name,
+                diagnostics = diagnostics
+            )
             SubscriptionImportResult(
                 subscriptionId = 0,
                 nodeCount = 0,
                 error = error,
-                metadataFromHeader = false
+                metadataFromHeader = false,
+                diagnostics = diagnostics
             )
         }
     }
@@ -232,7 +253,7 @@ class SubscriptionRepository(context: Context) {
         val fetchResult = fetchSubscription(url)
         val parsed = SubscriptionParser.parseSubscriptionContent(fetchResult.content)
         if (parsed.nodes.isEmpty()) {
-            throw IllegalStateException(NO_VALID_NODES_ERROR)
+            throw NoValidNodesException(parsed.diagnostics)
         }
         val userInfo = parseSubscriptionUserInfo(fetchResult.headers["Subscription-Userinfo"])
         val remainingBytes = userInfo?.remainingBytes()
@@ -242,7 +263,8 @@ class SubscriptionRepository(context: Context) {
             trafficBytes = remainingBytes ?: parsed.trafficBytes,
             expireTimestamp = expireTimestamp ?: parsed.expireTimestamp,
             metadataFromHeader = remainingBytes != null || expireTimestamp != null,
-            sourceType = parsed.sourceType
+            sourceType = parsed.sourceType,
+            diagnostics = parsed.diagnostics
         )
     }
 
@@ -317,13 +339,20 @@ class SubscriptionRepository(context: Context) {
             refreshedNodes = persistedNodes
         )
 
+        logImportDiagnostics(
+            action = "update",
+            subscriptionName = subscription.name,
+            diagnostics = prepared.diagnostics
+        )
+
         return SubscriptionUpdateResult(
             subscriptionId = subscription.id,
             nodeCount = persistedNodes.size,
             trafficBytes = prepared.trafficBytes,
             expireTimestamp = prepared.expireTimestamp,
             summary = summary,
-            metadataFromHeader = prepared.metadataFromHeader
+            metadataFromHeader = prepared.metadataFromHeader,
+            diagnostics = prepared.diagnostics
         )
     }
 
@@ -482,6 +511,21 @@ class SubscriptionRepository(context: Context) {
 
     private fun normalizeUpdateInterval(interval: Long): Long {
         return interval.coerceAtLeast(MIN_UPDATE_INTERVAL_MS)
+    }
+
+    private fun logImportDiagnostics(
+        action: String,
+        subscriptionName: String,
+        diagnostics: ParseDiagnostics
+    ) {
+        if (diagnostics.ignoredEntryCount <= 0) return
+        val summary = diagnostics.reasonCounts.entries
+            .sortedByDescending { it.value }
+            .joinToString(", ") { (reason, count) -> "$reason=$count" }
+        RuntimeLogBuffer.append(
+            "warn",
+            "Subscription $action ignored ${diagnostics.ignoredEntryCount} entries for ${subscriptionName.ifBlank { "unnamed" }}: $summary"
+        )
     }
 
 }

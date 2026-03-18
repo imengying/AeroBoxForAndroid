@@ -13,10 +13,34 @@ import org.yaml.snakeyaml.constructor.SafeConstructor
 object ClashParser {
     private val supportedTransportTypes get() = SubscriptionParser.supportedTransportTypes
 
+    data class ClashParseResult(
+        val nodes: List<ProxyNode>,
+        val diagnostics: ParseDiagnostics = ParseDiagnostics()
+    )
+
     fun parseClashYaml(content: String): List<ProxyNode> {
-        val root = loadYamlRoot(content) ?: return emptyList()
-        val proxies = value(root, "proxies") as? List<*> ?: return emptyList()
-        return proxies.mapNotNull { parseProxyItem(it as? Map<*, *>) }
+        return parseClashYamlDetailed(content).nodes
+    }
+
+    fun parseClashYamlDetailed(content: String): ClashParseResult {
+        val root = loadYamlRoot(content) ?: return ClashParseResult(
+            nodes = emptyList(),
+            diagnostics = ParseDiagnostics().withIgnored("invalid_clash_yaml")
+        )
+        val proxies = value(root, "proxies") as? List<*>
+            ?: return ClashParseResult(
+                nodes = emptyList(),
+                diagnostics = ParseDiagnostics().withIgnored("missing_clash_proxies")
+            )
+        val nodes = mutableListOf<ProxyNode>()
+        var diagnostics = ParseDiagnostics()
+        proxies.forEach { item ->
+            when (val result = parseProxyItemDetailed(item as? Map<*, *>)) {
+                is ProxyParseResult.Success -> nodes += result.node
+                is ProxyParseResult.Ignored -> diagnostics = diagnostics.withIgnored(result.reason)
+            }
+        }
+        return ClashParseResult(nodes = nodes, diagnostics = diagnostics)
     }
 
     fun isClashYaml(content: String): Boolean {
@@ -40,14 +64,22 @@ object ClashParser {
             Yaml(SafeConstructor(options)).load<Any?>(content)
         }.getOrNull()
     }
+    private sealed interface ProxyParseResult {
+        data class Success(val node: ProxyNode) : ProxyParseResult
+        data class Ignored(val reason: String) : ProxyParseResult
+    }
 
-    private fun parseProxyItem(map: Map<*, *>?): ProxyNode? {
-        if (map.isNullOrEmpty()) return null
+    private fun parseProxyItemDetailed(map: Map<*, *>?): ProxyParseResult {
+        if (map.isNullOrEmpty()) return ProxyParseResult.Ignored("invalid_clash_proxy_item")
 
-        val name = stringValue(map, "name") ?: return null
-        val typeStr = stringValue(map, "type")?.lowercase() ?: return null
-        val server = stringValue(map, "server") ?: return null
-        val port = intValue(map, "port") ?: return null
+        val name = stringValue(map, "name")
+            ?: return ProxyParseResult.Ignored("missing_clash_name")
+        val typeStr = stringValue(map, "type")?.lowercase()
+            ?: return ProxyParseResult.Ignored("missing_clash_type")
+        val server = stringValue(map, "server")
+            ?: return ProxyParseResult.Ignored("missing_clash_endpoint")
+        val port = intValue(map, "port")
+            ?: return ProxyParseResult.Ignored("missing_clash_endpoint")
 
         val type = when (typeStr) {
             "ss", "shadowsocks" -> {
@@ -64,7 +96,7 @@ object ClashParser {
             "tuic" -> ProxyType.TUIC
             "socks", "socks5" -> ProxyType.SOCKS
             "http", "https" -> ProxyType.HTTP
-            else -> return null
+            else -> return ProxyParseResult.Ignored("unsupported_clash_type")
         }
         val hasRealityKey = !stringValue(map, "reality-opts", "public-key").isNullOrBlank() ||
             !stringValue(map, "reality-opts", "public_key").isNullOrBlank() ||
@@ -95,12 +127,11 @@ object ClashParser {
             else -> null
         }
         val transportType = resolveTransportType(network)
-        if (network != null && network.lowercase() != "tcp" && transportType == null) return null
-        val httpOpts = value(map, "http-opts")
+        if (network != null && network.lowercase() != "tcp" && transportType == null) {
+            return ProxyParseResult.Ignored("unsupported_clash_transport")
+        }
         val wsOpts = value(map, "ws-opts")
-        val grpcOpts = value(map, "grpc-opts")
         val smux = value(map, "smux")
-        val smuxBrutal = value(smux, "brutal")
         val udpOverTcp = parseUdpOverTcp(
             firstNonNullValue(
                 value(map, "udp-over-tcp"),
@@ -162,22 +193,15 @@ object ClashParser {
             stringValue(map, "reality-opts", "shortid")
         )
 
-        return ProxyNode(
+        return ProxyParseResult.Success(
+            ProxyNode(
             name = name,
             type = type,
             server = server,
             port = port,
-            detour = firstNonBlank(
-                stringValue(map, "dialer-proxy"),
-                stringValue(map, "dialer_proxy")
-            ),
             bindInterface = firstNonBlank(
                 stringValue(map, "interface-name"),
                 stringValue(map, "interface_name")
-            ),
-            routingMark = firstNonBlank(
-                stringValue(map, "routing-mark"),
-                stringValue(map, "routing_mark")
             ),
             connectTimeout = firstNonBlank(
                 stringValue(map, "connect-timeout"),
@@ -197,8 +221,6 @@ object ClashParser {
             flow = stringValue(map, "flow"),
             security = security,
             transportType = transportType,
-            globalPadding = booleanValue(map, "global-padding") ?: booleanValue(map, "global_padding"),
-            authenticatedLength = booleanValue(map, "authenticated-length") ?: booleanValue(map, "authenticated_length"),
             tls = tls,
             sni = firstNonBlank(
                 stringValue(map, "sni"),
@@ -208,26 +230,6 @@ object ClashParser {
             transportHost = transportHost,
             transportPath = if (transportType == "grpc") null else transportPath,
             transportServiceName = transportServiceName,
-            transportMethod = stringValue(httpOpts, "method"),
-            transportHeaders = firstNonBlank(
-                canonicalizeJsonValue(value(wsOpts, "headers")),
-                canonicalizeJsonValue(value(httpOpts, "headers")),
-                canonicalizeJsonValue(value(map, "headers"))
-            ),
-            transportIdleTimeout = firstNonBlank(
-                stringValue(grpcOpts, "idle-timeout"),
-                stringValue(grpcOpts, "idle_timeout"),
-                stringValue(httpOpts, "idle-timeout"),
-                stringValue(httpOpts, "idle_timeout")
-            ),
-            transportPingTimeout = firstNonBlank(
-                stringValue(grpcOpts, "ping-timeout"),
-                stringValue(grpcOpts, "ping_timeout"),
-                stringValue(httpOpts, "ping-timeout"),
-                stringValue(httpOpts, "ping_timeout")
-            ),
-            transportPermitWithoutStream = booleanValue(grpcOpts, "permit-without-stream")
-                ?: booleanValue(grpcOpts, "permit_without_stream"),
             wsMaxEarlyData = intValue(wsOpts, "max-early-data") ?: intValue(wsOpts, "max_early_data"),
             wsEarlyDataHeaderName = firstNonBlank(
                 stringValue(wsOpts, "early-data-header-name"),
@@ -243,7 +245,6 @@ object ClashParser {
             ),
             username = stringValue(map, "username"),
             socksVersion = stringValue(map, "version"),
-            httpHeaders = canonicalizeJsonValue(value(map, "headers")),
             allowInsecure = insecure,
             plugin = stringValue(map, "plugin"),
             pluginOpts = firstNonBlank(
@@ -269,14 +270,6 @@ object ClashParser {
             upMbps = intValue(map, "up-mbps") ?: intValue(map, "up_mbps"),
             downMbps = intValue(map, "down-mbps") ?: intValue(map, "down_mbps"),
             muxEnabled = booleanValue(smux, "enabled"),
-            muxProtocol = stringValue(smux, "protocol"),
-            muxMaxConnections = intValue(smux, "max-connections") ?: intValue(smux, "max_connections"),
-            muxMinStreams = intValue(smux, "min-streams") ?: intValue(smux, "min_streams"),
-            muxMaxStreams = intValue(smux, "max-streams") ?: intValue(smux, "max_streams"),
-            muxPadding = booleanValue(smux, "padding"),
-            muxBrutalEnabled = booleanValue(smuxBrutal, "enabled"),
-            muxBrutalUpMbps = intValue(smuxBrutal, "up-mbps") ?: intValue(smuxBrutal, "up_mbps"),
-            muxBrutalDownMbps = intValue(smuxBrutal, "down-mbps") ?: intValue(smuxBrutal, "down_mbps"),
             congestionControl = firstNonBlank(
                 stringValue(map, "congestion-controller"),
                 stringValue(map, "congestion_control"),
@@ -286,9 +279,8 @@ object ClashParser {
                 stringValue(map, "udp-relay-mode"),
                 stringValue(map, "udp_relay_mode")
             ),
-            udpOverStream = booleanValue(map, "udp-over-stream") ?: booleanValue(map, "udp_over_stream"),
-            zeroRttHandshake = booleanValue(map, "zero-rtt-handshake") ?: booleanValue(map, "zero_rtt_handshake"),
-            heartbeat = stringValue(map, "heartbeat")
+            udpOverStream = booleanValue(map, "udp-over-stream") ?: booleanValue(map, "udp_over_stream")
+            )
         )
     }
 
