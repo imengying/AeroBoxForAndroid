@@ -1,0 +1,216 @@
+name: Manual Build Artifact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ANDROID_NDK_VERSION: 29.0.14206865
+      GOMOBILE_VERSION: v0.1.12
+      LIBBOX_BUILD_TAGS: with_quic,with_utls,with_v2ray_api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "~1.25"
+          cache: false
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: "9.3.1"
+
+      - name: Set up Android SDK
+        run: bash .github/scripts/setup-android-sdk.sh
+
+      - name: Install required Android SDK packages
+        run: |
+          SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "${SDKMANAGER}" ]; then
+            echo "::error::sdkmanager not found at ${SDKMANAGER}"
+            exit 1
+          fi
+          yes | "${SDKMANAGER}" --licenses >/dev/null
+          "${SDKMANAGER}" "platforms;android-36" "build-tools;36.0.0" "ndk;${ANDROID_NDK_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Resolve latest stable sing-box release
+        run: |
+          set -euo pipefail
+          SING_BOX_VERSION="$(
+            curl -fsSL "https://api.github.com/repos/SagerNet/sing-box/releases/latest" \
+              | grep '"tag_name":' \
+              | sed -E 's/.*"([^"]+)".*/\1/'
+          )"
+          if [ -z "${SING_BOX_VERSION}" ]; then
+            echo "::error::Failed to resolve latest sing-box version"
+            exit 1
+          fi
+          echo "SING_BOX_VERSION=${SING_BOX_VERSION}" >> "${GITHUB_ENV}"
+          echo "Resolved sing-box version: ${SING_BOX_VERSION}"
+
+      - name: Build libbox.aar
+        run: bash .github/scripts/build-libbox.sh
+
+      - name: Detect signing availability
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ] && \
+             [ -n "${ANDROID_KEYSTORE_PASSWORD:-}" ] && \
+             [ -n "${ANDROID_KEY_ALIAS:-}" ] && \
+             [ -n "${ANDROID_KEY_PASSWORD:-}" ]; then
+            echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/manual-build.jks"
+            echo "HAS_SIGNING=true" >> "${GITHUB_ENV}"
+            echo "AEROBOX_KEYSTORE_PATH=${RUNNER_TEMP}/manual-build.jks" >> "${GITHUB_ENV}"
+            echo "Manual build will produce signed APKs."
+          else
+            echo "HAS_SIGNING=false" >> "${GITHUB_ENV}"
+            echo "Manual build will produce unsigned APKs because signing secrets are missing."
+          fi
+
+      - name: Derive manual build version
+        run: |
+          set -euo pipefail
+          VERSION_NAME="9.9.9"
+          VERSION_CODE=$((200000000 + GITHUB_RUN_NUMBER))
+          echo "AEROBOX_VERSION_NAME=${VERSION_NAME}" >> "${GITHUB_ENV}"
+          echo "AEROBOX_VERSION_CODE=${VERSION_CODE}" >> "${GITHUB_ENV}"
+          echo "Manual build version: ${VERSION_NAME} (${VERSION_CODE})"
+
+      - name: Prepare bundled routing rule-set assets
+        run: bash .github/scripts/prepare-geo-assets.sh
+
+      - name: Build unsigned release APK
+        env:
+          AEROBOX_VERSION_NAME: ${{ env.AEROBOX_VERSION_NAME }}
+          AEROBOX_VERSION_CODE: ${{ env.AEROBOX_VERSION_CODE }}
+        run: |
+          set -euo pipefail
+          EXTRA_ARGS=(
+            "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}"
+            "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}"
+          )
+          gradle --stacktrace :app:assembleRelease "${EXTRA_ARGS[@]}"
+
+      - name: Sign release APKs (v3 only)
+        if: env.HAS_SIGNING == 'true'
+        env:
+          KEYSTORE_PATH: ${{ env.AEROBOX_KEYSTORE_PATH }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          SRC_DIR="${GITHUB_WORKSPACE}/app/build/outputs/apk/release"
+          APKSIGNER="${ANDROID_SDK_ROOT}/build-tools/36.0.0/apksigner"
+          if [ ! -x "${APKSIGNER}" ]; then
+            echo "::error::apksigner not found at ${APKSIGNER}"
+            exit 1
+          fi
+
+          shopt -s nullglob
+          APKS=("${SRC_DIR}"/*.apk)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::error::No APK files found in ${SRC_DIR}"
+            exit 1
+          fi
+
+          for apk in "${APKS[@]}"; do
+            signed_apk="${apk%.apk}-signed.apk"
+            "${APKSIGNER}" sign \
+              --ks "${KEYSTORE_PATH}" \
+              --ks-key-alias "${KEY_ALIAS}" \
+              --ks-pass env:KEYSTORE_PASSWORD \
+              --key-pass env:KEY_PASSWORD \
+              --v1-signing-enabled false \
+              --v2-signing-enabled false \
+              --v3-signing-enabled true \
+              --v4-signing-enabled false \
+              --out "${signed_apk}" \
+              "${apk}"
+
+            mv -f "${signed_apk}" "${apk}"
+          done
+
+      - name: Rename APKs
+        env:
+          AEROBOX_VERSION_NAME: ${{ env.AEROBOX_VERSION_NAME }}
+          HAS_SIGNING: ${{ env.HAS_SIGNING }}
+        run: |
+          set -euo pipefail
+          SRC_DIR="${GITHUB_WORKSPACE}/app/build/outputs/apk/release"
+          DIST_DIR="${SRC_DIR}/dist"
+          mkdir -p "${DIST_DIR}"
+          shopt -s nullglob
+          APKS=("${SRC_DIR}"/*.apk)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::error::No APK files found in ${SRC_DIR}"
+            exit 1
+          fi
+
+          suffix=""
+          if [ "${HAS_SIGNING}" != "true" ]; then
+            suffix="-unsigned"
+          fi
+
+          for apk in "${APKS[@]}"; do
+            filename="$(basename "${apk}")"
+            abi="universal"
+            case "${filename}" in
+              *arm64-v8a*) abi="arm64-v8a" ;;
+              *armeabi-v7a*) abi="armeabi-v7a" ;;
+              *x86_64*) abi="x86_64" ;;
+              *x86*) abi="x86" ;;
+            esac
+            cp -f "${apk}" "${DIST_DIR}/AeroBox-${AEROBOX_VERSION_NAME}-${abi}${suffix}.apk"
+          done
+
+          echo "Renamed APK outputs:"
+          ls -la "${DIST_DIR}"
+
+      - name: Debug logs on failure
+        if: failure()
+        run: |
+          set +e
+          echo "========== libbox.aar =========="
+          ls -la "${GITHUB_WORKSPACE}/app/build/libbox/" || true
+          echo "========== app/build/outputs =========="
+          if [ -d "${GITHUB_WORKSPACE}/app/build/outputs" ]; then
+            find "${GITHUB_WORKSPACE}/app/build/outputs" -maxdepth 5 -print | sort
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: aerobox-manual-${{ env.AEROBOX_VERSION_NAME }}
+          path: |
+            app/build/outputs/apk/release/dist/*.apk
+            app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
