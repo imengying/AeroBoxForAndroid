@@ -90,10 +90,8 @@ dependencies {
     ksp("androidx.room:room-compiler:2.8.4")
 
     implementation("androidx.datastore:datastore-preferences:1.2.0")
-    implementation("androidx.appcompat:appcompat:1.7.1")
 
     implementation("com.squareup.okhttp3:okhttp:5.3.1")
-    implementation("com.google.android.gms:play-services-oss-licenses:17.4.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.yaml:snakeyaml:2.6")
