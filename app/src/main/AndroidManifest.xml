@@ -43,6 +43,12 @@
             android:taskAffinity=""
             android:theme="@style/Theme.AeroBox.Translucent" />
 
+        <activity
+            android:name="com.google.android.gms.oss.licenses.v2.OssLicensesMenuActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AeroBox.OssLicenses"
+            tools:replace="android:theme" />
+
         <service
             android:name=".service.AeroBoxVpnService"
             android:enabled="true"

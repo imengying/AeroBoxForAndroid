@@ -2,6 +2,7 @@ package com.aerobox.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import com.google.android.gms.oss.licenses.v2.OssLicensesMenuActivity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,7 +60,6 @@ fun SettingsScreen(
     onNavigateToPerAppProxy: () -> Unit = {},
     onNavigateToRouting: () -> Unit = {},
     onNavigateToLog: () -> Unit = {},
-    onNavigateToLicense: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(
         viewModelStoreOwner = LocalContext.current as androidx.activity.ComponentActivity
     )
@@ -308,10 +308,23 @@ fun SettingsScreen(
         }
             item {
                 SettingItem(
-                    onClick = onNavigateToLicense,
+                    onClick = {
+                        runCatching {
+                            OssLicensesMenuActivity.setActivityTitle(
+                                context.getString(R.string.open_source_licenses)
+                            )
+                            context.startActivity(
+                                Intent(context, OssLicensesMenuActivity::class.java)
+                            )
+                        }.onFailure {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("打开许可证页面失败")
+                            }
+                        }
+                    },
                     icon = { Icon(AppIcons.Security, contentDescription = null) },
                     title = stringResource(R.string.open_source_licenses),
-                    supporting = stringResource(R.string.about),
+                    supporting = "查看第三方依赖许可证",
                     trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
                 )
             }
