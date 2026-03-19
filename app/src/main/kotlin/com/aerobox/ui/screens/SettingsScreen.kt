@@ -311,7 +311,7 @@ fun SettingsScreen(
                     onClick = onNavigateToLicense,
                     icon = { Icon(AppIcons.Security, contentDescription = null) },
                     title = stringResource(R.string.open_source_licenses),
-                    supporting = "包含 sing-box / libbox 与其他依赖",
+                    supporting = "AeroBox 项目 GNU GPL-3.0-or-later",
                     trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
                 )
             }

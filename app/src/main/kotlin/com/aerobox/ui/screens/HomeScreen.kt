@@ -8,6 +8,9 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MarqueeAnimationMode
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -356,6 +359,7 @@ private fun NetworkDetectCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NodeSelectorCard(
     nodeName: String,
@@ -385,7 +389,13 @@ private fun NodeSelectorCard(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Clip,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .basicMarquee(
+                        iterations = Int.MAX_VALUE,
+                        animationMode = MarqueeAnimationMode.Immediately
+                    )
             )
             Text(
                 text = nodeAddress,

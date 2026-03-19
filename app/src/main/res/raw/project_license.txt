@@ -1,12 +1,4 @@
-sing-box / libbox
-
-Project:
-https://github.com/SagerNet/sing-box
-
-License:
-GPL-3.0-or-later
-
-Copyright (C) 2022 by nekohasekai <contact-sagernet@sekai.icu>
+Copyright (C) 2026 by AeroBox contributors
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

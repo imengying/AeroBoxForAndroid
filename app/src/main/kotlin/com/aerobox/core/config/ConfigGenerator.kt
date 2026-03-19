@@ -190,7 +190,7 @@ object ConfigGenerator {
             return JSONObject()
                 .put("servers", JSONArray().put(directServer).put(localResolverServer).put(bootstrapServer))
                 .put("final", DNS_DIRECT_TAG)
-                .putDestinationDomainStrategy(nodeIsIpv6Only, ipv6Mode)
+                .putDestinationDomainStrategy(nodeIsIpv6Only)
         }
 
         val remoteServer = buildDnsServer(
@@ -212,7 +212,7 @@ object ConfigGenerator {
                     .put(bootstrapServer)
             )
             .put("final", DNS_REMOTE_TAG)
-            .putDestinationDomainStrategy(nodeIsIpv6Only, ipv6Mode)
+            .putDestinationDomainStrategy(nodeIsIpv6Only)
 
         val dnsRules = JSONArray()
         serverDomainHint
@@ -563,13 +563,13 @@ object ConfigGenerator {
                 route.put("final", "proxy")
                 route.put(
                     "rules",
-                    buildBaseRouteRules(ipv6Mode)
+                    buildBaseRouteRules(nodeIsIpv6Only)
                 )
             }
 
             RoutingMode.RULE_BASED -> {
                 route.put("final", "proxy")
-                val rules = buildBaseRouteRules(ipv6Mode)
+                val rules = buildBaseRouteRules(nodeIsIpv6Only)
 
                 if (enableGeoBlockQuic) {
                     rules.put(
@@ -616,7 +616,7 @@ object ConfigGenerator {
                 route.put("final", "direct")
                 route.put(
                     "rules",
-                    buildBaseRouteRules(ipv6Mode)
+                    buildBaseRouteRules(nodeIsIpv6Only)
                 )
             }
 
@@ -633,7 +633,7 @@ object ConfigGenerator {
             .put("path", path)
     }
 
-    private fun buildBaseRouteRules(ipv6Mode: IPv6Mode): JSONArray {
+    private fun buildBaseRouteRules(nodeIsIpv6Only: Boolean): JSONArray {
         return JSONArray()
             // sniff + resolve replace the deprecated inbound-level
             // sniff / sniff_override_destination / domain_strategy fields.
@@ -641,7 +641,7 @@ object ConfigGenerator {
             .put(
                 JSONObject()
                     .put("action", "resolve")
-                    .put("strategy", ipv6Mode.domainStrategy())
+                    .put("strategy", destinationDomainStrategy(nodeIsIpv6Only))
             )
             .put(
                 JSONObject()
@@ -862,14 +862,18 @@ object ConfigGenerator {
             normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
     }
 
-    private fun JSONObject.putDestinationDomainStrategy(nodeIsIpv6Only: Boolean, ipv6Mode: IPv6Mode = IPv6Mode.DISABLE): JSONObject {
-        val strategy = when {
+    private fun JSONObject.putDestinationDomainStrategy(
+        nodeIsIpv6Only: Boolean
+    ): JSONObject {
+        put("strategy", destinationDomainStrategy(nodeIsIpv6Only))
+        return this
+    }
+
+    private fun destinationDomainStrategy(nodeIsIpv6Only: Boolean): String {
+        return when {
             nodeIsIpv6Only -> "prefer_ipv6"
-            ipv6Mode == IPv6Mode.ENABLE -> "prefer_ipv4"
             else -> "ipv4_only"
         }
-        put("strategy", strategy)
-        return this
     }
 
     private fun buildTlsObject(node: ProxyNode, includeReality: Boolean = false): JSONObject {
