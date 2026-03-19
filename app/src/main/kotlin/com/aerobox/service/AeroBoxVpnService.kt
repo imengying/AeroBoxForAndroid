@@ -224,6 +224,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                         requestedNodeId = requestedNodeId
                     ) ?: run {
                         stopService("Stopping service after config preparation failure")
+                        stopSelf()
                         return@launch
                     }
 
@@ -268,6 +269,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                     logError("startVpn failed: ${e.message ?: e}", e)
                     VpnStateManager.updateLastError(e.message ?: e.toString())
                     stopService("Stopping service after start failure")
+                    stopSelf()
                 }
             } // startMutex.withLock
         }
@@ -328,35 +330,58 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     private fun stopService(reason: String = "Stopping service") {
         logInfo(reason)
+        releaseRuntimeResources(
+            closeRunningService = true,
+            stopNetworkMonitor = true,
+            unregisterReceiver = true,
+            stopForegroundNotification = true,
+            clearCachedNode = true
+        )
+
+        VpnStateManager.updateServiceActive(false)
+        VpnStateManager.updateConnectionState(false, null)
+        VpnStateManager.resetTrafficSession()
+    }
+
+    private fun releaseRuntimeResources(
+        closeRunningService: Boolean,
+        stopNetworkMonitor: Boolean,
+        unregisterReceiver: Boolean,
+        stopForegroundNotification: Boolean,
+        clearCachedNode: Boolean
+    ) {
         speedTickerJob?.cancel()
         speedTickerJob = null
 
-        DefaultNetworkMonitor.stop()
+        if (stopNetworkMonitor) {
+            DefaultNetworkMonitor.stop()
+        }
 
-        runCatching { commandServer?.closeService() }
+        if (closeRunningService) {
+            runCatching { commandServer?.closeService() }
+        }
         runCatching {
             commandServer?.close()
             commandServer = null
         }
 
-        // Close VPN tunnel
         runCatching {
             vpnInterface?.close()
             vpnInterface = null
         }
 
-        // Unregister receiver
-        if (receiverRegistered) {
+        if (unregisterReceiver && receiverRegistered) {
             runCatching { unregisterReceiver(closeReceiver) }
             receiverRegistered = false
         }
 
-        VpnStateManager.updateServiceActive(false)
-        VpnStateManager.updateConnectionState(false, null)
-        VpnStateManager.resetTrafficSession()
-        cachedConnectedNode = null
+        if (clearCachedNode) {
+            cachedConnectedNode = null
+        }
 
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (stopForegroundNotification) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
     }
 
     // ─── CommandServerHandler callbacks ───
@@ -365,8 +390,18 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         val message = if (userRequestedStop) "Service stopped" else "Service stopped unexpectedly"
         if (userRequestedStop) logInfo(message) else logWarn(message)
         // Called by libbox when the service stops (may be unexpected)
+        if (!userRequestedStop) {
+            releaseRuntimeResources(
+                closeRunningService = false,
+                stopNetworkMonitor = true,
+                unregisterReceiver = false,
+                stopForegroundNotification = false,
+                clearCachedNode = false
+            )
+        }
         VpnStateManager.updateServiceActive(false)
         VpnStateManager.updateConnectionState(false, null)
+        VpnStateManager.resetTrafficSession()
 
         if (!userRequestedStop) {
             notificationManager.notify(
@@ -546,6 +581,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         val pfd = builder.establish()
             ?: error("android: failed to establish VPN interface")
         vpnInterface = pfd
+        reconnectAttempts = 0
         val connectedNode = cachedConnectedNode
         VpnStateManager.clearLastError()
         VpnStateManager.updateConnectionState(true, connectedNode)
@@ -792,6 +828,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             val autoReconnect = PreferenceManager.autoReconnectFlow(applicationContext).first()
             if (!autoReconnect) {
                 stopService("Stopping service: auto reconnect disabled")
+                stopSelf()
                 return@launch
             }
 
@@ -799,6 +836,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
                 logWarn("Max reconnect attempts ($MAX_RECONNECT_ATTEMPTS) reached, giving up")
                 stopService("Stopping service: max reconnect attempts reached")
+                stopSelf()
                 return@launch
             }
             val backoffMs = 1000L * (1L shl (reconnectAttempts - 1).coerceAtMost(5))

@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
+import java.net.URI
 
 data class RuntimeLogEntry(
     val timestamp: Long,
@@ -74,13 +75,28 @@ object RuntimeLogBuffer {
 
     // Example: https://sub.example.com/path?k=v -> https://sub.exa***.com/[path]
     private fun maskUrl(url: String): String {
+        val parsed = runCatching { URI(url) }.getOrNull()
+        if (parsed != null && !parsed.scheme.isNullOrBlank()) {
+            val host = parsed.host?.takeIf { it.isNotBlank() }
+            if (host != null) {
+                val authority = when {
+                    parsed.port > 0 && host.contains(':') -> "[$host]:${parsed.port}"
+                    parsed.port > 0 -> "$host:${parsed.port}"
+                    host.contains(':') -> "[$host]"
+                    else -> host
+                }
+                return "${parsed.scheme}://${maskEndpoint(authority)}/***"
+            }
+        }
+
         val schemeEnd = url.indexOf("://")
         if (schemeEnd < 0) return "[url]"
-        val scheme = url.substring(0, schemeEnd + 3) // "https://"
+        val scheme = url.substring(0, schemeEnd + 3)
         val rest = url.substring(schemeEnd + 3)
         val pathStart = rest.indexOf('/')
-        val host = if (pathStart >= 0) rest.substring(0, pathStart) else rest
-        return "${scheme}${maskHost(host)}/***"
+        val authority = if (pathStart >= 0) rest.substring(0, pathStart) else rest
+        val sanitizedAuthority = authority.substringAfter('@')
+        return "${scheme}${maskEndpoint(sanitizedAuthority)}/***"
     }
 
     // Example: 550e8400-e29b-41d4-a716-446655440000 -> 550e****
@@ -119,6 +135,15 @@ object RuntimeLogBuffer {
         val maskedSld = if (sld.length > 3) "${sld.substring(0, 3)}***" else "${sld}***"
         val prefix = if (labels.size > 2) labels.subList(0, labels.size - 2).joinToString(".") + "." else ""
         return "$prefix$maskedSld.$tld$port"
+    }
+
+    private fun maskEndpoint(raw: String): String {
+        val sanitized = raw.trim().substringAfter('@')
+        return when {
+            bracketIpv6Regex.matches(sanitized) -> maskBracketIpv6(sanitized)
+            ipv4PortRegex.matches(sanitized) -> maskIpv4(sanitized)
+            else -> maskHost(sanitized)
+        }
     }
 
 }

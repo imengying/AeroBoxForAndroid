@@ -109,14 +109,31 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setRemoteDns(dns: String) {
         PreferenceManager.setRemoteDns(appContext, dns)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用 DNS 设置失败"
+        )
     }
 
     suspend fun setLocalDns(dns: String) {
         PreferenceManager.setLocalDns(appContext, dns)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用 DNS 设置失败"
+        )
+    }
+
+    suspend fun setDnsServers(remoteDns: String, localDns: String) {
+        PreferenceManager.setRemoteDns(appContext, remoteDns)
+        PreferenceManager.setLocalDns(appContext, localDns)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用 DNS 设置失败"
+        )
     }
 
     suspend fun setEnableDoh(enabled: Boolean) {
         PreferenceManager.setEnableDoh(appContext, enabled)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用 DNS 设置失败"
+        )
     }
 
     suspend fun setPerAppProxyEnabled(enabled: Boolean) {
@@ -147,6 +164,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setIPv6Mode(mode: IPv6Mode) {
         PreferenceManager.setIPv6Mode(appContext, mode)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用 IPv6 设置失败"
+        )
     }
 
     suspend fun setAutoReconnect(enabled: Boolean) {
@@ -155,22 +175,37 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setEnableGeoRules(enabled: Boolean) {
         PreferenceManager.setEnableGeoRules(appContext, enabled)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用规则设置失败"
+        )
     }
 
     suspend fun setEnableGeoCnDomainRule(enabled: Boolean) {
         PreferenceManager.setEnableGeoCnDomainRule(appContext, enabled)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用规则设置失败"
+        )
     }
 
     suspend fun setEnableGeoCnIpRule(enabled: Boolean) {
         PreferenceManager.setEnableGeoCnIpRule(appContext, enabled)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用规则设置失败"
+        )
     }
 
     suspend fun setEnableGeoAdsBlock(enabled: Boolean) {
         PreferenceManager.setEnableGeoAdsBlock(appContext, enabled)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用规则设置失败"
+        )
     }
 
     suspend fun setEnableGeoBlockQuic(enabled: Boolean) {
         PreferenceManager.setEnableGeoBlockQuic(appContext, enabled)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用规则设置失败"
+        )
     }
 
     fun loadInstalledApps(forceRefresh: Boolean = false) {
@@ -189,28 +224,36 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     private suspend fun refreshActiveConnectionForInboundChange() {
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用入站设置失败"
+        )
+    }
+
+    private suspend fun refreshActiveConnectionForRuntimeChange(
+        failurePrefix: String
+    ) {
         val state = VpnStateManager.vpnState.value
         val currentNode = state.currentNode ?: return
         if (!state.isConnected) return
 
         when (val result = vpnRepository.reloadActiveConnection(currentNode)) {
             is VpnConnectionResult.Success -> {
-                _uiMessage.tryEmit("入站设置已生效")
+                _uiMessage.tryEmit("正在应用")
             }
 
             is VpnConnectionResult.InvalidConfig -> {
-                _uiMessage.tryEmit("应用入站设置失败：${result.error}")
+                _uiMessage.tryEmit("$failurePrefix：${result.error}")
             }
 
             is VpnConnectionResult.Failure -> {
                 val details = result.throwable.message?.takeIf { it.isNotBlank() }
                 _uiMessage.tryEmit(
-                    details?.let { "应用入站设置失败：$it" } ?: "应用入站设置失败"
+                    details?.let { "$failurePrefix：$it" } ?: failurePrefix
                 )
             }
 
             VpnConnectionResult.NoNodeAvailable -> {
-                _uiMessage.tryEmit("应用入站设置失败：当前节点不可用")
+                _uiMessage.tryEmit("$failurePrefix：当前节点不可用")
             }
         }
     }

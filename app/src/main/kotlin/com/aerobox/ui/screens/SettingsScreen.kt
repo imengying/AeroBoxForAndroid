@@ -331,8 +331,7 @@ fun SettingsScreen(
             onDismiss = { showDnsDialog = false },
             onConfirm = { remote, local ->
                 scope.launch {
-                    viewModel.setRemoteDns(remote)
-                    viewModel.setLocalDns(local)
+                    viewModel.setDnsServers(remote, local)
                 }
                 showDnsDialog = false
             }
