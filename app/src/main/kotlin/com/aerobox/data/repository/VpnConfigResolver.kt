@@ -26,24 +26,20 @@ class VpnConfigResolver(private val context: Context) {
     suspend fun resolveSelectedNode(): ProxyNode? {
         val selectedId = PreferenceManager.lastSelectedNodeIdFlow(context).first()
         val allNodes = nodeDao.getAllNodes().first()
-        val node = allNodes.firstOrNull { it.id == selectedId } ?: allNodes.firstOrNull() ?: return null
-        if (node.id != selectedId && node.id > 0L) {
-            PreferenceManager.setLastSelectedNodeId(context, node.id)
+        allNodes.firstOrNull { it.id == selectedId }?.let { return it }
+        if (selectedId > 0L) {
+            return null
         }
-        return node
+        val fallbackNode = allNodes.firstOrNull() ?: return null
+        if (fallbackNode.id > 0L) {
+            PreferenceManager.setLastSelectedNodeId(context, fallbackNode.id)
+        }
+        return fallbackNode
     }
 
-    suspend fun resolveNodeForAction(
-        node: ProxyNode,
-        allowSelectedFallback: Boolean
-    ): ProxyNode? {
+    suspend fun resolveNodeForAction(node: ProxyNode): ProxyNode? {
         subscriptionRepository.resolveNode(node)?.let { return it }
         nodeDao.getNodeById(node.id)?.let { return it }
-
-        if (allowSelectedFallback) {
-            return resolveSelectedNode()
-        }
-
         return node.takeIf { it.subscriptionId == 0L }
     }
 
@@ -57,7 +53,10 @@ class VpnConfigResolver(private val context: Context) {
         return if (fallbackToSelected) resolveSelectedNode() else null
     }
 
-    suspend fun buildConfig(node: ProxyNode): String {
+    suspend fun buildConfig(
+        node: ProxyNode,
+        preferencesOverride: PreferenceManager.VpnConfigPreferences? = null
+    ): String {
         val nodeName = node.name.ifBlank { "unnamed node" }
         Log.w(TAG, "Generating config for $nodeName [${node.type.name}]")
         RuntimeLogBuffer.append("info", "Generating config for $nodeName [${node.type.name}]")
@@ -65,7 +64,7 @@ class VpnConfigResolver(private val context: Context) {
             GeoAssetManager.ensureBundledAssets(context)
         }
 
-        val prefs = PreferenceManager.readVpnConfigPreferences(context)
+        val prefs = preferencesOverride ?: PreferenceManager.readVpnConfigPreferences(context)
         val geoIpCnRuleSetPath = if (prefs.enableGeoRules) {
             GeoAssetManager
                 .getGeoIpFile(context)

@@ -3,14 +3,17 @@ package com.aerobox.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.InstalledAppInfo
 import com.aerobox.data.model.RoutingMode
 import com.aerobox.data.repository.AppListRepository
 import com.aerobox.data.repository.VpnConnectionResult
+import com.aerobox.data.repository.VpnConfigResolver
 import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.PreferenceManager
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -25,6 +28,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val appContext = application.applicationContext
     private val appListRepository = AppListRepository(appContext)
     private val vpnRepository = VpnRepository(appContext)
+    private val configResolver = VpnConfigResolver(appContext)
 
     private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
     val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps.asStateFlow()
@@ -108,29 +112,48 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     suspend fun setRemoteDns(dns: String) {
-        PreferenceManager.setRemoteDns(appContext, dns)
+        val normalizedDns = dns.trim()
+        validateAndPersistDnsSettings(
+            remoteDns = normalizedDns,
+            localDns = PreferenceManager.localDnsFlow(appContext).first(),
+            enableDoh = PreferenceManager.enableDohFlow(appContext).first()
+        ) ?: return
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用 DNS 设置失败"
         )
     }
 
     suspend fun setLocalDns(dns: String) {
-        PreferenceManager.setLocalDns(appContext, dns)
+        val normalizedDns = dns.trim()
+        validateAndPersistDnsSettings(
+            remoteDns = PreferenceManager.remoteDnsFlow(appContext).first(),
+            localDns = normalizedDns,
+            enableDoh = PreferenceManager.enableDohFlow(appContext).first()
+        ) ?: return
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用 DNS 设置失败"
         )
     }
 
     suspend fun setDnsServers(remoteDns: String, localDns: String) {
-        PreferenceManager.setRemoteDns(appContext, remoteDns)
-        PreferenceManager.setLocalDns(appContext, localDns)
+        val normalizedRemoteDns = remoteDns.trim()
+        val normalizedLocalDns = localDns.trim()
+        validateAndPersistDnsSettings(
+            remoteDns = normalizedRemoteDns,
+            localDns = normalizedLocalDns,
+            enableDoh = PreferenceManager.enableDohFlow(appContext).first()
+        ) ?: return
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用 DNS 设置失败"
         )
     }
 
     suspend fun setEnableDoh(enabled: Boolean) {
-        PreferenceManager.setEnableDoh(appContext, enabled)
+        validateAndPersistDnsSettings(
+            remoteDns = PreferenceManager.remoteDnsFlow(appContext).first(),
+            localDns = PreferenceManager.localDnsFlow(appContext).first(),
+            enableDoh = enabled
+        ) ?: return
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用 DNS 设置失败"
         )
@@ -138,14 +161,23 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setPerAppProxyEnabled(enabled: Boolean) {
         PreferenceManager.setPerAppProxyEnabled(appContext, enabled)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用分应用代理设置失败"
+        )
     }
 
     suspend fun setPerAppProxyMode(mode: String) {
         PreferenceManager.setPerAppProxyMode(appContext, mode)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用分应用代理设置失败"
+        )
     }
 
     suspend fun setPerAppProxyPackages(packages: Set<String>) {
         PreferenceManager.setPerAppProxyPackages(appContext, packages)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = "应用分应用代理设置失败"
+        )
     }
 
     suspend fun setPerAppShowSystem(show: Boolean) {
@@ -227,6 +259,49 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用入站设置失败"
         )
+    }
+
+    private suspend fun validateAndPersistDnsSettings(
+        remoteDns: String,
+        localDns: String,
+        enableDoh: Boolean
+    ): PreferenceManager.VpnConfigPreferences? {
+        val currentPrefs = PreferenceManager.readVpnConfigPreferences(appContext)
+        val candidatePrefs = currentPrefs.copy(
+            remoteDns = remoteDns,
+            localDns = localDns,
+            enableDoh = enableDoh
+        )
+
+        val syntaxError = ConfigGenerator.validateDnsSettings(
+            remoteDns = remoteDns,
+            localDns = localDns,
+            enableDoh = enableDoh,
+            ipv6Mode = currentPrefs.ipv6Mode
+        )
+        if (syntaxError != null) {
+            _uiMessage.tryEmit("DNS 设置无效：$syntaxError")
+            return null
+        }
+
+        val state = VpnStateManager.vpnState.value
+        val currentNode = state.currentNode
+        if (state.isConnected && currentNode != null) {
+            val candidateConfig = configResolver.buildConfig(
+                node = currentNode,
+                preferencesOverride = candidatePrefs
+            )
+            val configError = configResolver.validateConfig(candidateConfig)
+            if (configError != null) {
+                _uiMessage.tryEmit("DNS 设置无效：$configError")
+                return null
+            }
+        }
+
+        PreferenceManager.setRemoteDns(appContext, remoteDns)
+        PreferenceManager.setLocalDns(appContext, localDns)
+        PreferenceManager.setEnableDoh(appContext, enableDoh)
+        return candidatePrefs
     }
 
     private suspend fun refreshActiveConnectionForRuntimeChange(

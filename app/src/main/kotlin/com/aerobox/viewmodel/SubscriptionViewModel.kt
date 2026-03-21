@@ -4,6 +4,8 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.aerobox.core.subscription.ParseDiagnostics
+import com.aerobox.data.repository.NoValidNodesException
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.SubscriptionRepository
 import com.aerobox.data.repository.SubscriptionImportResult
@@ -194,18 +196,19 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
 
         return when {
             error?.message == SubscriptionRepository.NO_VALID_NODES_ERROR ->
-                "导入失败：未解析到可用节点，请检查订阅格式"
+                "导入失败：${friendlyNoValidNodesMessage(result.diagnostics)}"
 
             error != null ->
                 "导入订阅失败：${toFriendlyError(error)}"
 
             else ->
-                "导入失败：未解析到可用节点，请检查订阅格式"
+                "导入失败：${friendlyNoValidNodesMessage(result.diagnostics)}"
         }
     }
 
     private fun toFriendlyError(error: Throwable): String {
         return when (error) {
+            is NoValidNodesException -> friendlyNoValidNodesMessage(error.diagnostics)
             is IllegalStateException ->
                 if (error.message == SubscriptionRepository.NO_VALID_NODES_ERROR) {
                     "未解析到可用节点，请检查订阅格式"
@@ -224,6 +227,58 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 }
             }
             else -> error.message?.takeIf { it.isNotBlank() } ?: "未知错误"
+        }
+    }
+
+    private fun friendlyNoValidNodesMessage(diagnostics: ParseDiagnostics): String {
+        val hints = diagnostics.reasonCounts.entries
+            .sortedByDescending { it.value }
+            .mapNotNull { (reason, _) -> diagnosticsHint(reason) }
+            .distinct()
+            .take(2)
+
+        return if (hints.isEmpty()) {
+            "未解析到可用节点，请检查订阅格式"
+        } else {
+            "未解析到可用节点。可能原因：${hints.joinToString("；")}"
+        }
+    }
+
+    private fun diagnosticsHint(reason: String): String? {
+        return when (reason) {
+            "unsupported_subscription_content",
+            "invalid_json_content",
+            "invalid_clash_yaml" -> "订阅内容不是受支持的 sing-box、Clash 或节点链接格式"
+
+            "missing_clash_proxies" -> "Clash 配置里没有 proxies 节点列表"
+
+            "unsupported_json_type",
+            "unsupported_clash_type",
+            "unsupported_uri_scheme" -> "订阅里包含当前暂不支持的节点类型或链接协议"
+
+            "unsupported_json_transport",
+            "unsupported_clash_transport",
+            "unsupported_json_network" -> "订阅里包含当前暂不支持的传输配置"
+
+            "missing_json_endpoint",
+            "missing_clash_endpoint" -> "部分节点缺少服务器地址或端口"
+
+            "invalid_json_item",
+            "invalid_clash_proxy_item" -> "订阅里的部分节点条目格式不正确"
+
+            "invalid_or_unsupported_shadowsocks_uri",
+            "invalid_or_unsupported_vmess_uri",
+            "invalid_or_unsupported_vless_uri",
+            "invalid_or_unsupported_trojan_uri",
+            "invalid_or_unsupported_hysteria2_uri",
+            "invalid_or_unsupported_tuic_uri",
+            "invalid_or_unsupported_socks_uri",
+            "invalid_or_unsupported_http_uri" -> "节点链接格式不正确，或包含当前暂不支持的参数"
+
+            "informational_entry",
+            "duplicate_entry" -> null
+
+            else -> null
         }
     }
 

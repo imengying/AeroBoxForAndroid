@@ -25,6 +25,32 @@ object ConfigGenerator {
         val path: String? = null
     )
 
+    fun validateDnsSettings(
+        remoteDns: String,
+        localDns: String,
+        enableDoh: Boolean,
+        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
+        nodeIsIpv6Only: Boolean = false
+    ): String? {
+        return runCatching {
+            val normalizedRemote = normalizeRemoteDnsAddress(remoteDns, enableDoh, nodeIsIpv6Only)
+            val normalizedLocal = normalizeLocalDnsAddress(localDns)
+            validateDnsServerSpec(
+                label = "远程 DNS",
+                spec = parseDnsServer(normalizedRemote),
+                ipv6Mode = ipv6Mode
+            )
+            validateDnsServerSpec(
+                label = "本地 DNS",
+                spec = parseDnsServer(normalizedLocal),
+                ipv6Mode = ipv6Mode
+            )
+            null
+        }.getOrElse { error ->
+            error.message?.takeIf { it.isNotBlank() } ?: "DNS 地址格式无效"
+        }
+    }
+
     fun generateSingBoxConfig(
         node: ProxyNode,
         routingMode: RoutingMode = RoutingMode.RULE_BASED,
@@ -286,6 +312,36 @@ object ConfigGenerator {
                     )
                 }
             }
+    }
+
+    private fun validateDnsServerSpec(
+        label: String,
+        spec: DnsServerSpec,
+        ipv6Mode: IPv6Mode
+    ) {
+        require(spec.server.isNotBlank()) { "$label 地址无效" }
+        require(spec.serverPort in 1..65535) { "$label 端口无效" }
+        require(spec.type in setOf("https", "tls", "tcp", "udp", "quic")) { "$label 协议无效" }
+        require(isValidDnsHostOrIp(spec.server)) { "$label 地址无效" }
+        if (spec.type == "https") {
+            require(!spec.path.isNullOrBlank() && spec.path.startsWith("/")) { "$label 路径无效" }
+        }
+        if (ipv6Mode == IPv6Mode.DISABLE) {
+            require(!isIpv6Literal(spec.server)) { "$label 不能是 IPv6 地址" }
+        }
+    }
+
+    private fun isValidDnsHostOrIp(server: String): Boolean {
+        val normalized = server.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
+        if (normalized.isBlank() || normalized.any { it.isWhitespace() }) return false
+        if (isIpLiteral(normalized)) return true
+        return normalized.split('.').all { label ->
+            label.isNotBlank() &&
+                label.length <= 63 &&
+                label.firstOrNull()?.let { it.isLetterOrDigit() } == true &&
+                label.lastOrNull()?.let { it.isLetterOrDigit() } == true &&
+                label.all { it.isLetterOrDigit() || it == '-' }
+        }
     }
 
     private fun normalizeRemoteDnsAddress(remoteDns: String, enableDoh: Boolean, nodeIsIpv6Only: Boolean = false): String {

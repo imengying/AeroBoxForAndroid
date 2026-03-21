@@ -72,10 +72,8 @@ class VpnRepository(private val context: Context) {
                 subscriptionRepository.refreshDueSubscriptions(subscriptions)
             }
 
-            val resolvedNode = configResolver.resolveNodeForAction(
-                node = node,
-                allowSelectedFallback = refreshDueSubscriptions
-            ) ?: return@runCatching VpnConnectionResult.NoNodeAvailable
+            val resolvedNode = configResolver.resolveNodeForAction(node)
+                ?: return@runCatching VpnConnectionResult.NoNodeAvailable
 
             val config = configResolver.buildConfig(resolvedNode)
             val configError = configResolver.validateConfig(config)

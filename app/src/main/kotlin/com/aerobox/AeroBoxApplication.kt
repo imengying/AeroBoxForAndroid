@@ -66,8 +66,6 @@ class AeroBoxApplication : Application() {
                 AppDatabase::class.java,
                 "aerobox.db"
             )
-                .fallbackToDestructiveMigration(true)
-                .fallbackToDestructiveMigrationOnDowngrade(true)
                 .build()
         }
     }

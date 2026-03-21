@@ -37,7 +37,7 @@ data class SubscriptionImportResult(
     val diagnostics: ParseDiagnostics = ParseDiagnostics()
 )
 
-private class NoValidNodesException(
+internal class NoValidNodesException(
     val diagnostics: ParseDiagnostics
 ) : IllegalStateException(SubscriptionRepository.NO_VALID_NODES_ERROR)
 
@@ -364,7 +364,6 @@ class SubscriptionRepository(context: Context) {
         val previouslySelected = existingNodes.firstOrNull { it.id == selectedNodeId } ?: return
         val replacement = refreshedNodes.firstOrNull { it.id == selectedNodeId }
             ?: findBestMatchingNode(previouslySelected, refreshedNodes)
-            ?: refreshedNodes.firstOrNull()
             ?: return
         if (replacement.id != selectedNodeId) {
             PreferenceManager.setLastSelectedNodeId(appContext, replacement.id)

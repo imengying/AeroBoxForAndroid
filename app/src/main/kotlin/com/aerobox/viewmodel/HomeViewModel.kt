@@ -171,7 +171,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 nodeDao.getAllNodes(),
                 PreferenceManager.lastSelectedNodeIdFlow(appContext)
             ) { nodes, selectedId ->
-                nodes.firstOrNull { it.id == selectedId } ?: nodes.firstOrNull()
+                nodes.firstOrNull { it.id == selectedId }
+                    ?: if (selectedId > 0L) null else nodes.firstOrNull()
             }.collect { node ->
                 _selectedNode.value = node
             }
@@ -299,6 +300,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             VpnStateManager.clearLastError()
             when (val result = vpnRepository.connectNode(node, refreshDueSubscriptions = true)) {
                 is VpnConnectionResult.Success -> {
+                    _selectedNode.value = result.node
+                    PreferenceManager.setLastSelectedNodeId(appContext, result.node.id)
+                    if (result.node.id != node.id) {
+                        _uiMessage.tryEmit("订阅更新后，已使用匹配的新节点：${result.node.name}")
+                    }
                     startConnectWatchdog(context)
                 }
 
