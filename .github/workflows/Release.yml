@@ -1,4 +1,4 @@
-name: Tag Build Release
+name: Release
 
 on:
   push:
