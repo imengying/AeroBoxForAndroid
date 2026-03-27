@@ -27,16 +27,14 @@ class VpnRepository(private val context: Context) {
         SubscriptionRepository(context)
     }
 
-    suspend fun connectSelectedNode(refreshDueSubscriptions: Boolean = false): VpnConnectionResult {
+    suspend fun connectSelectedNode(): VpnConnectionResult {
         val node = configResolver.resolveSelectedNode() ?: return VpnConnectionResult.NoNodeAvailable
-        return connectNode(node, refreshDueSubscriptions)
+        return connectNode(node)
     }
 
-    suspend fun connectNode(
-        node: ProxyNode,
-        refreshDueSubscriptions: Boolean = false
-    ): VpnConnectionResult {
-        return launchNodeAction(node, refreshDueSubscriptions) { config, resolvedNode ->
+    suspend fun connectNode(node: ProxyNode): VpnConnectionResult {
+        refreshDueSubscriptionsBeforeConnect()
+        return launchNodeAction(node) { config, resolvedNode ->
             startVpn(config, resolvedNode.id)
         }
     }
@@ -61,17 +59,16 @@ class VpnRepository(private val context: Context) {
         startServiceWithAction(AeroBoxVpnService.ACTION_SWITCH, config, nodeId)
     }
 
+    private suspend fun refreshDueSubscriptionsBeforeConnect() {
+        val subscriptions = subscriptionRepository.getAllSubscriptions().first()
+        subscriptionRepository.refreshDueSubscriptions(subscriptions)
+    }
+
     private suspend fun launchNodeAction(
         node: ProxyNode,
-        refreshDueSubscriptions: Boolean = false,
         action: (String, ProxyNode) -> Unit
     ): VpnConnectionResult {
         return runCatching {
-            if (refreshDueSubscriptions) {
-                val subscriptions = subscriptionRepository.getAllSubscriptions().first()
-                subscriptionRepository.refreshDueSubscriptions(subscriptions)
-            }
-
             val resolvedNode = configResolver.resolveNodeForAction(node)
                 ?: return@runCatching VpnConnectionResult.NoNodeAvailable
 

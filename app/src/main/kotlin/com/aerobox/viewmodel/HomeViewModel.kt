@@ -298,7 +298,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             VpnStateManager.clearLastError()
-            when (val result = vpnRepository.connectNode(node, refreshDueSubscriptions = true)) {
+            when (val result = vpnRepository.connectNode(node)) {
                 is VpnConnectionResult.Success -> {
                     _selectedNode.value = result.node
                     PreferenceManager.setLastSelectedNodeId(appContext, result.node.id)
