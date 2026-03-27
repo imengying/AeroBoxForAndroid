@@ -56,10 +56,11 @@ interface PlatformInterfaceWrapper : PlatformInterface {
                 return emptyConnectionOwner()
             }
             val packages = AeroBoxApplication.appInstance.packageManager.getPackagesForUid(uid)
+            val packageName = packages?.firstOrNull() ?: ""
             val owner = ConnectionOwner()
             owner.userId = uid
-            owner.userName = packages?.firstOrNull() ?: ""
-            owner.androidPackageName = packages?.firstOrNull() ?: ""
+            owner.userName = packageName
+            owner.setAndroidPackageNameCompat(packageName)
             return owner
         }.getOrElse {
             emptyConnectionOwner()
@@ -164,8 +165,30 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         return ConnectionOwner().apply {
             userId = Process.INVALID_UID
             userName = ""
-            androidPackageName = ""
+            setAndroidPackageNameCompat("")
         }
+    }
+}
+
+private fun ConnectionOwner.setAndroidPackageNameCompat(value: String) {
+    val setterNames = listOf("setAndroidPackageName", "setPackageName")
+    for (setterName in setterNames) {
+        val setter = javaClass.methods.firstOrNull { method ->
+            method.name == setterName &&
+                method.parameterCount == 1 &&
+                method.parameterTypes.firstOrNull() == String::class.java
+        }
+        if (setter != null) {
+            runCatching { setter.invoke(this, value) }
+            return
+        }
+    }
+
+    val fieldNames = listOf("androidPackageName", "packageName")
+    for (fieldName in fieldNames) {
+        val field = runCatching { javaClass.getField(fieldName) }.getOrNull() ?: continue
+        runCatching { field.set(this, value) }
+        return
     }
 }
 
