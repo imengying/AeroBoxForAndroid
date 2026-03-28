@@ -810,11 +810,8 @@ object ConfigGenerator {
                     node.obfsPassword?.takeIf { it.isNotBlank() }?.let { obfs.put("password", it) }
                     outbound.put("obfs", obfs)
                 }
-                node.serverPorts
-                    ?.split(",")
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotEmpty() }
-                    ?.takeIf { it.isNotEmpty() }
+                normalizedHysteriaServerPorts(node.serverPorts)
+                    .takeIf { it.isNotEmpty() }
                     ?.let { ports ->
                         outbound.remove("server_port")
                         val portArray = JSONArray()
@@ -1030,6 +1027,27 @@ object ConfigGenerator {
                 .put("version", version)
         }
         return enabled
+    }
+
+    private fun normalizedHysteriaServerPorts(serverPorts: String?): List<String> {
+        return serverPorts
+            ?.split(",")
+            ?.mapNotNull(::normalizeHysteriaServerPortEntry)
+            .orEmpty()
+    }
+
+    private fun normalizeHysteriaServerPortEntry(entry: String): String? {
+        val trimmed = entry.trim()
+        if (trimmed.isEmpty()) return null
+
+        val dashRange = Regex("""^(\d{1,5})\s*-\s*(\d{1,5})$""").matchEntire(trimmed)
+        if (dashRange != null) {
+            val start = dashRange.groupValues[1]
+            val end = dashRange.groupValues[2]
+            return "$start:$end"
+        }
+
+        return trimmed.replace(" ", "")
     }
 
     private fun mergeHeaderJson(host: String?): JSONObject? {

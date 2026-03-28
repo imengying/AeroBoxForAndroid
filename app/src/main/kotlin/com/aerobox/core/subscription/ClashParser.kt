@@ -261,6 +261,7 @@ object ClashParser {
             serverPorts = firstNonBlank(
                 joinedValue(map, "server-ports"),
                 joinedValue(map, "server_ports"),
+                joinedValue(map, "ports"),
                 stringValue(map, "mport")
             ),
             hopInterval = firstNonBlank(
