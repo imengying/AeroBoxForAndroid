@@ -7,4 +7,5 @@
 /captures
 .externalNativeBuild
 .cxx
+app/build
 .codex
