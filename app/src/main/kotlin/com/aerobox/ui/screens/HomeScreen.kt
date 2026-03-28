@@ -16,14 +16,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
@@ -105,8 +103,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             }
         }
     }
-
-    val listState = rememberLazyListState()
+    val baseBottomSpacing = 24.dp
 
     LaunchedEffect(viewModel) {
         viewModel.uiMessage.collectLatest { message ->
@@ -114,13 +111,15 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         }
     }
     Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = 80.dp, bottom = 24.dp, start = 16.dp, end = 16.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 80.dp, start = 16.dp, end = 16.dp, bottom = baseBottomSpacing),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     ConnectionCard(
                         isConnected = vpnState.isConnected,
@@ -144,9 +143,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                         },
                     )
                 }
-            }
 
-            item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -162,40 +159,38 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                         modifier = Modifier.weight(0.5f).height(92.dp)
                     )
                 }
-            }
 
-            item {
                 RoutingModeRow(
                     selected = routingMode,
                     onSelect = { viewModel.setRoutingMode(it) }
                 )
-            }
 
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    NetworkDetectCard(
-                        ip = detectedIp,
-                        onClick = { viewModel.refreshNetworkInfo() },
-                        modifier = Modifier.weight(0.5f).height(92.dp)
-                    )
-                    MemoryUsageCard(
-                        memoryUsage = memoryUsage,
-                        modifier = Modifier.weight(0.5f).height(92.dp)
-                    )
-                }
-            }
-
-            if (selectedNode == null) {
-                item {
+                if (selectedNode == null) {
                     Text(
                         text = stringResource(R.string.hint_add_subscription),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+
+            Spacer(
+                modifier = Modifier.weight(1f, fill = true)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                NetworkDetectCard(
+                    ip = detectedIp,
+                    onClick = { viewModel.refreshNetworkInfo() },
+                    modifier = Modifier.weight(0.5f).height(92.dp)
+                )
+                MemoryUsageCard(
+                    memoryUsage = memoryUsage,
+                    modifier = Modifier.weight(0.5f).height(92.dp)
+                )
             }
         }
         AppSnackbarHost(
