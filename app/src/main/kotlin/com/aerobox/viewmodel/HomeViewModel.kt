@@ -157,6 +157,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var detectIpJob: Job? = null
     private var connectWatchdogJob: Job? = null
 
+    override fun onCleared() {
+        detectIpJob?.cancel()
+        connectWatchdogJob?.cancel()
+        super.onCleared()
+    }
+
     init {
         observeSelectedNode()
         observeConnectionDuration()
@@ -218,7 +224,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
                 _memoryUsage.value = readMemoryUsage()
-                delay(5_000)
+                delay(15_000)
             }
         }
     }
