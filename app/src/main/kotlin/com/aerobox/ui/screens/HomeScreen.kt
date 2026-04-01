@@ -429,7 +429,7 @@ private fun RoutingModeRow(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
