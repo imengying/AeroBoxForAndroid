@@ -144,6 +144,22 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     )
                 }
 
+                if (selectedNode == null) {
+                    Text(
+                        text = stringResource(R.string.hint_add_subscription),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(
+                modifier = Modifier.weight(1f, fill = true)
+            )
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -165,32 +181,20 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     onSelect = { viewModel.setRoutingMode(it) }
                 )
 
-                if (selectedNode == null) {
-                    Text(
-                        text = stringResource(R.string.hint_add_subscription),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    NetworkDetectCard(
+                        ip = detectedIp,
+                        onClick = { viewModel.refreshNetworkInfo() },
+                        modifier = Modifier.weight(0.5f).height(92.dp)
+                    )
+                    MemoryUsageCard(
+                        memoryUsage = memoryUsage,
+                        modifier = Modifier.weight(0.5f).height(92.dp)
                     )
                 }
-            }
-
-            Spacer(
-                modifier = Modifier.weight(1f, fill = true)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                NetworkDetectCard(
-                    ip = detectedIp,
-                    onClick = { viewModel.refreshNetworkInfo() },
-                    modifier = Modifier.weight(0.5f).height(92.dp)
-                )
-                MemoryUsageCard(
-                    memoryUsage = memoryUsage,
-                    modifier = Modifier.weight(0.5f).height(92.dp)
-                )
             }
         }
         AppSnackbarHost(
