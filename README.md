@@ -20,7 +20,6 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 - IPv6 支持、开机自连、断线自动重连
 - 节点延迟测试、运行日志、通知栏快捷切换
 - Material 3 + Jetpack Compose 界面
-- Android VPN TUN 默认使用 `mixed` stack，并在构建时启用 `with_gvisor`
 
 ## 支持的代理协议 / Supported Proxy Protocols
 

@@ -193,8 +193,7 @@ object ConfigGenerator {
         nodeIsIpv6Only: Boolean = false,
         serverDomainHint: String? = null
     ): JSONObject {
-        // When proxy is IPv6-only, remote DNS domain resolution must prefer IPv6
-        // so DoH endpoints resolve to IPv6 addresses reachable through the proxy.
+        // IPv6-only proxies need IPv6-first bootstrap resolution for remote DNS.
         val remoteDnsStrategy = if (nodeIsIpv6Only) "prefer_ipv6" else ipv6Mode.domainStrategy()
         val localResolverServer = buildLocalPlatformDnsServer(
             tag = DNS_LOCAL_TAG
@@ -212,7 +211,6 @@ object ConfigGenerator {
             ipv6Mode = ipv6Mode
         )
 
-        // Strict direct mode: force DNS to local resolver only.
         if (routingMode == RoutingMode.DIRECT) {
             return JSONObject()
                 .put("servers", JSONArray().put(directServer).put(localResolverServer).put(bootstrapServer))
@@ -267,19 +265,15 @@ object ConfigGenerator {
                 )
             }
 
-        // Only add Geo-specific DNS routing rules for rule-based modes
         if (routingMode == RoutingMode.RULE_BASED) {
-            fun addDnsLocalRule(country: String) {
+            if (enableGeoCnDomainRule) {
                 dnsRules.put(
                     JSONObject()
-                        .put("rule_set", JSONArray().put("geosite-$country"))
+                        .put("rule_set", JSONArray().put("geosite-cn"))
                         .put("action", "route")
                         .put("server", DNS_DIRECT_TAG)
                 )
             }
-
-            if (enableGeoCnDomainRule) addDnsLocalRule("cn")
-
         }
 
         if (dnsRules.length() > 0) {
@@ -597,18 +591,6 @@ object ConfigGenerator {
             normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
     }
 
-    private fun knownEncryptedDnsEndpoint(value: String): String? {
-        val host = knownEncryptedDnsHost(value) ?: return null
-        return when (host) {
-            "dns.google" -> "https://dns.google/dns-query"
-            "cloudflare-dns.com" -> "https://cloudflare-dns.com/dns-query"
-            "dns.quad9.net" -> "https://dns.quad9.net/dns-query"
-            "dns.alidns.com" -> "https://dns.alidns.com/dns-query"
-            "doh.pub" -> "https://doh.pub/dns-query"
-            else -> null
-        }
-    }
-
     private fun knownEncryptedDnsHost(value: String): String? {
         return when (value.removePrefix("[").removeSuffix("]").lowercase()) {
             "8.8.8.8", "8.8.4.4", "dns.google" -> "dns.google"
@@ -780,18 +762,13 @@ object ConfigGenerator {
 
     private fun buildBaseRouteRules(nodeIsIpv6Only: Boolean): JSONArray {
         return JSONArray().apply {
-            // Sniff is still useful for routing and SNI extraction.
             put(JSONObject().put("action", "sniff"))
 
-            // Avoid client-side destination resolution on IPv6-only nodes.
-            // Some IPv6-only servers can still reach IPv4-only sites via
-            // server-side resolver/NAT64 setup, but local resolve would turn a
-            // domain into a missing AAAA record and fail before the proxy sees it.
             if (!nodeIsIpv6Only) {
                 put(
                     JSONObject()
                         .put("action", "resolve")
-                        .put("strategy", destinationDomainStrategy(nodeIsIpv6Only))
+                        .put("strategy", "prefer_ipv4")
                 )
             }
 
@@ -1023,13 +1000,6 @@ object ConfigGenerator {
     ): JSONObject {
         put("strategy", ipv6Mode.domainStrategy())
         return this
-    }
-
-    private fun destinationDomainStrategy(nodeIsIpv6Only: Boolean): String {
-        return when {
-            nodeIsIpv6Only -> "prefer_ipv6"
-            else -> "prefer_ipv4"
-        }
     }
 
     private fun buildTlsObject(node: ProxyNode, includeReality: Boolean = false): JSONObject {

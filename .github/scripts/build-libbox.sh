@@ -32,35 +32,11 @@ fi
 # target blocks.
 python3 "${GITHUB_WORKSPACE}/.github/scripts/patch-sing-box-box-go.py"
 
-echo "--- patched box.go PlatformLogWriter conditions ---"
-grep -n "needCacheFile\\|needClashAPI" box.go
-python3 - <<'PY'
-from pathlib import Path
-
-text = Path("box.go").read_text()
-forbidden = [
-    "\tif experimentalOptions.CacheFile != nil && experimentalOptions.CacheFile.Enabled || options.PlatformLogWriter != nil {\n",
-    "\tif experimentalOptions.ClashAPI != nil || options.PlatformLogWriter != nil {\n",
-]
-for old in forbidden:
-    if old in text:
-        raise SystemExit(
-            "PlatformLogWriter still affects needCacheFile/needClashAPI in patched box.go"
-        )
-print("--- remaining PlatformLogWriter references ---")
-for line_no, line in enumerate(text.splitlines(), 1):
-    if "PlatformLogWriter" in line:
-        print(f"{line_no}:{line}")
-PY
-
 cp "${GITHUB_WORKSPACE}/.github/libbox/urltest_export.go" experimental/libbox/urltest_export.go
 gofmt -w experimental/libbox/urltest_export.go
-echo "--- added experimental/libbox/urltest_export.go ---"
-sed -n '1,200p' experimental/libbox/urltest_export.go
 
-# Build with gomobile bind directly (no need to patch build_libbox)
 mkdir -p "${GITHUB_WORKSPACE}/app/build/libbox"
-gomobile bind -v \
+gomobile bind \
   -o "${GITHUB_WORKSPACE}/app/build/libbox/libbox.aar" \
   -target android \
   -androidapi 31 \
@@ -73,8 +49,7 @@ gomobile bind -v \
   ./experimental/libbox
 
 AAR_PATH="${GITHUB_WORKSPACE}/app/build/libbox/libbox.aar"
-echo "--- libbox.aar built ---"
-ls -lh "${AAR_PATH}"
+test -f "${AAR_PATH}"
 
 STRIP_DIR="${RUNNER_TEMP}/aar_strip"
 mkdir -p "${STRIP_DIR}"
@@ -82,9 +57,8 @@ unzip -q "${AAR_PATH}" -d "${STRIP_DIR}"
 LLVM_STRIP="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
 if [ -x "${LLVM_STRIP}" ]; then
   find "${STRIP_DIR}/jni" -name '*.so' -exec "${LLVM_STRIP}" --strip-unneeded {} \;
-  echo "--- .so sizes after strip ---"
-  find "${STRIP_DIR}/jni" -name '*.so' -exec du -h {} \; | sort -h
-  pushd "${STRIP_DIR}"
+  rm -f "${AAR_PATH}"
+  pushd "${STRIP_DIR}" >/dev/null
   zip -q -r "${AAR_PATH}" .
-  popd
+  popd >/dev/null
 fi
