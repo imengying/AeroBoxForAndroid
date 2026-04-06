@@ -88,6 +88,48 @@ jobs:
           set -euo pipefail
           gradle --stacktrace :app:assembleRelease
 
+      - name: Build installable debug APK
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          gradle --stacktrace :app:assembleDebug
+
+      - name: Prepare debug APK artifacts
+        if: github.event_name != 'pull_request'
+        env:
+          CI_REF_NAME: ${{ github.ref_name }}
+          CI_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          SRC_DIR="${GITHUB_WORKSPACE}/app/build/outputs/apk/debug"
+          DIST_DIR="${SRC_DIR}/dist"
+          mkdir -p "${DIST_DIR}"
+
+          shopt -s nullglob
+          APKS=("${SRC_DIR}"/*.apk)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::error::No debug APK files found in ${SRC_DIR}"
+            exit 1
+          fi
+
+          SHORT_SHA="${CI_SHA::7}"
+          SAFE_REF="$(printf '%s' "${CI_REF_NAME}" | tr '/:@' '---')"
+
+          for apk in "${APKS[@]}"; do
+            filename="$(basename "${apk}")"
+            abi="universal"
+            case "${filename}" in
+              *arm64-v8a*) abi="arm64-v8a" ;;
+              *armeabi-v7a*) abi="armeabi-v7a" ;;
+              *x86_64*) abi="x86_64" ;;
+              *x86*) abi="x86" ;;
+            esac
+            cp -f "${apk}" "${DIST_DIR}/AeroBox-${SAFE_REF}-${SHORT_SHA}-${abi}-debug.apk"
+          done
+
+          echo "Prepared debug APK outputs:"
+          ls -la "${DIST_DIR}"
+
       - name: Debug logs on failure
         if: failure()
         run: |
@@ -98,3 +140,11 @@ jobs:
           if [ -d "${GITHUB_WORKSPACE}/app/build/outputs" ]; then
             find "${GITHUB_WORKSPACE}/app/build/outputs" -maxdepth 5 -print | sort
           fi
+
+      - name: Upload installable debug APKs
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v6
+        with:
+          name: aerobox-ci-debug-${{ github.ref_name }}-${{ github.run_number }}
+          path: app/build/outputs/apk/debug/dist/*.apk
+          if-no-files-found: error
