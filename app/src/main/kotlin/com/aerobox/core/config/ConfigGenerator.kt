@@ -94,7 +94,7 @@ object ConfigGenerator {
                     .takeUnless { it.isBlank() || isIpLiteral(it) }
             )
         )
-        config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, ipv6Mode))
+        config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, ipv6Mode, nodeIsIpv6Only))
 
         val proxyOutbound = buildProxyOutbound(node).put("tag", PROXY_OUTBOUND_TAG)
         config.put(
@@ -603,7 +603,8 @@ object ConfigGenerator {
     private fun buildInbounds(
         enableSocks: Boolean,
         enableHttp: Boolean,
-        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE
+        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
+        nodeIsIpv6Only: Boolean = false
     ): JSONArray {
         val inbounds = JSONArray()
         val tunAddresses = JSONArray().apply {
@@ -621,7 +622,11 @@ object ConfigGenerator {
             .put("address", tunAddresses)
             .put("mtu", DEFAULT_TUN_MTU)
             .put("auto_route", true)
-            .put("stack", "system")
+            // Hiddify defaults to mixed and NekoBox defaults to gVisor instead
+            // of system. IPv6-only nodes are the path where we currently see
+            // payload-bearing TCP streams fail, so prefer mixed there first and
+            // keep the existing system stack for the common case.
+            .put("stack", if (nodeIsIpv6Only) "mixed" else "system")
 
         inbounds.put(tunInbound)
 
