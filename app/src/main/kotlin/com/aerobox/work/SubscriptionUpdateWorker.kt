@@ -19,6 +19,9 @@ class SubscriptionUpdateWorker(
             reconfigureSchedule = false
         )
         if (results.isEmpty() || results.any { it.isSuccess }) {
+            // Periodic work must be rescheduled after each run so staggered
+            // subscriptions can move the next trigger to their own due time.
+            SubscriptionUpdateScheduler.reconfigure(applicationContext)
             return Result.success()
         }
         return Result.retry()

@@ -14,6 +14,7 @@ import com.aerobox.data.model.matchScore
 import com.aerobox.data.model.normalizedDisplayName
 import com.aerobox.utils.PreferenceManager
 import com.aerobox.work.SubscriptionUpdateScheduler
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -26,8 +27,6 @@ import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 data class SubscriptionImportResult(
     val subscriptionId: Long,
@@ -282,9 +281,9 @@ class SubscriptionRepository(context: Context) {
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
                         if (!it.isSuccessful) {
-                            cont.resumeWithException(IOException("HTTP ${it.code}"))
+                            cont.resumeWithExceptionIfActive(IOException("HTTP ${it.code}"))
                         } else {
-                            cont.resume(
+                            cont.resumeIfActive(
                                 SubscriptionFetchResult(
                                     content = it.body.string(),
                                     headers = it.headers
@@ -294,10 +293,20 @@ class SubscriptionRepository(context: Context) {
                     }
                 }
                 override fun onFailure(call: Call, e: IOException) {
-                    cont.resumeWithException(e)
+                    cont.resumeWithExceptionIfActive(e)
                 }
             })
         }
+
+    private fun <T> CancellableContinuation<T>.resumeIfActive(value: T) {
+        val token = tryResume(value) ?: return
+        completeResume(token)
+    }
+
+    private fun <T> CancellableContinuation<T>.resumeWithExceptionIfActive(error: Throwable) {
+        val token = tryResumeWithException(error) ?: return
+        completeResume(token)
+    }
 
     private fun shouldAutoUpdate(subscription: Subscription, now: Long): Boolean {
         if (!subscription.autoUpdate) return false

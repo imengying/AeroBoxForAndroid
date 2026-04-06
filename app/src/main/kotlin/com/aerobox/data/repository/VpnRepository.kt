@@ -9,10 +9,15 @@ import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.service.AeroBoxVpnService
+import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.PreferenceManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface VpnConnectionResult {
     data class Success(val node: ProxyNode) : VpnConnectionResult
@@ -22,6 +27,11 @@ sealed interface VpnConnectionResult {
 }
 
 class VpnRepository(private val context: Context) {
+    companion object {
+        private val backgroundRefreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val dueRefreshRunning = AtomicBoolean(false)
+    }
+
     private val configResolver = VpnConfigResolver(context)
     private val subscriptionRepository by lazy {
         SubscriptionRepository(context)
@@ -33,10 +43,12 @@ class VpnRepository(private val context: Context) {
     }
 
     suspend fun connectNode(node: ProxyNode): VpnConnectionResult {
-        refreshDueSubscriptionsBeforeConnect()
-        return launchNodeAction(node) { config, resolvedNode ->
+        val result = launchNodeAction(node) { config, resolvedNode ->
             startVpn(config, resolvedNode.id)
         }
+        val triggerNode = (result as? VpnConnectionResult.Success)?.node ?: node
+        refreshDueSubscriptionsInBackground(triggerNode)
+        return result
     }
 
     suspend fun switchToNode(node: ProxyNode): VpnConnectionResult {
@@ -59,9 +71,53 @@ class VpnRepository(private val context: Context) {
         startServiceWithAction(AeroBoxVpnService.ACTION_SWITCH, config, nodeId)
     }
 
-    private suspend fun refreshDueSubscriptionsBeforeConnect() {
-        val subscriptions = subscriptionRepository.getAllSubscriptions().first()
-        subscriptionRepository.refreshDueSubscriptions(subscriptions)
+    private fun refreshDueSubscriptionsInBackground(triggerNode: ProxyNode) {
+        if (!dueRefreshRunning.compareAndSet(false, true)) return
+
+        backgroundRefreshScope.launch {
+            try {
+                val subscriptions = subscriptionRepository.getAllSubscriptions().first()
+                val results = subscriptionRepository.refreshDueSubscriptions(subscriptions)
+                val updatedSubscriptionIds = results.mapNotNull { it.getOrNull()?.subscriptionId }.toSet()
+                val triggerSubscriptionId = triggerNode.subscriptionId.takeIf { it > 0L } ?: return@launch
+                if (triggerSubscriptionId !in updatedSubscriptionIds) return@launch
+                if (!VpnStateManager.serviceActive.value) return@launch
+
+                RuntimeLogBuffer.append(
+                    "info",
+                    "Due subscription refreshed in background, reloading active connection"
+                )
+
+                when (val reloadResult = reloadActiveConnection(triggerNode)) {
+                    is VpnConnectionResult.Success -> Unit
+                    VpnConnectionResult.NoNodeAvailable -> {
+                        RuntimeLogBuffer.append(
+                            "warn",
+                            "Background subscription refresh finished but no replacement node was available"
+                        )
+                    }
+                    is VpnConnectionResult.InvalidConfig -> {
+                        RuntimeLogBuffer.append(
+                            "warn",
+                            "Background subscription refresh reload failed: ${reloadResult.error}"
+                        )
+                    }
+                    is VpnConnectionResult.Failure -> {
+                        RuntimeLogBuffer.append(
+                            "warn",
+                            "Background subscription refresh reload failed: ${reloadResult.throwable.message ?: reloadResult.throwable}"
+                        )
+                    }
+                }
+            } catch (error: Throwable) {
+                RuntimeLogBuffer.append(
+                    "warn",
+                    "Background subscription refresh failed: ${error.message ?: error}"
+                )
+            } finally {
+                dueRefreshRunning.set(false)
+            }
+        }
     }
 
     private suspend fun launchNodeAction(
