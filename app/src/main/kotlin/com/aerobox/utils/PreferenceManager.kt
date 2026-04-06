@@ -17,6 +17,9 @@ import kotlinx.coroutines.flow.map
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
 object PreferenceManager {
+    const val DEFAULT_REMOTE_DNS = "https://cloudflare-dns.com/dns-query"
+    const val DEFAULT_DIRECT_DNS = "udp://223.5.5.5"
+
     private val DARK_MODE = stringPreferencesKey("dark_mode")
     private val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
     private val AUTO_CONNECT = booleanPreferencesKey("auto_connect")
@@ -25,8 +28,8 @@ object PreferenceManager {
     // Routing & Network
     private val ROUTING_MODE = stringPreferencesKey("routing_mode")
     private val REMOTE_DNS = stringPreferencesKey("remote_dns")
-    private val LOCAL_DNS = stringPreferencesKey("local_dns")
-    private val ENABLE_DOH = booleanPreferencesKey("enable_doh")
+    // Keep the legacy storage key to preserve existing user data.
+    private val DIRECT_DNS = stringPreferencesKey("local_dns")
     private val PER_APP_PROXY_ENABLED = booleanPreferencesKey("per_app_proxy_enabled")
     private val PER_APP_PROXY_MODE = stringPreferencesKey("per_app_proxy_mode") // "whitelist" or "blacklist"
     private val PER_APP_PROXY_PACKAGES = stringSetPreferencesKey("per_app_proxy_packages")
@@ -64,13 +67,10 @@ object PreferenceManager {
         }
 
     fun remoteDnsFlow(context: Context): Flow<String> =
-        context.dataStore.data.map { it[REMOTE_DNS] ?: "1.1.1.1" }
+        context.dataStore.data.map { it[REMOTE_DNS] ?: DEFAULT_REMOTE_DNS }
 
-    fun localDnsFlow(context: Context): Flow<String> =
-        context.dataStore.data.map { it[LOCAL_DNS] ?: "223.5.5.5" }
-
-    fun enableDohFlow(context: Context): Flow<Boolean> =
-        context.dataStore.data.map { it[ENABLE_DOH] ?: true }
+    fun directDnsFlow(context: Context): Flow<String> =
+        context.dataStore.data.map { it[DIRECT_DNS] ?: DEFAULT_DIRECT_DNS }
 
     fun perAppProxyEnabledFlow(context: Context): Flow<Boolean> =
         context.dataStore.data.map { it[PER_APP_PROXY_ENABLED] ?: false }
@@ -150,12 +150,8 @@ object PreferenceManager {
         context.dataStore.edit { it[REMOTE_DNS] = dns }
     }
 
-    suspend fun setLocalDns(context: Context, dns: String) {
-        context.dataStore.edit { it[LOCAL_DNS] = dns }
-    }
-
-    suspend fun setEnableDoh(context: Context, enabled: Boolean) {
-        context.dataStore.edit { it[ENABLE_DOH] = enabled }
+    suspend fun setDirectDns(context: Context, dns: String) {
+        context.dataStore.edit { it[DIRECT_DNS] = dns }
     }
 
     suspend fun setPerAppProxyEnabled(context: Context, enabled: Boolean) {
@@ -219,8 +215,7 @@ object PreferenceManager {
     data class VpnConfigPreferences(
         val routingMode: RoutingMode,
         val remoteDns: String,
-        val localDns: String,
-        val enableDoh: Boolean,
+        val directDns: String,
         val enableSocksInbound: Boolean,
         val enableHttpInbound: Boolean,
         val ipv6Mode: IPv6Mode,
@@ -249,9 +244,8 @@ object PreferenceManager {
         }
         return VpnConfigPreferences(
             routingMode = routingMode,
-            remoteDns = prefs[REMOTE_DNS] ?: "1.1.1.1",
-            localDns = prefs[LOCAL_DNS] ?: "223.5.5.5",
-            enableDoh = prefs[ENABLE_DOH] ?: true,
+            remoteDns = prefs[REMOTE_DNS] ?: DEFAULT_REMOTE_DNS,
+            directDns = prefs[DIRECT_DNS] ?: DEFAULT_DIRECT_DNS,
             enableSocksInbound = prefs[ENABLE_SOCKS_INBOUND] ?: false,
             enableHttpInbound = prefs[ENABLE_HTTP_INBOUND] ?: false,
             ipv6Mode = ipv6Mode,

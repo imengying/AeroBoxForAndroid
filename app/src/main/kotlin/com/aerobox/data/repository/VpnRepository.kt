@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.logging.RuntimeLogBuffer
+import com.aerobox.core.network.NodeAddressFamilyResolver
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
@@ -166,17 +167,23 @@ class VpnRepository(private val context: Context) {
         node: ProxyNode,
         testUrl: String = "http://cp.cloudflare.com/",
         timeoutMs: Int = 5000,
-        localDns: String? = null,
+        directDns: String? = null,
         ipv6Mode: IPv6Mode? = null
     ): Int {
         return withContext(Dispatchers.IO) {
-            val resolvedLocalDns = localDns ?: PreferenceManager.localDnsFlow(context).first()
+            val resolvedDirectDns = directDns ?: PreferenceManager.directDnsFlow(context).first()
             val resolvedIpv6Mode = ipv6Mode ?: PreferenceManager.ipv6ModeFlow(context).first()
-            val safeLocalDns = if (resolvedLocalDns.contains("[")) "223.5.5.5" else resolvedLocalDns
+            val safeDirectDns = if (resolvedDirectDns.contains("[")) {
+                PreferenceManager.DEFAULT_DIRECT_DNS
+            } else {
+                resolvedDirectDns
+            }
+            val nodeIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(node)
             val config = ConfigGenerator.generateUrlTestConfig(
                 node = node,
-                localDns = safeLocalDns,
-                ipv6Mode = resolvedIpv6Mode
+                directDns = safeDirectDns,
+                ipv6Mode = resolvedIpv6Mode,
+                nodeIsIpv6OnlyOverride = nodeIsIpv6Only
             )
             val parseError = configResolver.validateConfig(config)
             if (parseError != null) {

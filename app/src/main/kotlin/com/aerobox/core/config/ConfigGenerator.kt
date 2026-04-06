@@ -27,22 +27,21 @@ object ConfigGenerator {
 
     fun validateDnsSettings(
         remoteDns: String,
-        localDns: String,
-        enableDoh: Boolean,
+        directDns: String,
         ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
         nodeIsIpv6Only: Boolean = false
     ): String? {
         return runCatching {
-            val normalizedRemote = normalizeRemoteDnsAddress(remoteDns, enableDoh, nodeIsIpv6Only)
-            val normalizedLocal = normalizeLocalDnsAddress(localDns, nodeIsIpv6Only)
+            val normalizedRemote = normalizeRemoteDnsAddress(remoteDns, nodeIsIpv6Only)
+            val normalizedDirect = normalizeDirectDnsAddress(directDns, nodeIsIpv6Only)
             validateDnsServerSpec(
                 label = "远程 DNS",
                 spec = parseDnsServer(normalizedRemote),
                 ipv6Mode = ipv6Mode
             )
             validateDnsServerSpec(
-                label = "本地 DNS",
-                spec = parseDnsServer(normalizedLocal),
+                label = "直连 DNS",
+                spec = parseDnsServer(normalizedDirect),
                 ipv6Mode = ipv6Mode
             )
             null
@@ -54,9 +53,8 @@ object ConfigGenerator {
     fun generateSingBoxConfig(
         node: ProxyNode,
         routingMode: RoutingMode = RoutingMode.RULE_BASED,
-        remoteDns: String = "1.1.1.1",
-        localDns: String = "223.5.5.5",
-        enableDoh: Boolean = true,
+        remoteDns: String = "https://cloudflare-dns.com/dns-query",
+        directDns: String = "udp://223.5.5.5",
         enableSocksInbound: Boolean = false,
         enableHttpInbound: Boolean = false,
         ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
@@ -66,7 +64,8 @@ object ConfigGenerator {
         enableGeoBlockQuic: Boolean = true,
         geoIpCnRuleSetPath: String? = null,
         geoSiteCnRuleSetPath: String? = null,
-        geoSiteAdsRuleSetPath: String? = null
+        geoSiteAdsRuleSetPath: String? = null,
+        nodeIsIpv6OnlyOverride: Boolean? = null
     ): String {
         val config = JSONObject()
         val hasGeoSiteCn = !geoSiteCnRuleSetPath.isNullOrBlank()
@@ -80,13 +79,12 @@ object ConfigGenerator {
                 .put("timestamp", true)
         )
 
-        val nodeIsIpv6Only = isIpv6Literal(node.server)
+        val nodeIsIpv6Only = nodeIsIpv6OnlyOverride ?: isIpv6Literal(node.server)
         config.put(
             "dns",
             buildDns(
                 remoteDns = remoteDns,
-                localDns = localDns,
-                enableDoh = enableDoh,
+                directDns = directDns,
                 routingMode = routingMode,
                 enableGeoCnDomainRule = enableGeoCnDomainRule && hasGeoSiteCn,
                 ipv6Mode = ipv6Mode,
@@ -127,11 +125,12 @@ object ConfigGenerator {
 
     fun generateUrlTestConfig(
         node: ProxyNode,
-        localDns: String = "223.5.5.5",
-        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE
+        directDns: String = "udp://223.5.5.5",
+        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
+        nodeIsIpv6OnlyOverride: Boolean? = null
     ): String {
         val config = JSONObject()
-        val nodeIsIpv6Only = isIpv6Literal(node.server)
+        val nodeIsIpv6Only = nodeIsIpv6OnlyOverride ?: isIpv6Literal(node.server)
         config.put(
             "log",
             JSONObject()
@@ -141,9 +140,8 @@ object ConfigGenerator {
         config.put(
             "dns",
             buildDns(
-                remoteDns = "1.1.1.1",
-                localDns = localDns,
-                enableDoh = false,
+                remoteDns = "https://cloudflare-dns.com/dns-query",
+                directDns = directDns,
                 routingMode = RoutingMode.DIRECT,
                 enableGeoCnDomainRule = false,
                 ipv6Mode = ipv6Mode,
@@ -186,8 +184,7 @@ object ConfigGenerator {
 
     private fun buildDns(
         remoteDns: String,
-        localDns: String,
-        enableDoh: Boolean,
+        directDns: String,
         routingMode: RoutingMode,
         enableGeoCnDomainRule: Boolean,
         ipv6Mode: IPv6Mode,
@@ -208,7 +205,7 @@ object ConfigGenerator {
 
         val directServer = buildDnsServer(
             tag = DNS_DIRECT_TAG,
-            dns = normalizeLocalDnsAddress(localDns, nodeIsIpv6Only),
+            dns = normalizeDirectDnsAddress(directDns, nodeIsIpv6Only),
             resolverTag = DNS_LOCAL_TAG,
             ipv6Mode = ipv6Mode
         )
@@ -223,7 +220,7 @@ object ConfigGenerator {
 
         val remoteServer = buildDnsServer(
             tag = DNS_REMOTE_TAG,
-            dns = normalizeRemoteDnsAddress(remoteDns, enableDoh, nodeIsIpv6Only),
+            dns = normalizeRemoteDnsAddress(remoteDns, nodeIsIpv6Only),
             detour = "proxy",
             resolverTag = DNS_DIRECT_TAG,
             ipv6Mode = ipv6Mode,
@@ -346,37 +343,30 @@ object ConfigGenerator {
         }
     }
 
-    private fun normalizeRemoteDnsAddress(remoteDns: String, enableDoh: Boolean, nodeIsIpv6Only: Boolean = false): String {
+    private fun normalizeRemoteDnsAddress(remoteDns: String, nodeIsIpv6Only: Boolean = false): String {
         val trimmed = remoteDns.trim()
         if (trimmed.isBlank()) {
-            return if (enableDoh) "https://cloudflare-dns.com/dns-query" else if (nodeIsIpv6Only) "2606:4700:4700::1111" else "1.1.1.1"
-        }
-
-        if (enableDoh) {
-            return when {
-                trimmed.startsWith("https://") -> normalizeEncryptedDnsEndpoint(trimmed, "https")
-                trimmed.startsWith("tls://") -> normalizeEncryptedDnsEndpoint(trimmed, "tls")
-                trimmed.startsWith("quic://") -> normalizeEncryptedDnsEndpoint(trimmed, "quic")
-                isIpLiteral(trimmed) -> knownEncryptedDnsEndpoint(trimmed) ?: "tls://$trimmed"
-                else -> "tls://$trimmed"
-            }
+            return "https://cloudflare-dns.com/dns-query"
         }
 
         return when {
+            trimmed.startsWith("https://") -> normalizeEncryptedDnsEndpoint(trimmed, "https")
             trimmed.startsWith("tls://") -> {
-                val host = trimmed.removePrefix("tls://")
-                parseHostAndPort(host, 853).first
-            }
-            trimmed.startsWith("https://") -> {
-                runCatching { URI(trimmed).host }
-                    .getOrNull()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: trimmed.removePrefix("https://").substringBefore('/')
+                normalizeEncryptedDnsEndpoint(trimmed, "tls")
             }
             trimmed.startsWith("quic://") -> {
-                val host = trimmed.removePrefix("quic://")
-                parseHostAndPort(host, 853).first
+                normalizeEncryptedDnsEndpoint(trimmed, "quic")
             }
+            trimmed.startsWith("tcp://") -> normalizeIpv6OnlyDnsEndpoint(
+                value = trimmed,
+                scheme = "tcp",
+                defaultPort = 53
+            ).takeIf { nodeIsIpv6Only } ?: trimmed
+            trimmed.startsWith("udp://") -> normalizeIpv6OnlyDnsEndpoint(
+                value = trimmed,
+                scheme = "udp",
+                defaultPort = 53
+            ).takeIf { nodeIsIpv6Only } ?: trimmed
             else -> if (nodeIsIpv6Only) knownIpv6DnsAddress(trimmed) ?: trimmed else trimmed
         }
     }
@@ -428,8 +418,8 @@ object ConfigGenerator {
         }
     }
 
-    private fun normalizeLocalDnsAddress(localDns: String, nodeIsIpv6Only: Boolean = false): String {
-        val trimmed = localDns.trim()
+    private fun normalizeDirectDnsAddress(directDns: String, nodeIsIpv6Only: Boolean = false): String {
+        val trimmed = directDns.trim()
         if (trimmed == "[ipv4]" || trimmed == "[ipv6]") {
             return if (nodeIsIpv6Only) "2400:3200::1" else "223.5.5.5"
         }
@@ -766,26 +756,33 @@ object ConfigGenerator {
     }
 
     private fun buildBaseRouteRules(nodeIsIpv6Only: Boolean): JSONArray {
-        return JSONArray()
-            // sniff + resolve replace the deprecated inbound-level
-            // sniff / sniff_override_destination / domain_strategy fields.
-            .put(JSONObject().put("action", "sniff"))
-            .put(
-                JSONObject()
-                    .put("action", "resolve")
-                    .put("strategy", destinationDomainStrategy(nodeIsIpv6Only))
-            )
-            .put(
+        return JSONArray().apply {
+            // Sniff is still useful for routing and SNI extraction.
+            put(JSONObject().put("action", "sniff"))
+
+            // Avoid client-side destination resolution on IPv6-only nodes.
+            // Some IPv6-only servers can still reach IPv4-only sites via
+            // server-side resolver/NAT64 setup, but local resolve would turn a
+            // domain into a missing AAAA record and fail before the proxy sees it.
+            if (!nodeIsIpv6Only) {
+                put(
+                    JSONObject()
+                        .put("action", "resolve")
+                        .put("strategy", destinationDomainStrategy(nodeIsIpv6Only))
+                )
+            }
+
+            put(
                 JSONObject()
                     .put("port", JSONArray().put(53))
                     .put("action", "hijack-dns")
             )
-            .put(
+            put(
                 JSONObject()
                     .put("protocol", "dns")
                     .put("action", "hijack-dns")
-                )
-            .put(
+            )
+            put(
                 JSONObject()
                     .put(
                         "ip_cidr",
@@ -804,13 +801,13 @@ object ConfigGenerator {
                     .put("action", "route")
                     .put("outbound", "direct")
             )
-            .put(
+            put(
                 JSONObject()
                     .put("ip_cidr", JSONArray().put("224.0.0.0/3").put("ff00::/8"))
                     .put("source_ip_cidr", JSONArray().put("224.0.0.0/3").put("ff00::/8"))
                     .put("action", "reject")
             )
-            .put(
+            put(
                 JSONObject()
                     .put("ip_cidr", JSONArray()
                         .put("1.1.1.1/32").put("1.0.0.1/32")
@@ -822,6 +819,7 @@ object ConfigGenerator {
                     .put("action", "route")
                     .put("outbound", "direct")
             )
+        }
     }
 
     // ── Proxy Outbound ───────────────────────────────────────────────
@@ -984,6 +982,12 @@ object ConfigGenerator {
             .substringBefore('%')
             .trim()
     }
+
+    fun normalizedServerHost(server: String): String = normalizeOutboundServer(server)
+
+    fun isIpv6ServerLiteral(server: String): Boolean = isIpv6Literal(server)
+
+    fun isIpLiteralHost(host: String): Boolean = isIpLiteral(host)
 
     private fun isIpv6Literal(server: String): Boolean {
         val normalized = server.trim().removePrefix("[").removeSuffix("]").substringBefore('%')

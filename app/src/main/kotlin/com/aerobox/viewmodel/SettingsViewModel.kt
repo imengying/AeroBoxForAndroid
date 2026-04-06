@@ -52,13 +52,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.GLOBAL_PROXY)
 
     val remoteDns: StateFlow<String> = PreferenceManager.remoteDnsFlow(appContext)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "1.1.1.1")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PreferenceManager.DEFAULT_REMOTE_DNS)
 
-    val localDns: StateFlow<String> = PreferenceManager.localDnsFlow(appContext)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "223.5.5.5")
-
-    val enableDoh: StateFlow<Boolean> = PreferenceManager.enableDohFlow(appContext)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val directDns: StateFlow<String> = PreferenceManager.directDnsFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PreferenceManager.DEFAULT_DIRECT_DNS)
 
     val perAppProxyEnabled: StateFlow<Boolean> = PreferenceManager.perAppProxyEnabledFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -115,44 +112,40 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val normalizedDns = dns.trim()
         validateAndPersistDnsSettings(
             remoteDns = normalizedDns,
-            localDns = PreferenceManager.localDnsFlow(appContext).first(),
-            enableDoh = PreferenceManager.enableDohFlow(appContext).first()
+            directDns = PreferenceManager.directDnsFlow(appContext).first()
         ) ?: return
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用 DNS 设置失败"
         )
     }
 
-    suspend fun setLocalDns(dns: String) {
+    suspend fun setDirectDns(dns: String) {
         val normalizedDns = dns.trim()
         validateAndPersistDnsSettings(
             remoteDns = PreferenceManager.remoteDnsFlow(appContext).first(),
-            localDns = normalizedDns,
-            enableDoh = PreferenceManager.enableDohFlow(appContext).first()
+            directDns = normalizedDns
         ) ?: return
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用 DNS 设置失败"
         )
     }
 
-    suspend fun setDnsServers(remoteDns: String, localDns: String) {
+    suspend fun setDnsServers(remoteDns: String, directDns: String) {
         val normalizedRemoteDns = remoteDns.trim()
-        val normalizedLocalDns = localDns.trim()
+        val normalizedDirectDns = directDns.trim()
         validateAndPersistDnsSettings(
             remoteDns = normalizedRemoteDns,
-            localDns = normalizedLocalDns,
-            enableDoh = PreferenceManager.enableDohFlow(appContext).first()
+            directDns = normalizedDirectDns
         ) ?: return
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用 DNS 设置失败"
         )
     }
 
-    suspend fun setEnableDoh(enabled: Boolean) {
+    suspend fun resetDnsServers() {
         validateAndPersistDnsSettings(
-            remoteDns = PreferenceManager.remoteDnsFlow(appContext).first(),
-            localDns = PreferenceManager.localDnsFlow(appContext).first(),
-            enableDoh = enabled
+            remoteDns = PreferenceManager.DEFAULT_REMOTE_DNS,
+            directDns = PreferenceManager.DEFAULT_DIRECT_DNS
         ) ?: return
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用 DNS 设置失败"
@@ -263,20 +256,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun validateAndPersistDnsSettings(
         remoteDns: String,
-        localDns: String,
-        enableDoh: Boolean
+        directDns: String
     ): PreferenceManager.VpnConfigPreferences? {
         val currentPrefs = PreferenceManager.readVpnConfigPreferences(appContext)
         val candidatePrefs = currentPrefs.copy(
             remoteDns = remoteDns,
-            localDns = localDns,
-            enableDoh = enableDoh
+            directDns = directDns
         )
 
         val syntaxError = ConfigGenerator.validateDnsSettings(
             remoteDns = remoteDns,
-            localDns = localDns,
-            enableDoh = enableDoh,
+            directDns = directDns,
             ipv6Mode = currentPrefs.ipv6Mode
         )
         if (syntaxError != null) {
@@ -305,8 +295,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
 
         PreferenceManager.setRemoteDns(appContext, remoteDns)
-        PreferenceManager.setLocalDns(appContext, localDns)
-        PreferenceManager.setEnableDoh(appContext, enableDoh)
+        PreferenceManager.setDirectDns(appContext, directDns)
         return candidatePrefs
     }
 

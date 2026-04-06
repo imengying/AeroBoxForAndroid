@@ -6,6 +6,7 @@ import com.aerobox.AeroBoxApplication
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.logging.RuntimeLogBuffer
+import com.aerobox.core.network.NodeAddressFamilyResolver
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.utils.PreferenceManager
@@ -96,13 +97,13 @@ class VpnConfigResolver(private val context: Context) {
         } else {
             null
         }
+        val nodeIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(node)
 
         val config = ConfigGenerator.generateSingBoxConfig(
             node = node,
             routingMode = prefs.routingMode,
             remoteDns = prefs.remoteDns,
-            localDns = prefs.localDns,
-            enableDoh = prefs.enableDoh,
+            directDns = prefs.directDns,
             enableSocksInbound = prefs.enableSocksInbound,
             enableHttpInbound = prefs.enableHttpInbound,
             ipv6Mode = prefs.ipv6Mode,
@@ -112,7 +113,8 @@ class VpnConfigResolver(private val context: Context) {
             enableGeoBlockQuic = prefs.enableGeoRules && prefs.enableGeoBlockQuic,
             geoIpCnRuleSetPath = geoIpCnRuleSetPath,
             geoSiteCnRuleSetPath = geoSiteCnRuleSetPath,
-            geoSiteAdsRuleSetPath = geoSiteAdsRuleSetPath
+            geoSiteAdsRuleSetPath = geoSiteAdsRuleSetPath,
+            nodeIsIpv6OnlyOverride = nodeIsIpv6Only
         )
         return config
     }

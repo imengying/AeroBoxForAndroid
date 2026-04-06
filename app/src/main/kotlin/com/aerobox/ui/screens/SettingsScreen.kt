@@ -70,8 +70,7 @@ fun SettingsScreen(
     val autoConnect by viewModel.autoConnect.collectAsStateWithLifecycle()
     val routingMode by viewModel.routingMode.collectAsStateWithLifecycle()
     val remoteDns by viewModel.remoteDns.collectAsStateWithLifecycle()
-    val localDns by viewModel.localDns.collectAsStateWithLifecycle()
-    val enableDoh by viewModel.enableDoh.collectAsStateWithLifecycle()
+    val directDns by viewModel.directDns.collectAsStateWithLifecycle()
     val perAppProxyEnabled by viewModel.perAppProxyEnabled.collectAsStateWithLifecycle()
     val enableSocksInbound by viewModel.enableSocksInbound.collectAsStateWithLifecycle()
     val enableHttpInbound by viewModel.enableHttpInbound.collectAsStateWithLifecycle()
@@ -195,18 +194,8 @@ fun SettingsScreen(
                 onClick = { showDnsDialog = true },
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
                 title = "DNS 服务器",
-                supporting = "远程: $remoteDns · 本地: $localDns",
+                supporting = "远程: $remoteDns · 直连: $directDns",
                 trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
-            )
-        }
-        item {
-            SettingItem(
-                icon = { Icon(AppIcons.Security, contentDescription = null) },
-                title = "加密 DNS",
-                supporting = "使用 DNS over TLS/HTTPS",
-                trailing = {
-                    Switch(checked = enableDoh, onCheckedChange = { scope.launch { viewModel.setEnableDoh(it) } })
-                }
             )
         }
 
@@ -327,11 +316,17 @@ fun SettingsScreen(
     if (showDnsDialog) {
         DnsSettingsDialog(
             remoteDns = remoteDns,
-            localDns = localDns,
+            directDns = directDns,
             onDismiss = { showDnsDialog = false },
-            onConfirm = { remote, local ->
+            onReset = {
                 scope.launch {
-                    viewModel.setDnsServers(remote, local)
+                    viewModel.resetDnsServers()
+                }
+                showDnsDialog = false
+            },
+            onConfirm = { remote, direct ->
+                scope.launch {
+                    viewModel.setDnsServers(remote, direct)
                 }
                 showDnsDialog = false
             }
@@ -343,12 +338,13 @@ fun SettingsScreen(
 @Composable
 private fun DnsSettingsDialog(
     remoteDns: String,
-    localDns: String,
+    directDns: String,
     onDismiss: () -> Unit,
-    onConfirm: (remote: String, local: String) -> Unit
+    onReset: () -> Unit,
+    onConfirm: (remote: String, direct: String) -> Unit
 ) {
     var remote by remember { mutableStateOf(remoteDns) }
-    var local by remember { mutableStateOf(localDns) }
+    var direct by remember { mutableStateOf(directDns) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -359,16 +355,16 @@ private fun DnsSettingsDialog(
                     value = remote,
                     onValueChange = { remote = it },
                     label = { Text("远程 DNS") },
-                    supportingText = { Text("示例: tls://1.1.1.1, https://cloudflare-dns.com/dns-query") },
+                    supportingText = { Text("示例: https://cloudflare-dns.com/dns-query, tls://1.1.1.1, udp://8.8.8.8") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = local,
-                    onValueChange = { local = it },
-                    label = { Text("本地 DNS") },
-                    supportingText = { Text("用于解析中国域名: 223.5.5.5, 119.29.29.29") },
+                    value = direct,
+                    onValueChange = { direct = it },
+                    label = { Text("直连 DNS") },
+                    supportingText = { Text("示例: udp://223.5.5.5, https://dns.alidns.com/dns-query") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -376,12 +372,15 @@ private fun DnsSettingsDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(remote.trim(), local.trim()) },
-                enabled = remote.isNotBlank() && local.isNotBlank()
+                onClick = { onConfirm(remote.trim(), direct.trim()) },
+                enabled = remote.isNotBlank() && direct.isNotBlank()
             ) { Text(stringResource(R.string.confirm)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            Row {
+                TextButton(onClick = onReset) { Text("恢复默认") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
         }
     )
 }

@@ -82,7 +82,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private data class UrlTestSettings(
-        val localDns: String,
+        val directDns: String,
         val ipv6Mode: IPv6Mode
     )
 
@@ -475,7 +475,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun testNodeLatency(node: ProxyNode, settings: UrlTestSettings): Int {
         return vpnRepository.urlTestNode(
             node = node,
-            localDns = settings.localDns,
+            directDns = settings.directDns,
             ipv6Mode = settings.ipv6Mode,
             timeoutMs = NODE_TEST_TIMEOUT_MS
         )
@@ -632,11 +632,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     private suspend fun loadUrlTestSettings(): UrlTestSettings {
-        val userLocalDns = PreferenceManager.localDnsFlow(appContext).first()
+        val userDirectDns = PreferenceManager.directDnsFlow(appContext).first()
         val ipv6Mode = PreferenceManager.ipv6ModeFlow(appContext).first()
-        val safeLocalDns = if (userLocalDns.contains("[")) "223.5.5.5" else userLocalDns
+        val safeDirectDns = if (userDirectDns.contains("[")) {
+            PreferenceManager.DEFAULT_DIRECT_DNS
+        } else {
+            userDirectDns
+        }
         return UrlTestSettings(
-            localDns = safeLocalDns,
+            directDns = safeDirectDns,
             ipv6Mode = ipv6Mode
         )
     }
