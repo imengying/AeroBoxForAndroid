@@ -10,6 +10,9 @@ if [ ! -x "${SDKMANAGER}" ]; then
   exit 1
 fi
 
-yes | "${SDKMANAGER}" --licenses >/dev/null
+(
+  set +o pipefail
+  yes | "${SDKMANAGER}" --licenses >/dev/null
+)
 "${SDKMANAGER}" "platforms;android-36" "build-tools;36.0.0" "ndk;${ANDROID_NDK_VERSION}"
 echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "${GITHUB_ENV}"
