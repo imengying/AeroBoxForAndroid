@@ -94,7 +94,7 @@ object ConfigGenerator {
                     .takeUnless { it.isBlank() || isIpLiteral(it) }
             )
         )
-        config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, ipv6Mode, nodeIsIpv6Only))
+        config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, ipv6Mode))
 
         val proxyOutbound = buildProxyOutbound(node).put("tag", PROXY_OUTBOUND_TAG)
         config.put(
@@ -603,8 +603,7 @@ object ConfigGenerator {
     private fun buildInbounds(
         enableSocks: Boolean,
         enableHttp: Boolean,
-        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
-        nodeIsIpv6Only: Boolean = false
+        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE
     ): JSONArray {
         val inbounds = JSONArray()
         val tunAddresses = JSONArray().apply {
@@ -623,15 +622,6 @@ object ConfigGenerator {
             .put("mtu", DEFAULT_TUN_MTU)
             .put("auto_route", true)
             .put("stack", "system")
-
-        if (nodeIsIpv6Only) {
-            // HTTPS apps often connect to an IPv4 address that they resolved
-            // locally before entering the TUN. For IPv6-only nodes, let sing-box
-            // override that address with the sniffed SNI domain so the remote
-            // side can resolve and reach IPv4-only sites itself.
-            tunInbound.put("sniff", true)
-            tunInbound.put("sniff_override_destination", true)
-        }
 
         inbounds.put(tunInbound)
 
