@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
@@ -73,6 +72,7 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -218,45 +218,72 @@ fun SubscriptionScreen(
         snackbarHost = { AppSnackbarHost(hostState = snackbarHostState) },
         floatingActionButton = {
             Box {
+                val openQrImport = {
+                    showImportMenu = false
+                    val hasCameraPermission = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.CAMERA
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (hasCameraPermission) {
+                        qrScanLauncher.launch(buildQrScanOptions())
+                    } else {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                }
+                val openLocalImport = {
+                    showImportMenu = false
+                    localFileLauncher.launch(arrayOf("*/*"))
+                }
+
                 DropdownMenu(
                     expanded = showImportMenu,
                     onDismissRequest = { showImportMenu = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.add_via_subscription_link)) },
+                        text = {
+                            Text(
+                                text = stringResource(R.string.add_via_subscription_link),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
                         onClick = {
                             showImportMenu = false
                             showAddSubscriptionDialog = true
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.add_via_nodes)) },
+                        text = {
+                            Text(
+                                text = stringResource(R.string.add_via_nodes),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
                         onClick = {
                             showImportMenu = false
                             showAddNodeDialog = true
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.scan_qr)) },
-                        onClick = {
-                            showImportMenu = false
-                            val hasCameraPermission = ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.CAMERA
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (hasCameraPermission) {
-                                qrScanLauncher.launch(buildQrScanOptions())
-                            } else {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                        }
+                        text = {
+                            Text(
+                                text = stringResource(R.string.scan_qr),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
+                        onClick = openQrImport
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.add_via_local_file)) },
-                        onClick = {
-                            showImportMenu = false
-                            localFileLauncher.launch(arrayOf("*/*"))
-                        }
+                        text = {
+                            Text(
+                                text = stringResource(R.string.add_via_local_file),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
+                        onClick = openLocalImport
                     )
                 }
                 FloatingActionButton(onClick = { showImportMenu = !showImportMenu }) {
@@ -447,11 +474,13 @@ fun SubscriptionScreen(
 private fun buildQrScanOptions(): ScanOptions {
     return ScanOptions().apply {
         setPrompt("扫描订阅或节点二维码")
+        setDesiredBarcodeFormats(ScanOptions.QR_CODE)
         setBeepEnabled(false)
         setOrientationLocked(false)
     }
 }
 
+@Composable
 @Composable
 private fun NodeImportDialog(
     onDismiss: () -> Unit,
