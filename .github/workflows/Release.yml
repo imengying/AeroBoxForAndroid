@@ -47,8 +47,6 @@ jobs:
         run: bash .github/scripts/install-android-packages.sh
 
       - name: Resolve latest stable sing-box release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: bash .github/scripts/resolve-sing-box-version.sh
 
       - name: Build libbox.aar
@@ -105,8 +103,6 @@ jobs:
           echo "AEROBOX_VERSION_CODE=${VERSION_CODE}" >> "${GITHUB_ENV}"
 
       - name: Prepare bundled routing rule-set assets
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: bash .github/scripts/prepare-geo-assets.sh
 
       - name: Build unsigned release APK
