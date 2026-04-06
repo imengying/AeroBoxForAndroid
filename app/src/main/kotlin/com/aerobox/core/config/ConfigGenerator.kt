@@ -216,6 +216,11 @@ object ConfigGenerator {
             return JSONObject()
                 .put("servers", JSONArray().put(directServer).put(localResolverServer).put(bootstrapServer))
                 .put("final", DNS_DIRECT_TAG)
+                // Android apps often resolve domains before opening the actual
+                // socket. Keep reverse IP->domain mappings so transparent proxy
+                // flows can still recover the original hostname during routing.
+                .put("independent_cache", true)
+                .put("reverse_mapping", true)
                 .putDnsQueryStrategy(ipv6Mode)
         }
 
@@ -238,6 +243,11 @@ object ConfigGenerator {
                     .put(bootstrapServer)
             )
             .put("final", DNS_REMOTE_TAG)
+            // Android apps often resolve domains before opening the actual
+            // socket. Keep reverse IP->domain mappings so transparent proxy
+            // flows can still recover the original hostname during routing.
+            .put("independent_cache", true)
+            .put("reverse_mapping", true)
             .putDnsQueryStrategy(ipv6Mode)
 
         val dnsRules = JSONArray()
