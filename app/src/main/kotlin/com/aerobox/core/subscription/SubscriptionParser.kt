@@ -1217,20 +1217,6 @@ object SubscriptionParser {
         return null
     }
 
-    private fun optIntField(obj: JSONObject?, vararg keys: String): Int? {
-        val source = obj ?: return null
-        for (key in keys) {
-            if (!source.has(key)) continue
-            val value = source.opt(key)
-            return when (value) {
-                is Number -> value.toInt()
-                is String -> value.trim().toIntOrNull()
-                else -> null
-            }
-        }
-        return null
-    }
-
     private fun tryBase64Decode(value: String): String {
         val sanitized = value.trim().replace("\n", "").replace("\r", "")
         if (sanitized.isBlank()) return value

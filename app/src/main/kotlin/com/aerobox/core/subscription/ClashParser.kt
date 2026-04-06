@@ -18,10 +18,6 @@ object ClashParser {
         val diagnostics: ParseDiagnostics = ParseDiagnostics()
     )
 
-    fun parseClashYaml(content: String): List<ProxyNode> {
-        return parseClashYamlDetailed(content).nodes
-    }
-
     fun parseClashYamlDetailed(content: String): ClashParseResult {
         val root = loadYamlRoot(content) ?: return ClashParseResult(
             nodes = emptyList(),
@@ -381,25 +377,6 @@ object ClashParser {
                 }
                 .takeIf { it.isNotEmpty() }
                 ?.joinToString(";")
-            else -> value.toString().trim().takeIf { it.isNotEmpty() }
-        }
-    }
-
-    private fun canonicalizeJsonValue(value: Any?): String? {
-        return when (value) {
-            null -> null
-            is String -> value.trim().takeIf { it.isNotEmpty() }
-            is Map<*, *> -> {
-                val orderedKeys = value.keys
-                    .mapNotNull { it?.toString()?.trim()?.takeIf { key -> key.isNotEmpty() } }
-                    .sorted()
-                if (orderedKeys.isEmpty()) return null
-                val canonical = org.json.JSONObject()
-                orderedKeys.forEach { key ->
-                    canonical.put(key, value.entries.firstOrNull { it.key?.toString() == key }?.value)
-                }
-                canonical.toString()
-            }
             else -> value.toString().trim().takeIf { it.isNotEmpty() }
         }
     }
