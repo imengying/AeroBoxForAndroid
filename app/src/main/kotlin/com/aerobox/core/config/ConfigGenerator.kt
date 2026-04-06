@@ -622,10 +622,6 @@ object ConfigGenerator {
             .put("address", tunAddresses)
             .put("mtu", DEFAULT_TUN_MTU)
             .put("auto_route", true)
-            // Hiddify defaults to mixed and NekoBox defaults to gVisor instead
-            // of system. IPv6-only nodes are the path where we currently see
-            // payload-bearing TCP streams fail, so prefer mixed there first and
-            // keep the existing system stack for the common case.
             .put("stack", if (nodeIsIpv6Only) "mixed" else "system")
 
         inbounds.put(tunInbound)
