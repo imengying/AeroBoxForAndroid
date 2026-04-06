@@ -215,7 +215,7 @@ object ConfigGenerator {
             return JSONObject()
                 .put("servers", JSONArray().put(directServer).put(localResolverServer).put(bootstrapServer))
                 .put("final", DNS_DIRECT_TAG)
-                .putDestinationDomainStrategy(nodeIsIpv6Only)
+                .putDnsQueryStrategy(ipv6Mode)
         }
 
         val remoteServer = buildDnsServer(
@@ -237,7 +237,7 @@ object ConfigGenerator {
                     .put(bootstrapServer)
             )
             .put("final", DNS_REMOTE_TAG)
-            .putDestinationDomainStrategy(nodeIsIpv6Only)
+            .putDnsQueryStrategy(ipv6Mode)
 
         val dnsRules = JSONArray()
         serverDomainHint
@@ -995,10 +995,10 @@ object ConfigGenerator {
             normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
     }
 
-    private fun JSONObject.putDestinationDomainStrategy(
-        nodeIsIpv6Only: Boolean
+    private fun JSONObject.putDnsQueryStrategy(
+        ipv6Mode: IPv6Mode
     ): JSONObject {
-        put("strategy", destinationDomainStrategy(nodeIsIpv6Only))
+        put("strategy", ipv6Mode.domainStrategy())
         return this
     }
 
