@@ -205,22 +205,6 @@ fun PerAppProxyScreen(
                 }
             }
 
-            Text(
-                text = buildString {
-                    append(if (mode == "blacklist") "已选中的应用将绕过代理（直连）" else "仅选中的应用会走代理")
-                    append(" · 已选 ${selectedPackages.size} 个")
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
-            Text(
-                text = "列表仅显示系统当前可见的可启动应用",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
