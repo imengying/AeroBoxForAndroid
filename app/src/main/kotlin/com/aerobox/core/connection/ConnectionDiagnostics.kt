@@ -20,6 +20,14 @@ object ConnectionDiagnostics {
         val msg = rawError.lowercase()
 
         return when {
+            msg.contains("reality") && msg.contains("sni") -> {
+                ConnectionIssue(
+                    title = "Reality 配置不完整",
+                    message = "Reality 节点使用 IP 地址时需要显式填写 SNI/server name。",
+                    rawError = rawError
+                )
+            }
+
             msg.contains("geosite") ||
                 msg.contains("geoip") ||
                 msg.contains("rule_set") ||

@@ -825,6 +825,7 @@ object ConfigGenerator {
     // ── Proxy Outbound ───────────────────────────────────────────────
 
     private fun buildProxyOutbound(node: ProxyNode): JSONObject {
+        validateTlsServerNameRequirements(node)
         val cleanServer = normalizeOutboundServer(node.server)
         val enabledNetwork = node.effectiveEnabledNetwork()
         val transportType = node.effectiveTransportType()
@@ -955,6 +956,14 @@ object ConfigGenerator {
             )
         }
         return outbound
+    }
+
+    private fun validateTlsServerNameRequirements(node: ProxyNode) {
+        val cleanServer = normalizeOutboundServer(node.server)
+        val usesReality = !node.publicKey.isNullOrBlank()
+        if (usesReality && isIpLiteral(cleanServer) && node.sni.isNullOrBlank()) {
+            throw IllegalArgumentException("Reality 节点使用 IP 地址时必须显式填写 SNI")
+        }
     }
 
     private fun applyDialFields(outbound: JSONObject, node: ProxyNode) {

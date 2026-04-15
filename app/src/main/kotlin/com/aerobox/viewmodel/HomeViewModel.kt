@@ -12,6 +12,7 @@ import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.core.connection.ConnectionFixAction
 import com.aerobox.core.connection.ConnectionIssue
 import com.aerobox.core.geo.GeoAssetManager
+import com.aerobox.core.network.NodeAddressFamilyResolver
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.NodeLatencyState
@@ -549,7 +550,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             "https://api6.ipify.org",
             "https://v6.ident.me"
         )
-        val preferIpv6Only = isIpv6Literal(node?.server.orEmpty())
+        val preferIpv6Only = node?.let { NodeAddressFamilyResolver.isIpv6Only(it) } == true
         val useProxyFriendlyEndpoints = vpnState.value.isConnected
         val ipv4Endpoints = if (useProxyFriendlyEndpoints) {
             proxiedIpv4Endpoints
@@ -648,16 +649,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun isLikelyIpAddress(value: String): Boolean {
         val text = value.trim()
         return IPV4_REGEX.matches(text) || (text.contains(':') && IPV6_REGEX.matches(text))
-    }
-
-    private fun isIpv6Literal(host: String): Boolean {
-        val value = host
-            .trim()
-            .removePrefix("[")
-            .removeSuffix("]")
-            .substringBefore('%')
-        if (!value.contains(':')) return false
-        return value.all { it.isDigit() || it in "abcdefABCDEF:." }
     }
 
     private fun handleConnectionFailure(context: Context, rawError: String) {

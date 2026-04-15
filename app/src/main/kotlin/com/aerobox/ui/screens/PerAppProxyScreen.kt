@@ -121,7 +121,7 @@ fun PerAppProxyScreen(
     }
     val stableSelectedPackages = initialSelectedPackages ?: selectedPackages
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(selectedPackages) {
         viewModel.loadInstalledApps()
     }
 
@@ -213,6 +213,12 @@ fun PerAppProxyScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+            Text(
+                text = "列表仅显示系统当前可见的可启动应用",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
 
             OutlinedTextField(

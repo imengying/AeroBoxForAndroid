@@ -234,11 +234,21 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun loadInstalledApps(forceRefresh: Boolean = false) {
-        if (_installedApps.value.isNotEmpty() && !forceRefresh) return
+        val explicitPackages = perAppProxyPackages.value
+        val visiblePackages = _installedApps.value.asSequence().map { it.packageName }.toSet()
+        if (!forceRefresh &&
+            _installedApps.value.isNotEmpty() &&
+            explicitPackages.all { it in visiblePackages }
+        ) {
+            return
+        }
         viewModelScope.launch {
             _isLoadingInstalledApps.value = true
             runCatching {
-                appListRepository.getInstalledApps(forceRefresh = forceRefresh)
+                appListRepository.getInstalledApps(
+                    explicitPackages = explicitPackages,
+                    forceRefresh = forceRefresh
+                )
             }.onSuccess { apps ->
                 _installedApps.value = apps
             }.onFailure {

@@ -19,6 +19,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Headers
@@ -51,6 +53,7 @@ class SubscriptionRepository(context: Context) {
 
     companion object {
         private const val NODE_MATCH_THRESHOLD = 50
+        private const val MAX_CONCURRENT_SUBSCRIPTION_REFRESHES = 4
         private const val SUBSCRIPTION_USER_AGENT = "clash-verge/v1.3.8"
         const val MIN_UPDATE_INTERVAL_MS = 15 * 60 * 1000L
         const val DEFAULT_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000L
@@ -169,7 +172,10 @@ class SubscriptionRepository(context: Context) {
             val updatedAt = System.currentTimeMillis()
             val subscriptionId = database.withTransaction {
                 val insertedId = subscriptionDao.insert(subscription)
-                val nodes = prepared.nodes.map { it.copy(subscriptionId = insertedId) }
+                val nodes = assignFetchedNodeOrder(
+                    nodes = prepared.nodes,
+                    subscriptionId = insertedId
+                )
                 proxyNodeDao.insertAll(nodes)
                 subscriptionDao.update(
                     subscription.copy(
@@ -259,13 +265,7 @@ class SubscriptionRepository(context: Context) {
     }
 
     suspend fun refreshAllSubscriptions(subscriptions: List<Subscription>): List<Result<SubscriptionUpdateResult>> {
-        val results = coroutineScope {
-            subscriptions.map { subscription ->
-                async {
-                    runCatching { updateSubscriptionInternal(subscription) }
-                }
-            }.map { it.await() }
-        }
+        val results = refreshSubscriptions(subscriptions)
         if (results.any { it.isSuccess }) {
             SubscriptionUpdateScheduler.reconfigure(appContext)
         }
@@ -277,14 +277,30 @@ class SubscriptionRepository(context: Context) {
         now: Long = System.currentTimeMillis(),
         reconfigureSchedule: Boolean = true
     ): List<Result<SubscriptionUpdateResult>> {
-        val results = subscriptions.mapNotNull { subscription ->
-            if (!shouldAutoUpdate(subscription, now)) return@mapNotNull null
-            runCatching { updateSubscriptionInternal(subscription) }
+        val dueSubscriptions = subscriptions.filter { subscription ->
+            shouldAutoUpdate(subscription, now)
         }
+        val results = refreshSubscriptions(dueSubscriptions)
         if (reconfigureSchedule && results.any { it.isSuccess }) {
             SubscriptionUpdateScheduler.reconfigure(appContext)
         }
         return results
+    }
+
+    private suspend fun refreshSubscriptions(
+        subscriptions: List<Subscription>
+    ): List<Result<SubscriptionUpdateResult>> {
+        if (subscriptions.isEmpty()) return emptyList()
+        val semaphore = Semaphore(MAX_CONCURRENT_SUBSCRIPTION_REFRESHES)
+        return coroutineScope {
+            subscriptions.map { subscription ->
+                async {
+                    semaphore.withPermit {
+                        runCatching { updateSubscriptionInternal(subscription) }
+                    }
+                }
+            }.map { it.await() }
+        }
     }
 
     suspend fun updateNodeLatency(nodeId: Long, latency: Int) {
@@ -330,6 +346,7 @@ class SubscriptionRepository(context: Context) {
                         subscriptionId = 0L
                     )
                 }
+                .let { nodes -> assignFetchedNodeOrder(nodes, subscriptionId = 0L) }
 
             if (nodesToInsert.isEmpty()) {
                 SubscriptionImportResult(
@@ -532,13 +549,27 @@ class SubscriptionRepository(context: Context) {
         subscriptionId: Long
     ): List<ProxyNode> {
         val remainingExisting = existingNodes.toMutableList()
-        return freshNodes.map { freshNode ->
+        val baseTimestamp = System.currentTimeMillis()
+        return freshNodes.mapIndexed { index, freshNode ->
             val matchedNode = takeBestMatchingNode(freshNode, remainingExisting)
             freshNode.copy(
                 id = matchedNode?.id ?: 0L,
                 subscriptionId = subscriptionId,
                 latency = matchedNode?.latency ?: freshNode.latency,
-                createdAt = matchedNode?.createdAt ?: freshNode.createdAt
+                createdAt = baseTimestamp + index
+            )
+        }
+    }
+
+    private fun assignFetchedNodeOrder(
+        nodes: List<ProxyNode>,
+        subscriptionId: Long
+    ): List<ProxyNode> {
+        val baseTimestamp = System.currentTimeMillis()
+        return nodes.mapIndexed { index, node ->
+            node.copy(
+                subscriptionId = subscriptionId,
+                createdAt = baseTimestamp + index
             )
         }
     }
