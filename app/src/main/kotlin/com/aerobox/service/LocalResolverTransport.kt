@@ -1,26 +1,20 @@
 package com.aerobox.service
 
 import android.net.DnsResolver
-import android.os.Build
 import android.os.CancellationSignal
 import android.system.ErrnoException
 import android.util.Log
-import androidx.annotation.RequiresApi
 import io.nekohasekai.libbox.ExchangeContext
 import io.nekohasekai.libbox.LocalDNSTransport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
-import java.net.InetAddress
-import java.net.UnknownHostException
 
 object LocalResolverTransport : LocalDNSTransport {
     private const val TAG = "LocalResolverTransport"
-    private const val RCODE_NXDOMAIN = 3
     private const val UNKNOWN_ERRNO = 114514
 
-    override fun raw(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+    override fun raw(): Boolean = true
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     override fun exchange(ctx: ExchangeContext, message: ByteArray) {
         val signal = CancellationSignal()
         ctx.onCancel(signal::cancel)
@@ -52,14 +46,9 @@ object LocalResolverTransport : LocalDNSTransport {
     }
 
     override fun lookup(ctx: ExchangeContext, network: String, domain: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            lookupWithDnsResolver(ctx, network, domain)
-        } else {
-            lookupWithInetAddress(ctx, network, domain)
-        }
+        lookupWithDnsResolver(ctx, network, domain)
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
     private fun lookupWithDnsResolver(ctx: ExchangeContext, network: String, domain: String) {
         val signal = CancellationSignal()
         ctx.onCancel(signal::cancel)
@@ -119,35 +108,6 @@ object LocalResolverTransport : LocalDNSTransport {
                 signal,
                 callback
             )
-        }
-    }
-
-    private fun lookupWithInetAddress(ctx: ExchangeContext, network: String, domain: String) {
-        Dispatchers.IO.asExecutor().execute {
-            try {
-                val resolved = try {
-                    DefaultNetworkMonitor.defaultNetwork?.getAllByName(domain)
-                } catch (_: UnknownHostException) {
-                    null
-                } ?: InetAddress.getAllByName(domain)
-
-                val filtered = when {
-                    network.endsWith("4") -> resolved.filter { it.address.size == 4 }
-                    network.endsWith("6") -> resolved.filter { it.address.size == 16 }
-                    else -> resolved.toList()
-                }
-
-                if (filtered.isNotEmpty()) {
-                    ctx.success(filtered.mapNotNull { it.hostAddress }.joinToString("\n"))
-                } else {
-                    ctx.errnoCode(UNKNOWN_ERRNO)
-                }
-            } catch (_: UnknownHostException) {
-                ctx.errorCode(RCODE_NXDOMAIN)
-            } catch (e: Exception) {
-                Log.w(TAG, "InetAddress lookup failed", e)
-                ctx.errnoCode(UNKNOWN_ERRNO)
-            }
         }
     }
 }

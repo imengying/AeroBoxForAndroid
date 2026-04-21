@@ -110,9 +110,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setRemoteDns(dns: String) {
         val normalizedDns = dns.trim()
+        val currentPrefs = PreferenceManager.readVpnConfigPreferences(appContext)
         validateAndPersistDnsSettings(
             remoteDns = normalizedDns,
-            directDns = PreferenceManager.directDnsFlow(appContext).first()
+            directDns = currentPrefs.directDns
         ) ?: return
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = "应用 DNS 设置失败"
@@ -121,8 +122,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setDirectDns(dns: String) {
         val normalizedDns = dns.trim()
+        val currentPrefs = PreferenceManager.readVpnConfigPreferences(appContext)
         validateAndPersistDnsSettings(
-            remoteDns = PreferenceManager.remoteDnsFlow(appContext).first(),
+            remoteDns = currentPrefs.remoteDns,
             directDns = normalizedDns
         ) ?: return
         refreshActiveConnectionForRuntimeChange(

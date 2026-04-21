@@ -10,6 +10,7 @@ import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.data.database.AppDatabase
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.native.SingBoxNative
+import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.VpnStateManager
 import com.aerobox.work.SubscriptionUpdateScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -67,6 +68,10 @@ class AeroBoxApplication : Application() {
                 "aerobox.db"
             )
                 .build()
+        }
+
+        val vpnRepository: VpnRepository by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+            VpnRepository(_appInstance)
         }
     }
 }

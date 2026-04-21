@@ -249,10 +249,8 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                         receiverRegistered = true
                     }
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                        DefaultNetworkMonitor.setNetworkChangedCallback(::updateUnderlyingNetwork)
-                        DefaultNetworkMonitor.start()
-                    }
+                    DefaultNetworkMonitor.setNetworkChangedCallback(::updateUnderlyingNetwork)
+                    DefaultNetworkMonitor.start()
 
                     val server = commandServer ?: CommandServer(this@AeroBoxVpnService, this@AeroBoxVpnService).also {
                         it.start()
@@ -497,16 +495,14 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
         hasIpv6Tun = inet6Addresses.isNotEmpty()
         builder.setMetered(false)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-            DefaultNetworkMonitor.defaultNetwork?.let { network ->
-                runCatching {
-                    builder.setUnderlyingNetworks(arrayOf(network))
-                }.onFailure {
-                    RuntimeLogBuffer.append(
-                        "debug",
-                        "Builder setUnderlyingNetworks skipped: ${it.message ?: it}"
-                    )
-                }
+        DefaultNetworkMonitor.defaultNetwork?.let { network ->
+            runCatching {
+                builder.setUnderlyingNetworks(arrayOf(network))
+            }.onFailure {
+                RuntimeLogBuffer.append(
+                    "debug",
+                    "Builder setUnderlyingNetworks skipped: ${it.message ?: it}"
+                )
             }
         }
 
@@ -589,14 +585,11 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         val initialSpeedText = "↑ 0 B/s  ↓ 0 B/s"
         val notification = buildNotification(contentText = initialSpeedText, connected = true)
         notificationManager.notify(NOTIFICATION_ID, notification)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
-            updateUnderlyingNetwork(DefaultNetworkMonitor.defaultNetwork)
-        }
+        updateUnderlyingNetwork(DefaultNetworkMonitor.defaultNetwork)
         return pfd.fd
     }
 
     private fun updateUnderlyingNetwork(network: Network?) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP_MR1) return
         runCatching {
             setUnderlyingNetworks(network?.let { arrayOf(it) })
         }.onFailure {

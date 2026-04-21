@@ -1,5 +1,10 @@
 package com.aerobox.utils
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import com.aerobox.data.model.TrafficStats
 import com.aerobox.data.model.VpnState
 import kotlin.math.max
@@ -20,4 +25,12 @@ fun Long.formatDuration(): String {
     val minutes = (elapsedSeconds % 3600) / 60
     val seconds = elapsedSeconds % 60
     return "%02d:%02d:%02d".format(hours, minutes, seconds)
+}
+
+fun Context.needsNotificationPermission(): Boolean {
+    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) != PackageManager.PERMISSION_GRANTED
 }

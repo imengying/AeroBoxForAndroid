@@ -37,7 +37,7 @@ class AppListRepository(context: Context) {
 
     private fun loadInstalledApps(): List<InstalledAppInfo> {
         val packageManager = appContext.packageManager
-        return getInstalledPackagesCompat(packageManager)
+        return getInstalledPackages(packageManager)
             .asSequence()
             .filter { info -> info.packageName != appContext.packageName && info.packageName != "android" }
             .map { info ->
@@ -59,7 +59,7 @@ class AppListRepository(context: Context) {
     }
 
     @Suppress("DEPRECATION")
-    private fun getInstalledPackagesCompat(packageManager: PackageManager): List<PackageInfo> {
+    private fun getInstalledPackages(packageManager: PackageManager): List<PackageInfo> {
         val flags = PackageManager.GET_META_DATA or PackageManager.GET_PERMISSIONS
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             packageManager.getInstalledPackages(

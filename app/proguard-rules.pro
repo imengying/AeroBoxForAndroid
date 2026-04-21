@@ -29,8 +29,3 @@
     public static int v(...);
     public static int d(...);
 }
-
-# Optimize aggressively
--optimizationpasses 5
--allowaccessmodification
--repackageclasses ''

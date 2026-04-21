@@ -22,7 +22,6 @@ import com.aerobox.data.model.TrafficStats
 import com.aerobox.data.model.VpnState
 import com.aerobox.data.repository.SubscriptionRepository
 import com.aerobox.data.repository.VpnConnectionResult
-import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.NetworkUtils
 import com.aerobox.utils.PreferenceManager
@@ -69,17 +68,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         const val NODE_TEST_CONCURRENCY = 10
         val IPV4_REGEX = Regex("""^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$""")
         val IPV6_REGEX = Regex("""^[0-9A-Fa-f:]+(%[0-9A-Za-z._~-]+)?$""")
-        val ipCheckClient: OkHttpClient by lazy {
-            OkHttpClient.Builder()
-                .callTimeout(5, TimeUnit.SECONDS)
-                .connectTimeout(3, TimeUnit.SECONDS)
-                .readTimeout(3, TimeUnit.SECONDS)
-                // Zero idle connections to ensure fresh sockets per detection,
-                // avoiding stale connections from before VPN routing changed.
-                .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
-                .retryOnConnectionFailure(false)
-                .build()
-        }
     }
 
     private data class UrlTestSettings(
@@ -89,8 +77,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val appContext = application.applicationContext
     private val nodeDao = AeroBoxApplication.database.proxyNodeDao()
-    private val vpnRepository = VpnRepository(appContext)
+    private val vpnRepository = AeroBoxApplication.vpnRepository
     private val subscriptionRepository = SubscriptionRepository(appContext)
+    private val ipCheckClient = OkHttpClient.Builder()
+        .callTimeout(5, TimeUnit.SECONDS)
+        .connectTimeout(3, TimeUnit.SECONDS)
+        .readTimeout(3, TimeUnit.SECONDS)
+        // Zero idle connections to ensure fresh sockets per detection,
+        // avoiding stale connections from before VPN routing changed.
+        .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+        .retryOnConnectionFailure(false)
+        .build()
 
     val vpnState: StateFlow<VpnState> = VpnStateManager.vpnState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VpnState())
@@ -161,6 +158,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         detectIpJob?.cancel()
         connectWatchdogJob?.cancel()
+        ipCheckClient.dispatcher.cancelAll()
+        ipCheckClient.connectionPool.evictAll()
         super.onCleared()
     }
 
@@ -633,16 +632,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     private suspend fun loadUrlTestSettings(): UrlTestSettings {
-        val userDirectDns = PreferenceManager.directDnsFlow(appContext).first()
-        val ipv6Mode = PreferenceManager.ipv6ModeFlow(appContext).first()
-        val safeDirectDns = if (userDirectDns.contains("[")) {
+        val preferences = PreferenceManager.readVpnConfigPreferences(appContext)
+        val safeDirectDns = if (preferences.directDns.contains("[")) {
             PreferenceManager.DEFAULT_DIRECT_DNS
         } else {
-            userDirectDns
+            preferences.directDns
         }
         return UrlTestSettings(
             directDns = safeDirectDns,
-            ipv6Mode = ipv6Mode
+            ipv6Mode = preferences.ipv6Mode
         )
     }
 

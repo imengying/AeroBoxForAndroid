@@ -216,7 +216,7 @@ object ConfigGenerator {
                 .put("servers", JSONArray().put(directServer).put(localResolverServer).put(bootstrapServer))
                 .put("final", DNS_DIRECT_TAG)
                 .put("independent_cache", true)
-                .putDnsQueryStrategy(ipv6Mode)
+                .put("strategy", ipv6Mode.domainStrategy())
         }
 
         val remoteServer = buildDnsServer(
@@ -1004,12 +1004,6 @@ object ConfigGenerator {
             normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
     }
 
-    private fun JSONObject.putDnsQueryStrategy(
-        ipv6Mode: IPv6Mode
-    ): JSONObject {
-        put("strategy", ipv6Mode.domainStrategy())
-        return this
-    }
 
     private fun buildTlsObject(node: ProxyNode, includeReality: Boolean = false): JSONObject {
         // Force TLS enabled when Reality is in use — Reality requires TLS.

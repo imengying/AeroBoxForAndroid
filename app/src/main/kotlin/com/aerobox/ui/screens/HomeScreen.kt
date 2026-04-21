@@ -2,9 +2,7 @@ package com.aerobox.ui.screens
 
 import android.Manifest
 import android.app.Activity
-import android.content.pm.PackageManager
 import android.net.VpnService
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -45,7 +43,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
@@ -55,6 +52,7 @@ import com.aerobox.ui.components.ConnectionCard
 import com.aerobox.ui.components.NodeListSheet
 import com.aerobox.ui.components.TrafficStatsCard
 import com.aerobox.ui.components.AppSnackbarHost
+import com.aerobox.utils.needsNotificationPermission
 import com.aerobox.viewmodel.HomeViewModel
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.flow.collectLatest
@@ -270,13 +268,7 @@ private fun ensureNotificationPermissionThenStart(
     onContinue: () -> Unit,
     onRequest: (String) -> Unit
 ) {
-    val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.POST_NOTIFICATIONS
-        ) != PackageManager.PERMISSION_GRANTED
-
-    if (needsPermission) {
+    if (context.needsNotificationPermission()) {
         onRequest(Manifest.permission.POST_NOTIFICATIONS)
     } else {
         onContinue()

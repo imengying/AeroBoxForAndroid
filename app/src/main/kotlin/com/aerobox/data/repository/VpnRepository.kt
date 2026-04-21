@@ -201,8 +201,13 @@ class VpnRepository(private val context: Context) {
         ipv6Mode: IPv6Mode? = null
     ): Int {
         return withContext(Dispatchers.IO) {
-            val resolvedDirectDns = directDns ?: PreferenceManager.directDnsFlow(context).first()
-            val resolvedIpv6Mode = ipv6Mode ?: PreferenceManager.ipv6ModeFlow(context).first()
+            val preferences = if (directDns != null && ipv6Mode != null) {
+                null
+            } else {
+                PreferenceManager.readVpnConfigPreferences(context)
+            }
+            val resolvedDirectDns = directDns ?: preferences?.directDns ?: PreferenceManager.DEFAULT_DIRECT_DNS
+            val resolvedIpv6Mode = ipv6Mode ?: preferences?.ipv6Mode ?: IPv6Mode.DISABLE
             val safeDirectDns = if (resolvedDirectDns.contains("[")) {
                 PreferenceManager.DEFAULT_DIRECT_DNS
             } else {

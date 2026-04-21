@@ -2,17 +2,14 @@ package com.aerobox
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Bundle
-import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.core.content.ContextCompat
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
@@ -27,11 +24,11 @@ import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.imports.ExternalImportParser
 import com.aerobox.imports.ExternalImportRequest
-import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.navigation.AppNavigation
 import com.aerobox.ui.theme.SingBoxVPNTheme
+import com.aerobox.utils.needsNotificationPermission
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -152,13 +149,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun ensureNotificationPermissionThenStartVpn() {
-        val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
-
-        if (needsPermission) {
+        if (needsNotificationPermission()) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             startVpnFromIntent()
@@ -167,7 +158,7 @@ class MainActivity : ComponentActivity() {
 
     private fun startVpnFromIntent() {
         lifecycleScope.launch {
-            when (val result = VpnRepository(applicationContext).connectSelectedNode()) {
+            when (val result = AeroBoxApplication.vpnRepository.connectSelectedNode()) {
                 VpnConnectionResult.NoNodeAvailable -> {
                     uiMessage.tryEmit(getString(R.string.add_node_first))
                 }
