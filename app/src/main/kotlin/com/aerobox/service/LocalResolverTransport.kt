@@ -8,6 +8,7 @@ import io.nekohasekai.libbox.ExchangeContext
 import io.nekohasekai.libbox.LocalDNSTransport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
+import java.net.InetAddress
 
 object LocalResolverTransport : LocalDNSTransport {
     private const val TAG = "LocalResolverTransport"
