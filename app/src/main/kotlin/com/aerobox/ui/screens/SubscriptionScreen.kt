@@ -303,7 +303,7 @@ fun SubscriptionScreen(
                 }
             }
         }
-    } { innerPadding ->
+    ) { innerPadding ->
         val hasContent = subscriptions.isNotEmpty() || ungroupedNodeCount > 0
         if (!hasContent) {
             Box(
