@@ -161,8 +161,9 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     private fun Throwable.rootCauseMessage(): String? {
         var current: Throwable = this
-        while (current.cause != null && current.cause !== current) {
-            current = current.cause!!
+        while (true) {
+            val cause = current.cause?.takeIf { it !== current } ?: break
+            current = cause
         }
         return current.message?.takeIf { it.isNotBlank() }
     }

@@ -659,21 +659,31 @@ class SubscriptionRepository(context: Context) {
             call.enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
-                        if (!it.isSuccessful) {
-                            cont.resumeWithException(IOException("HTTP ${it.code}"))
-                        } else {
-                            cont.resume(
-                                SubscriptionFetchResult(
-                                    content = it.body.string(),
-                                    headers = it.headers,
-                                    resolvedUrl = it.request.url.toString()
-                                )
+                        if (!cont.isActive) return
+                        val result = runCatching {
+                            if (!it.isSuccessful) {
+                                throw IOException("HTTP ${it.code}")
+                            }
+                            SubscriptionFetchResult(
+                                content = it.body.string(),
+                                headers = it.headers,
+                                resolvedUrl = it.request.url.toString()
                             )
                         }
+                        if (!cont.isActive) return
+                        result
+                            .onSuccess { fetchResult ->
+                                cont.resume(fetchResult)
+                            }
+                            .onFailure { error ->
+                                cont.resumeWithException(error)
+                            }
                     }
                 }
                 override fun onFailure(call: Call, e: IOException) {
-                    cont.resumeWithException(e)
+                    if (cont.isActive) {
+                        cont.resumeWithException(e)
+                    }
                 }
             })
         }

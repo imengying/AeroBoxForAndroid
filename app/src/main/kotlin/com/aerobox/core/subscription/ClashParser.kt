@@ -98,8 +98,8 @@ object ClashParser {
             joinedValue(map, "ports"),
             joinedValue(map, "mport")
         )
-        val port = intValue(map, "port")
-            ?: if (type == ProxyType.HYSTERIA2) firstPortFromPortList(hysteriaServerPorts) else null
+        val port: Int = intValue(map, "port")
+            ?: (if (type == ProxyType.HYSTERIA2) firstPortFromPortList(hysteriaServerPorts) else null)
             ?: return ProxyParseResult.Ignored("missing_clash_endpoint")
         val hasRealityKey = !stringValue(map, "reality-opts", "public-key").isNullOrBlank() ||
             !stringValue(map, "reality-opts", "public_key").isNullOrBlank() ||

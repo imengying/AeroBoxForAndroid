@@ -739,7 +739,12 @@ object SubscriptionParser {
             alpn = params["alpn"],
             obfsType = params["obfs"],
             obfsPassword = firstNonBlank(params["obfs-password"], params["obfs_password"]),
-            serverPorts = firstNonBlank(params["mport"], params["server_ports"], params["server-ports"]),
+            serverPorts = firstNonBlank(
+                params["mport"],
+                params["server_ports"],
+                params["server-ports"],
+                params["ports"]
+            ),
             hopInterval = firstNonBlank(params["hop_interval"], params["hop-interval"]),
             upMbps = parseIntField(params["up_mbps"], params["upmbps"]),
             downMbps = parseIntField(params["down_mbps"], params["downmbps"]),
@@ -843,11 +848,22 @@ object SubscriptionParser {
             }
 
             val server = obj.optString("server", obj.optString("address", ""))
-            val port = obj.optInt("server_port", obj.optInt("port", -1))
-            if (server.isBlank() || port <= 0) {
+            val serverPorts = firstNonBlank(
+                obj.optJSONArray("server_ports")?.toCommaSeparatedString(),
+                obj.optString("server_ports", "").ifBlank { null },
+                obj.optJSONArray("server-ports")?.toCommaSeparatedString(),
+                obj.optString("server-ports", "").ifBlank { null },
+                obj.optJSONArray("ports")?.toCommaSeparatedString(),
+                obj.optString("ports", "").ifBlank { null },
+                obj.optString("mport", "").ifBlank { null }
+            )
+            val resolvedPort = obj.optInt("server_port", obj.optInt("port", -1)).takeIf { it > 0 }
+                ?: (if (type == ProxyType.HYSTERIA2) firstPortFromPortList(serverPorts) else null)
+            if (server.isBlank() || resolvedPort == null) {
                 diagnostics = diagnostics.withIgnored("missing_json_endpoint")
                 continue
             }
+            val port: Int = resolvedPort
             val configuredNetwork = firstNonBlank(
                 obj.optString("network", "").ifBlank { null },
                 obj.optString("net", "").ifBlank { null }
@@ -983,11 +999,11 @@ object SubscriptionParser {
                     obj.optString("obfs_password", "").ifBlank { null },
                     obj.optString("obfs-password", "").ifBlank { null }
                 ),
-                serverPorts = firstNonBlank(
-                    obj.optJSONArray("server_ports")?.toCommaSeparatedString(),
-                    obj.optString("server_ports", "").ifBlank { null }
+                serverPorts = serverPorts,
+                hopInterval = firstNonBlank(
+                    obj.optString("hop_interval", "").ifBlank { null },
+                    obj.optString("hop-interval", "").ifBlank { null }
                 ),
-                hopInterval = obj.optString("hop_interval", "").ifBlank { null },
                 upMbps = obj.optInt("up_mbps", -1).takeIf { it > 0 },
                 downMbps = obj.optInt("down_mbps", -1).takeIf { it > 0 },
                 muxEnabled = optBooleanField(multiplex, "enabled"),
@@ -1163,6 +1179,18 @@ object SubscriptionParser {
             }
         }
         return values.takeIf { it.isNotEmpty() }?.joinToString(",")
+    }
+
+    private fun firstPortFromPortList(serverPorts: String?): Int? {
+        return serverPorts
+            ?.split(",")
+            ?.firstNotNullOfOrNull { entry ->
+                Regex("""\d{1,5}""")
+                    .find(entry)
+                    ?.value
+                    ?.toIntOrNull()
+                    ?.takeIf { it in 1..65535 }
+            }
     }
 
     private fun extractHostHeader(headers: JSONObject?): String? {
