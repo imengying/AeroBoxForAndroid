@@ -215,7 +215,6 @@ object ConfigGenerator {
             return JSONObject()
                 .put("servers", JSONArray().put(directServer).put(localResolverServer).put(bootstrapServer))
                 .put("final", DNS_DIRECT_TAG)
-                .put("independent_cache", true)
                 .put("strategy", ipv6Mode.domainStrategy())
         }
 
@@ -241,7 +240,6 @@ object ConfigGenerator {
         val dns = JSONObject()
             .put("servers", servers)
             .put("final", DNS_REMOTE_TAG)
-            .put("independent_cache", true)
             .put("strategy", if (nodeIsIpv6Only) "prefer_ipv6" else "ipv4_only")
 
         val dnsRules = JSONArray()
@@ -967,10 +965,9 @@ object ConfigGenerator {
         }
         applyMultiplex(outbound, node)
         if (!outbound.has("domain_resolver") && !isIpLiteral(cleanServer)) {
-            // Use domain_resolver (not domain_strategy) so that only the proxy
-            // SERVER address is resolved locally.  domain_strategy would also
-            // resolve the destination domain locally and send the IP instead of
-            // the domain, breaking DNS64/NAT64 setups on IPv6-only servers.
+            // Resolve only the proxy server address locally. Applying a global
+            // address strategy here would also resolve destination domains and
+            // break DNS64/NAT64 setups on IPv6-only servers.
             outbound.put(
                 "domain_resolver",
                 JSONObject()
@@ -1029,10 +1026,28 @@ object ConfigGenerator {
 
     private fun buildNaiveTlsObject(node: ProxyNode): JSONObject {
         val tls = JSONObject()
+            .put("enabled", true)
         node.sni?.takeIf { it.isNotBlank() }?.let { tls.put("server_name", it) }
         node.naiveCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("certificate", it) }
         node.naiveCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("certificate_path", it) }
+        buildNaiveEchObject(node)?.let { tls.put("ech", it) }
         return tls
+    }
+
+    private fun buildNaiveEchObject(node: ProxyNode): JSONObject? {
+        val config = node.naiveEchConfig?.trim()?.takeIf { it.isNotEmpty() }
+        val configPath = node.naiveEchConfigPath?.trim()?.takeIf { it.isNotEmpty() }
+        val queryServerName = node.naiveEchQueryServerName?.trim()?.takeIf { it.isNotEmpty() }
+        if (node.naiveEchEnabled == null && config == null && configPath == null && queryServerName == null) {
+            return null
+        }
+
+        val ech = JSONObject()
+            .put("enabled", node.naiveEchEnabled ?: true)
+        config?.let { ech.put("config", it) }
+        configPath?.let { ech.put("config_path", it) }
+        queryServerName?.let { ech.put("query_server_name", it) }
+        return ech
     }
 
     private fun buildNaiveExtraHeaders(raw: String?): JSONObject? {

@@ -75,6 +75,10 @@ fun ProxyNode.connectionFingerprint(includeName: Boolean = true): String {
         add(naiveInsecureConcurrency?.toString().normalizedIdentityValue())
         add(naiveCertificate.normalizedIdentityValue())
         add(naiveCertificatePath.normalizedIdentityValue())
+        add(naiveEchEnabled?.toString().normalizedIdentityValue())
+        add(naiveEchConfig.normalizedIdentityValue())
+        add(naiveEchConfigPath.normalizedIdentityValue())
+        add(naiveEchQueryServerName.normalizedIdentityValue())
     }.joinToString("|")
 }
 

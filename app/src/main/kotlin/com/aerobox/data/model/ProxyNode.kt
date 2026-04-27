@@ -99,7 +99,11 @@ data class ProxyNode(
     val naiveExtraHeaders: String? = null,
     val naiveInsecureConcurrency: Int? = null,
     val naiveCertificate: String? = null,
-    val naiveCertificatePath: String? = null
+    val naiveCertificatePath: String? = null,
+    val naiveEchEnabled: Boolean? = null,
+    val naiveEchConfig: String? = null,
+    val naiveEchConfigPath: String? = null,
+    val naiveEchQueryServerName: String? = null
 )
 
 private val supportedEnabledNetworks = setOf("tcp", "udp")

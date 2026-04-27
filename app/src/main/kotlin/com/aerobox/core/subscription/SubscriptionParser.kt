@@ -840,6 +840,23 @@ object SubscriptionParser {
             naiveCertificatePath = firstNonBlank(
                 params["certificate-path"],
                 params["certificate_path"]
+            ),
+            naiveEchEnabled = parseBooleanOrNull(
+                params["ech"],
+                params["ech-enabled"],
+                params["ech_enabled"]
+            ),
+            naiveEchConfig = firstNonBlank(
+                params["ech-config"],
+                params["ech_config"]
+            ),
+            naiveEchConfigPath = firstNonBlank(
+                params["ech-config-path"],
+                params["ech_config_path"]
+            ),
+            naiveEchQueryServerName = firstNonBlank(
+                params["ech-query-server-name"],
+                params["ech_query_server_name"]
             )
         ).withUriSharedOptions(params)
     }
@@ -877,6 +894,7 @@ object SubscriptionParser {
             val tlsObject = obj.optJSONObject("tls")
             val realityObject = tlsObject?.optJSONObject("reality")
             val utlsObject = tlsObject?.optJSONObject("utls")
+            val echObject = tlsObject?.optJSONObject("ech") ?: obj.optJSONObject("ech")
             val obfsObject = obj.optJSONObject("obfs")
             val headersObject = obj.optJSONObject("headers")
             val udpOverTcp = parseUdpOverTcp(obj.opt("udp_over_tcp"))
@@ -978,7 +996,7 @@ object SubscriptionParser {
                 password = obj.optString("password", "").ifBlank { null },
                 method = obj.optString("method", "").ifBlank { null },
                 flow = obj.optString("flow", "").ifBlank { null },
-                security = obj.optString("security", "").ifBlank { null },
+                security = if (type == ProxyType.NAIVE) null else obj.optString("security", "").ifBlank { null },
                 network = enabledNetwork,
                 transportType = transportType,
                 tls = type == ProxyType.NAIVE
@@ -1017,23 +1035,39 @@ object SubscriptionParser {
                 ),
                 wsMaxEarlyData = transport?.optInt("max_early_data", -1)?.takeIf { it >= 0 },
                 wsEarlyDataHeaderName = transport?.optString("early_data_header_name", "")?.ifBlank { null },
-                alpn = firstNonBlank(
-                    obj.optString("alpn", "").ifBlank { null },
-                    tlsObject?.optJSONArray("alpn")?.toCommaSeparatedString(),
-                    tlsObject?.optString("alpn", "")?.ifBlank { null }
-                ),
-                fingerprint = firstNonBlank(
-                    obj.optString("fingerprint", obj.optString("fp", "")).ifBlank { null },
-                    utlsObject?.optString("fingerprint", "")?.ifBlank { null }
-                ),
-                publicKey = firstNonBlank(
-                    obj.optString("public_key", obj.optString("pbk", "")).ifBlank { null },
-                    realityObject?.optString("public_key", "")?.ifBlank { null }
-                ),
-                shortId = firstNonBlank(
-                    obj.optString("short_id", obj.optString("sid", "")).ifBlank { null },
-                    realityObject?.optString("short_id", "")?.ifBlank { null }
-                ),
+                alpn = if (type == ProxyType.NAIVE) {
+                    null
+                } else {
+                    firstNonBlank(
+                        obj.optString("alpn", "").ifBlank { null },
+                        tlsObject?.optJSONArray("alpn")?.toCommaSeparatedString(),
+                        tlsObject?.optString("alpn", "")?.ifBlank { null }
+                    )
+                },
+                fingerprint = if (type == ProxyType.NAIVE) {
+                    null
+                } else {
+                    firstNonBlank(
+                        obj.optString("fingerprint", obj.optString("fp", "")).ifBlank { null },
+                        utlsObject?.optString("fingerprint", "")?.ifBlank { null }
+                    )
+                },
+                publicKey = if (type == ProxyType.NAIVE) {
+                    null
+                } else {
+                    firstNonBlank(
+                        obj.optString("public_key", obj.optString("pbk", "")).ifBlank { null },
+                        realityObject?.optString("public_key", "")?.ifBlank { null }
+                    )
+                },
+                shortId = if (type == ProxyType.NAIVE) {
+                    null
+                } else {
+                    firstNonBlank(
+                        obj.optString("short_id", obj.optString("sid", "")).ifBlank { null },
+                        realityObject?.optString("short_id", "")?.ifBlank { null }
+                    )
+                },
                 packetEncoding = firstNonBlank(
                     obj.optString("packet_encoding", obj.optString("packetEncoding", "")).ifBlank { null },
                     transport?.optString("packet_encoding", "")?.ifBlank { null },
@@ -1047,10 +1081,14 @@ object SubscriptionParser {
                         else -> null
                     }
                 ),
-                allowInsecure = obj.optBoolean("allowInsecure", false)
+                allowInsecure = if (type == ProxyType.NAIVE) {
+                    false
+                } else {
+                    obj.optBoolean("allowInsecure", false)
                         || obj.optBoolean("allow_insecure", false)
                         || tlsObject?.optBoolean("insecure", false) == true
-                        || parseBooleanField(obj.optString("allowInsecure")),
+                        || parseBooleanField(obj.optString("allowInsecure"))
+                },
                 plugin = obj.optString("plugin", "").ifBlank { null },
                 pluginOpts = firstNonBlank(
                     obj.optString("plugin_opts", "").ifBlank { null },
@@ -1107,6 +1145,26 @@ object SubscriptionParser {
                     jsonScalarString(tlsObject?.opt("certificate-path")),
                     jsonScalarString(obj.opt("certificate_path")),
                     jsonScalarString(obj.opt("certificate-path"))
+                ),
+                naiveEchEnabled = optBooleanField(echObject, "enabled")
+                    ?: parseBooleanOrNull(jsonScalarString(obj.opt("ech")))
+                    ?: optBooleanField(obj, "ech_enabled", "ech-enabled"),
+                naiveEchConfig = firstNonBlank(
+                    jsonListOrScalarString(echObject?.opt("config")),
+                    jsonListOrScalarString(obj.opt("ech_config")),
+                    jsonListOrScalarString(obj.opt("ech-config"))
+                ),
+                naiveEchConfigPath = firstNonBlank(
+                    jsonScalarString(echObject?.opt("config_path")),
+                    jsonScalarString(echObject?.opt("config-path")),
+                    jsonScalarString(obj.opt("ech_config_path")),
+                    jsonScalarString(obj.opt("ech-config-path"))
+                ),
+                naiveEchQueryServerName = firstNonBlank(
+                    jsonScalarString(echObject?.opt("query_server_name")),
+                    jsonScalarString(echObject?.opt("query-server-name")),
+                    jsonScalarString(obj.opt("ech_query_server_name")),
+                    jsonScalarString(obj.opt("ech-query-server-name"))
                 )
             )
         }
@@ -1322,6 +1380,17 @@ object SubscriptionParser {
             null, JSONObject.NULL -> null
             is JSONObject, is JSONArray -> null
             else -> value.toString().trim().takeIf { it.isNotEmpty() }
+        }
+    }
+
+    private fun jsonListOrScalarString(value: Any?): String? {
+        return when (value) {
+            is JSONArray -> buildList {
+                for (index in 0 until value.length()) {
+                    jsonScalarString(value.opt(index))?.let { add(it) }
+                }
+            }.takeIf { it.isNotEmpty() }?.joinToString("\n")
+            else -> jsonScalarString(value)
         }
     }
 

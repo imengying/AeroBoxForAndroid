@@ -153,6 +153,11 @@ object ClashParser {
         }
         val wsOpts = value(map, "ws-opts")
         val smux = value(map, "smux")
+        val echOptions = firstNonNullValue(
+            value(map, "ech-opts"),
+            value(map, "ech_opts"),
+            value(map, "tls", "ech")
+        )
         val udpOverTcp = parseUdpOverTcp(
             firstNonNullValue(
                 value(map, "udp-over-tcp"),
@@ -240,7 +245,7 @@ object ClashParser {
             ),
             method = firstNonBlank(stringValue(map, "cipher"), stringValue(map, "method")),
             flow = stringValue(map, "flow"),
-            security = security,
+            security = if (type == ProxyType.NAIVE) null else security,
             transportType = transportType,
             tls = tls,
             sni = firstNonBlank(
@@ -256,17 +261,17 @@ object ClashParser {
                 stringValue(wsOpts, "early-data-header-name"),
                 stringValue(wsOpts, "early_data_header_name")
             ),
-            alpn = joinedValue(map, "alpn"),
-            fingerprint = fingerprint,
-            publicKey = publicKey,
-            shortId = shortId,
+            alpn = if (type == ProxyType.NAIVE) null else joinedValue(map, "alpn"),
+            fingerprint = if (type == ProxyType.NAIVE) null else fingerprint,
+            publicKey = if (type == ProxyType.NAIVE) null else publicKey,
+            shortId = if (type == ProxyType.NAIVE) null else shortId,
             packetEncoding = firstNonBlank(
                 stringValue(map, "packet-encoding"),
                 stringValue(map, "packet_encoding")
             ),
             username = stringValue(map, "username"),
             socksVersion = stringValue(map, "version"),
-            allowInsecure = insecure,
+            allowInsecure = if (type == ProxyType.NAIVE) false else insecure,
             plugin = stringValue(map, "plugin"),
             pluginOpts = firstNonBlank(
                 pluginOptionsValue(value(map, "plugin-opts")),
@@ -317,6 +322,27 @@ object ClashParser {
                 stringValue(map, "certificate-path"),
                 stringValue(map, "certificate_path"),
                 stringValue(map, "tls", "certificate_path")
+            ),
+            naiveEchEnabled = booleanValue(echOptions, "enabled")
+                ?: booleanValue(map, "ech")
+                ?: booleanValue(map, "ech-enabled")
+                ?: booleanValue(map, "ech_enabled"),
+            naiveEchConfig = firstNonBlank(
+                multiLineValue(echOptions, "config"),
+                multiLineValue(map, "ech-config"),
+                multiLineValue(map, "ech_config")
+            ),
+            naiveEchConfigPath = firstNonBlank(
+                stringValue(echOptions, "config-path"),
+                stringValue(echOptions, "config_path"),
+                stringValue(map, "ech-config-path"),
+                stringValue(map, "ech_config_path")
+            ),
+            naiveEchQueryServerName = firstNonBlank(
+                stringValue(echOptions, "query-server-name"),
+                stringValue(echOptions, "query_server_name"),
+                stringValue(map, "ech-query-server-name"),
+                stringValue(map, "ech_query_server_name")
             )
             )
         )
@@ -354,6 +380,17 @@ object ClashParser {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
         return parts.takeIf { it.isNotEmpty() }?.joinToString(",")
+    }
+
+    private fun multiLineValue(source: Any?, vararg path: String): String? {
+        val resolved = value(source, *path)
+        val parts = when (resolved) {
+            is List<*> -> resolved.mapNotNull { scalarString(it) }
+            else -> listOfNotNull(scalarString(resolved))
+        }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString("\n")
     }
 
     private fun intValue(source: Any?, vararg path: String): Int? {
