@@ -144,6 +144,15 @@ internal object JsonNodeParser {
                 connectTimeout = UriNodeParser.jsonScalarString(obj.opt("connect_timeout")),
                 tcpFastOpen = UriNodeParser.optBooleanField(obj, "tcp_fast_open", "tcpFastOpen"),
                 udpFragment = UriNodeParser.optBooleanField(obj, "udp_fragment", "udpFragment"),
+                disableTcpKeepAlive = UriNodeParser.optBooleanField(
+                    obj,
+                    "disable_tcp_keep_alive",
+                    "disableTcpKeepAlive"
+                ),
+                tcpKeepAlive = UriNodeParser.jsonScalarString(obj.opt("tcp_keep_alive")),
+                tcpKeepAliveInterval = UriNodeParser.jsonScalarString(
+                    obj.opt("tcp_keep_alive_interval")
+                ),
                 uuid = obj.optString("uuid", obj.optString("id", "")).ifBlank { null },
                 alterId = UriNodeParser.parseIntField(
                     obj.optString("alter_id", "").ifBlank { null },
@@ -272,6 +281,19 @@ internal object JsonNodeParser {
                 upMbps = obj.optInt("up_mbps", -1).takeIf { it > 0 },
                 downMbps = obj.optInt("down_mbps", -1).takeIf { it > 0 },
                 muxEnabled = UriNodeParser.optBooleanField(multiplex, "enabled"),
+                muxProtocol = multiplex?.optString("protocol", "")?.ifBlank { null },
+                muxMaxConnections = multiplex?.optInt("max_connections", -1)?.takeIf { it > 0 },
+                muxMinStreams = multiplex?.optInt("min_streams", -1)?.takeIf { it > 0 },
+                muxMaxStreams = multiplex?.optInt("max_streams", -1)?.takeIf { it > 0 },
+                muxPadding = UriNodeParser.optBooleanField(multiplex, "padding"),
+                muxBrutalEnabled = UriNodeParser.optBooleanField(
+                    multiplex?.optJSONObject("brutal"),
+                    "enabled"
+                ),
+                muxBrutalUpMbps = multiplex?.optJSONObject("brutal")
+                    ?.optInt("up_mbps", -1)?.takeIf { it > 0 },
+                muxBrutalDownMbps = multiplex?.optJSONObject("brutal")
+                    ?.optInt("down_mbps", -1)?.takeIf { it > 0 },
                 congestionControl = UriNodeParser.firstNonBlank(
                     obj.optString("congestion_control", "").ifBlank { null },
                     obj.optString("congestion-control", "").ifBlank { null },

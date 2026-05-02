@@ -90,6 +90,16 @@ data class ProxyNode(
     val downMbps: Int? = null,
     // Shared multiplex
     val muxEnabled: Boolean? = null,
+    // Multiplex tuning (added with schema v2; sing-box accepts smux/yamux/h2mux
+    // for protocol). All nullable so older databases stay compatible.
+    val muxProtocol: String? = null,
+    val muxMaxConnections: Int? = null,
+    val muxMinStreams: Int? = null,
+    val muxMaxStreams: Int? = null,
+    val muxPadding: Boolean? = null,
+    val muxBrutalEnabled: Boolean? = null,
+    val muxBrutalUpMbps: Int? = null,
+    val muxBrutalDownMbps: Int? = null,
     // TUIC-specific
     val congestionControl: String? = null,
     val udpRelayMode: String? = null,
@@ -103,7 +113,19 @@ data class ProxyNode(
     val naiveEchEnabled: Boolean? = null,
     val naiveEchConfig: String? = null,
     val naiveEchConfigPath: String? = null,
-    val naiveEchQueryServerName: String? = null
+    val naiveEchQueryServerName: String? = null,
+    // ShadowTLS handshake layer (added with schema v2). When a Shadowsocks
+    // node carries plugin=shadow-tls, OutboundConfigBuilder emits a paired
+    // shadowtls outbound and routes the SS outbound to it via detour.
+    val shadowTlsVersion: Int? = null,
+    val shadowTlsPassword: String? = null,
+    val shadowTlsServerName: String? = null,
+    val shadowTlsAlpn: String? = null,
+    // Dial-level TCP keep-alive (sing-box 1.13). All optional; sing-box has
+    // sane defaults (5m initial, 75s interval).
+    val disableTcpKeepAlive: Boolean? = null,
+    val tcpKeepAlive: String? = null,
+    val tcpKeepAliveInterval: String? = null
 )
 
 private val supportedEnabledNetworks = setOf("tcp", "udp")

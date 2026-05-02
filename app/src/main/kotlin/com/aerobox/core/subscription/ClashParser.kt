@@ -233,6 +233,16 @@ object ClashParser {
             ),
             tcpFastOpen = booleanValue(map, "tfo"),
             udpFragment = booleanValue(map, "udp-fragment") ?: booleanValue(map, "udp_fragment"),
+            disableTcpKeepAlive = booleanValue(map, "disable-tcp-keep-alive")
+                ?: booleanValue(map, "disable_tcp_keep_alive"),
+            tcpKeepAlive = firstNonBlank(
+                stringValue(map, "tcp-keep-alive"),
+                stringValue(map, "tcp_keep_alive")
+            ),
+            tcpKeepAliveInterval = firstNonBlank(
+                stringValue(map, "tcp-keep-alive-interval"),
+                stringValue(map, "tcp_keep_alive_interval")
+            ),
             uuid = firstNonBlank(stringValue(map, "uuid"), stringValue(map, "id")),
             alterId = intValue(map, "alterId") ?: intValue(map, "alter_id") ?: intValue(map, "aid") ?: 0,
             password = firstNonBlank(
@@ -290,6 +300,27 @@ object ClashParser {
             upMbps = intValue(map, "up-mbps") ?: intValue(map, "up_mbps"),
             downMbps = intValue(map, "down-mbps") ?: intValue(map, "down_mbps"),
             muxEnabled = booleanValue(smux, "enabled"),
+            muxProtocol = firstNonBlank(
+                stringValue(smux, "protocol"),
+                stringValue(map, "smux", "protocol")
+            ),
+            muxMaxConnections = intValue(smux, "max-connections")
+                ?: intValue(smux, "max_connections"),
+            muxMinStreams = intValue(smux, "min-streams")
+                ?: intValue(smux, "min_streams"),
+            muxMaxStreams = intValue(smux, "max-streams")
+                ?: intValue(smux, "max_streams"),
+            muxPadding = booleanValue(smux, "padding"),
+            muxBrutalEnabled = booleanValue(smux, "brutal-opts", "enabled")
+                ?: booleanValue(smux, "brutal_opts", "enabled"),
+            muxBrutalUpMbps = intValue(smux, "brutal-opts", "up-mbps")
+                ?: intValue(smux, "brutal_opts", "up_mbps")
+                ?: intValue(smux, "brutal-opts", "up")
+                ?: intValue(smux, "brutal_opts", "up"),
+            muxBrutalDownMbps = intValue(smux, "brutal-opts", "down-mbps")
+                ?: intValue(smux, "brutal_opts", "down_mbps")
+                ?: intValue(smux, "brutal-opts", "down")
+                ?: intValue(smux, "brutal_opts", "down"),
             congestionControl = firstNonBlank(
                 stringValue(map, "congestion-controller"),
                 stringValue(map, "congestion_control"),
@@ -341,9 +372,41 @@ object ClashParser {
                 stringValue(echOptions, "query_server_name"),
                 stringValue(map, "ech-query-server-name"),
                 stringValue(map, "ech_query_server_name")
-            )
+            ),
+            // Shadowsocks plugin "shadow-tls" → flatten plugin-opts into the
+            // dedicated shadowTls* columns so OutboundConfigBuilder can emit
+            // a paired sing-box `shadowtls` outbound. We still keep the
+            // original plugin/pluginOpts strings on the node for display,
+            // but the SS outbound itself will skip them when these are set.
+            shadowTlsVersion = if (isShadowTlsSsPlugin(map)) {
+                intValue(map, "plugin-opts", "version") ?: intValue(map, "plugin_opts", "version")
+            } else null,
+            shadowTlsPassword = if (isShadowTlsSsPlugin(map)) {
+                firstNonBlank(
+                    stringValue(map, "plugin-opts", "password"),
+                    stringValue(map, "plugin_opts", "password")
+                )
+            } else null,
+            shadowTlsServerName = if (isShadowTlsSsPlugin(map)) {
+                firstNonBlank(
+                    stringValue(map, "plugin-opts", "host"),
+                    stringValue(map, "plugin_opts", "host"),
+                    stringValue(map, "plugin-opts", "server-name"),
+                    stringValue(map, "plugin_opts", "server_name")
+                )
+            } else null,
+            shadowTlsAlpn = if (isShadowTlsSsPlugin(map)) {
+                firstNonBlank(
+                    joinedValue(map, "plugin-opts", "alpn"),
+                    joinedValue(map, "plugin_opts", "alpn")
+                )
+            } else null
             )
         )
+    }
+
+    private fun isShadowTlsSsPlugin(map: Map<*, *>): Boolean {
+        return stringValue(map, "plugin")?.equals("shadow-tls", ignoreCase = true) == true
     }
 
     private fun value(source: Any?, vararg path: String): Any? {

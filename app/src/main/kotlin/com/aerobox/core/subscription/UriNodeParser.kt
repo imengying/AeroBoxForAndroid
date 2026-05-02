@@ -93,6 +93,7 @@ internal object UriNodeParser {
         val name = decodeName(raw.substringAfter('#', "Shadowsocks"))
         val params = parseUriParams(mainAndQuery.substringAfter('?', ""))
         val pluginSpec = parseShadowsocksPlugin(params["plugin"])
+        val shadowTls = extractShadowTlsFromPluginString(pluginSpec.first, pluginSpec.second)
 
         val core = mainAndQuery.substringBefore('?')
         val normalizedCore = if (core.contains('@')) {
@@ -123,8 +124,49 @@ internal object UriNodeParser {
             network = normalizeEnabledNetwork(params["network"]),
             plugin = pluginSpec.first,
             pluginOpts = pluginSpec.second,
-            udpOverTcpEnabled = parseBooleanOrNull(params["uot"], params["udp_over_tcp"])
+            udpOverTcpEnabled = parseBooleanOrNull(params["uot"], params["udp_over_tcp"]),
+            shadowTlsVersion = shadowTls?.version,
+            shadowTlsPassword = shadowTls?.password,
+            shadowTlsServerName = shadowTls?.host,
+            shadowTlsAlpn = shadowTls?.alpn
         ).withUriSharedOptions(params)
+    }
+
+    /** Parsed view of a Shadowsocks `plugin=shadow-tls;…` plugin-opts string. */
+    internal data class ShadowTlsPluginInfo(
+        val host: String?,
+        val password: String?,
+        val version: Int?,
+        val alpn: String?
+    )
+
+    /**
+     * Extract ShadowTLS configuration from an SS-URI `plugin` + `plugin-opts`
+     * pair. Returns null when [plugin] is not the shadow-tls plugin.
+     *
+     * Recognises the common `host=…;password=…;version=3` form as well as
+     * tolerant variations (`server-name=`, `alpn=h2,http/1.1`).
+     */
+    internal fun extractShadowTlsFromPluginString(plugin: String?, opts: String?): ShadowTlsPluginInfo? {
+        if (plugin?.lowercase()?.trim() != "shadow-tls") return null
+        val pairs = opts.orEmpty().split(';', '\n')
+            .mapNotNull { entry ->
+                val trimmed = entry.trim()
+                if (trimmed.isEmpty()) return@mapNotNull null
+                val sep = trimmed.indexOf('=')
+                if (sep <= 0) return@mapNotNull null
+                val key = trimmed.substring(0, sep).trim().lowercase()
+                val value = trimmed.substring(sep + 1).trim()
+                if (key.isBlank() || value.isBlank()) null else key to value
+            }
+            .toMap()
+        if (pairs.isEmpty()) return null
+        return ShadowTlsPluginInfo(
+            host = pairs["host"] ?: pairs["server-name"] ?: pairs["server_name"],
+            password = pairs["password"],
+            version = pairs["version"]?.toIntOrNull(),
+            alpn = pairs["alpn"]
+        )
     }
 
     internal fun parseVmessUri(uri: String): ProxyNode? {

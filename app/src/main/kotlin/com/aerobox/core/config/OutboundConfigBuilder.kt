@@ -33,8 +33,13 @@ internal object OutboundConfigBuilder {
                 outbound.put("type", "shadowsocks")
                 outbound.put("method", node.method ?: "aes-128-gcm")
                 node.password?.takeIf { it.isNotBlank() }?.let { outbound.put("password", it) }
-                node.plugin?.takeIf { it.isNotBlank() }?.let { outbound.put("plugin", it) }
-                node.pluginOpts?.takeIf { it.isNotBlank() }?.let { outbound.put("plugin_opts", it) }
+                if (!hasShadowTlsCompanion(node)) {
+                    // sing-box doesn't accept plugin=shadow-tls on the SS outbound;
+                    // the handshake is emitted as a separate `shadowtls` outbound
+                    // (see buildShadowTlsCompanion) and chained via `detour`.
+                    node.plugin?.takeIf { it.isNotBlank() }?.let { outbound.put("plugin", it) }
+                    node.pluginOpts?.takeIf { it.isNotBlank() }?.let { outbound.put("plugin_opts", it) }
+                }
                 enabledNetwork?.let { outbound.put("network", it) }
                 buildUdpOverTcp(node.udpOverTcpEnabled, node.udpOverTcpVersion)?.let {
                     outbound.put("udp_over_tcp", it)
@@ -185,11 +190,87 @@ internal object OutboundConfigBuilder {
         }
     }
 
+    /**
+     * Whether the given node should be paired with a sibling `shadowtls`
+     * outbound. True when the user imported a Shadowsocks node that originally
+     * carried a `shadow-tls` plugin in its Clash / SS-URI form.
+     */
+    internal fun hasShadowTlsCompanion(node: ProxyNode): Boolean {
+        if (node.type != ProxyType.SHADOWSOCKS && node.type != ProxyType.SHADOWSOCKS_2022) {
+            return false
+        }
+        return !node.shadowTlsPassword.isNullOrBlank() ||
+            !node.shadowTlsServerName.isNullOrBlank() ||
+            (node.shadowTlsVersion != null && node.shadowTlsVersion > 0)
+    }
+
+    /**
+     * Build the companion `shadowtls` outbound that performs the TLS-style
+     * handshake on behalf of the paired Shadowsocks outbound. Returns null
+     * when the node does not use ShadowTLS.
+     *
+     * The caller is responsible for adding `"detour": companion.tag` to the
+     * primary SS outbound — see [ConfigGenerator.generateSingBoxConfig].
+     */
+    internal fun buildShadowTlsCompanion(node: ProxyNode, primaryTag: String): JSONObject? {
+        if (!hasShadowTlsCompanion(node)) return null
+        val cleanServer = ConfigGenerator.normalizeOutboundServer(node.server)
+        if (cleanServer.isBlank()) return null
+
+        val tag = "$primaryTag-shadowtls"
+        val outbound = JSONObject()
+            .put("type", "shadowtls")
+            .put("tag", tag)
+            .put("server", cleanServer)
+            .put("server_port", node.port)
+        // sing-box supports ShadowTLS v1/v2/v3; default to v3 (most common).
+        outbound.put(
+            "version",
+            node.shadowTlsVersion?.takeIf { it in 1..3 } ?: 3
+        )
+        node.shadowTlsPassword
+            ?.takeIf { it.isNotBlank() }
+            ?.let { outbound.put("password", it) }
+
+        val tls = JSONObject().put("enabled", true)
+        val sni = node.shadowTlsServerName?.takeIf { it.isNotBlank() }
+            ?: node.sni?.takeIf { it.isNotBlank() }
+        sni?.let { tls.put("server_name", it) }
+
+        val alpnSource = node.shadowTlsAlpn?.takeIf { it.isNotBlank() }
+            ?: node.alpn?.takeIf { it.isNotBlank() }
+        if (alpnSource != null) {
+            val alpnArray = JSONArray()
+            alpnSource.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                .forEach { alpnArray.put(it) }
+            if (alpnArray.length() > 0) tls.put("alpn", alpnArray)
+        }
+        if (node.allowInsecure) tls.put("insecure", true)
+        if (!node.fingerprint.isNullOrBlank()) {
+            tls.put(
+                "utls",
+                JSONObject()
+                    .put("enabled", true)
+                    .put("fingerprint", node.fingerprint)
+            )
+        }
+        outbound.put("tls", tls)
+        return outbound
+    }
+
     private fun applyDialFields(outbound: JSONObject, node: ProxyNode) {
         node.bindInterface?.takeIf { it.isNotBlank() }?.let { outbound.put("bind_interface", it) }
         node.connectTimeout?.takeIf { it.isNotBlank() }?.let { outbound.put("connect_timeout", it) }
         node.tcpFastOpen?.let { outbound.put("tcp_fast_open", it) }
         node.udpFragment?.let { outbound.put("udp_fragment", it) }
+        // sing-box 1.13 dial-level TCP keep-alive triplet. All optional;
+        // omitting a key falls back to sing-box's defaults (5m initial /
+        // 75s interval, keep-alive on).
+        node.disableTcpKeepAlive?.let { outbound.put("disable_tcp_keep_alive", it) }
+        node.tcpKeepAlive?.takeIf { it.isNotBlank() }?.let { outbound.put("tcp_keep_alive", it) }
+        node.tcpKeepAliveInterval
+            ?.takeIf { it.isNotBlank() }
+            ?.let { outbound.put("tcp_keep_alive_interval", it) }
     }
 
     private fun applyMultiplex(outbound: JSONObject, node: ProxyNode) {
@@ -197,6 +278,33 @@ internal object OutboundConfigBuilder {
 
         val multiplex = JSONObject()
         multiplex.put("enabled", enabled)
+        // sing-box accepts smux / yamux / h2mux. Anything else is silently
+        // ignored so passing through unrecognised values is safe, but we
+        // still gate-check to avoid emitting noise into the config.
+        node.muxProtocol
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it in setOf("smux", "yamux", "h2mux") }
+            ?.let { multiplex.put("protocol", it) }
+        node.muxMaxConnections?.takeIf { it > 0 }?.let { multiplex.put("max_connections", it) }
+        node.muxMinStreams?.takeIf { it > 0 }?.let { multiplex.put("min_streams", it) }
+        node.muxMaxStreams?.takeIf { it > 0 }?.let { multiplex.put("max_streams", it) }
+        node.muxPadding?.let { multiplex.put("padding", it) }
+
+        // TCP Brutal — only emit when we have at least one bandwidth limit;
+        // sing-box requires both up_mbps and down_mbps when brutal is on, so
+        // missing values fall back to a permissive 1 Gbps.
+        if (node.muxBrutalEnabled == true ||
+            (node.muxBrutalUpMbps != null && node.muxBrutalUpMbps > 0) ||
+            (node.muxBrutalDownMbps != null && node.muxBrutalDownMbps > 0)
+        ) {
+            val brutal = JSONObject()
+                .put("enabled", node.muxBrutalEnabled ?: true)
+                .put("up_mbps", node.muxBrutalUpMbps?.takeIf { it > 0 } ?: 1000)
+                .put("down_mbps", node.muxBrutalDownMbps?.takeIf { it > 0 } ?: 1000)
+            multiplex.put("brutal", brutal)
+        }
+
         outbound.put("multiplex", multiplex)
     }
 
@@ -206,11 +314,19 @@ internal object OutboundConfigBuilder {
         node.sni?.takeIf { it.isNotBlank() }?.let { tls.put("server_name", it) }
         node.naiveCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("certificate", it) }
         node.naiveCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("certificate_path", it) }
-        buildNaiveEchObject(node)?.let { tls.put("ech", it) }
+        buildEchObject(node)?.let { tls.put("ech", it) }
         return tls
     }
 
-    private fun buildNaiveEchObject(node: ProxyNode): JSONObject? {
+    /**
+     * Build the `tls.ech` sub-object for any TLS-bearing outbound.
+     *
+     * The backing fields keep their historical `naive*` prefix to avoid a
+     * Room schema migration, but ECH (Encrypted Client Hello) is a generic
+     * TLS feature in sing-box and applies equally to VMess/VLESS/Trojan/
+     * Hysteria2/TUIC/HTTP/Naive when their server advertises an ECHConfig.
+     */
+    private fun buildEchObject(node: ProxyNode): JSONObject? {
         val config = node.naiveEchConfig?.trim()?.takeIf { it.isNotEmpty() }
         val configPath = node.naiveEchConfigPath?.trim()?.takeIf { it.isNotEmpty() }
         val queryServerName = node.naiveEchQueryServerName?.trim()?.takeIf { it.isNotEmpty() }
@@ -293,6 +409,9 @@ internal object OutboundConfigBuilder {
                     .put("fingerprint", node.fingerprint)
             )
         }
+
+        // ECH applies to any TLS-bearing outbound, not just NaiveProxy.
+        buildEchObject(node)?.let { tls.put("ech", it) }
 
         return tls
     }

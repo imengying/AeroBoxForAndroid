@@ -79,12 +79,14 @@ object ConfigGenerator {
         config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, ipv6Mode))
 
         val proxyOutbound = OutboundConfigBuilder.buildProxyOutbound(node).put("tag", PROXY_OUTBOUND_TAG)
-        config.put(
-            "outbounds",
-            JSONArray()
-                .put(proxyOutbound)
-                .put(JSONObject().put("type", "direct").put("tag", "direct"))
-        )
+        val shadowTlsCompanion = OutboundConfigBuilder.buildShadowTlsCompanion(node, PROXY_OUTBOUND_TAG)
+        if (shadowTlsCompanion != null) {
+            proxyOutbound.put("detour", shadowTlsCompanion.getString("tag"))
+        }
+        val outboundsArray = JSONArray().put(proxyOutbound)
+        shadowTlsCompanion?.let { outboundsArray.put(it) }
+        outboundsArray.put(JSONObject().put("type", "direct").put("tag", "direct"))
+        config.put("outbounds", outboundsArray)
 
         config.put(
             "route",
@@ -136,12 +138,14 @@ object ConfigGenerator {
         config.put("inbounds", JSONArray())
 
         val proxyOutbound = OutboundConfigBuilder.buildProxyOutbound(node).put("tag", PROXY_OUTBOUND_TAG)
-        config.put(
-            "outbounds",
-            JSONArray()
-                .put(proxyOutbound)
-                .put(JSONObject().put("type", "direct").put("tag", "direct"))
-        )
+        val shadowTlsCompanion = OutboundConfigBuilder.buildShadowTlsCompanion(node, PROXY_OUTBOUND_TAG)
+        if (shadowTlsCompanion != null) {
+            proxyOutbound.put("detour", shadowTlsCompanion.getString("tag"))
+        }
+        val urlTestOutbounds = JSONArray().put(proxyOutbound)
+        shadowTlsCompanion?.let { urlTestOutbounds.put(it) }
+        urlTestOutbounds.put(JSONObject().put("type", "direct").put("tag", "direct"))
+        config.put("outbounds", urlTestOutbounds)
 
         config.put(
             "route",
