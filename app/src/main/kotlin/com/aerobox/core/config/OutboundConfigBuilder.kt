@@ -1,5 +1,7 @@
 package com.aerobox.core.config
 
+import com.aerobox.R
+import com.aerobox.core.errors.LocalizedException
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
 import com.aerobox.data.model.effectiveEnabledNetwork
@@ -19,7 +21,7 @@ internal object OutboundConfigBuilder {
         validateTlsServerNameRequirements(node)
         val cleanServer = ConfigGenerator.normalizeOutboundServer(node.server)
         if (cleanServer.isBlank()) {
-            throw IllegalArgumentException("节点服务器地址为空")
+            throw LocalizedException.of(R.string.error_node_server_empty)
         }
         val enabledNetwork = node.effectiveEnabledNetwork()
         val transportType = node.effectiveTransportType()
@@ -186,7 +188,7 @@ internal object OutboundConfigBuilder {
         val cleanServer = ConfigGenerator.normalizeOutboundServer(node.server)
         val usesReality = !node.publicKey.isNullOrBlank()
         if (usesReality && ConfigGenerator.isIpLiteral(cleanServer) && node.sni.isNullOrBlank()) {
-            throw IllegalArgumentException("Reality 节点使用 IP 地址时必须显式填写 SNI")
+            throw LocalizedException.of(R.string.error_reality_requires_sni)
         }
     }
 

@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.room.withTransaction
 import com.aerobox.AeroBoxApplication
 import com.aerobox.R
+import com.aerobox.core.errors.LocalizedException
 import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.subscription.ParseDiagnostics
 import com.aerobox.core.subscription.SubscriptionParser
@@ -575,7 +576,7 @@ class SubscriptionRepository(context: Context) {
             .mapIndexed { index, node ->
                 val fallbackName = nameHint
                     ?.takeIf { total == 1 }
-                    ?: "导入节点 ${index + 1}"
+                    ?: appContext.getString(R.string.imported_node_default_name_format, index + 1)
                 node.copy(
                     name = node.name.ifBlank { fallbackName },
                     subscriptionId = subscriptionId
@@ -599,7 +600,7 @@ class SubscriptionRepository(context: Context) {
             return SubscriptionImportResult(
                 subscriptionId = subscriptionId,
                 nodeCount = 0,
-                error = IllegalStateException("未导入新节点，可能已存在相同配置"),
+                error = LocalizedException.of(R.string.error_no_new_nodes_imported),
                 metadataFromHeader = prepared.metadataFromHeader,
                 diagnostics = prepared.diagnostics
             )

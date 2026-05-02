@@ -222,13 +222,14 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     connectionIssue?.let { issue ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissConnectionIssue() },
-            title = { Text(issue.title) },
+            title = { Text(stringResource(issue.titleResId)) },
             text = {
                 Text(
                     buildString {
-                        append(issue.message)
+                        append(stringResource(issue.messageResId))
                         if (issue.rawError.isNotBlank()) {
-                            append("\n\n原始错误：")
+                            append("\n\n")
+                            append(stringResource(R.string.connection_issue_raw_error_prefix))
                             append(issue.rawError.take(220))
                         }
                     }
@@ -240,22 +241,24 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     TextButton(
                         onClick = { viewModel.applyConnectionFix(context, action) }
                     ) {
-                        Text(action.label)
+                        Text(stringResource(action.labelResId))
                     }
                 } else {
                     TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
-                        Text("知道了")
+                        Text(stringResource(R.string.confirm))
                     }
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
                     Text(
-                        if (issue.fixAction == ConnectionFixAction.REFRESH_SUBSCRIPTIONS) {
-                            "稍后手动处理"
-                        } else {
-                            "取消"
-                        }
+                        stringResource(
+                            if (issue.fixAction == ConnectionFixAction.REFRESH_SUBSCRIPTIONS) {
+                                R.string.connection_issue_dismiss_for_now
+                            } else {
+                                R.string.cancel
+                            }
+                        )
                     )
                 }
             }
@@ -295,7 +298,7 @@ private fun MemoryUsageCard(
             horizontalAlignment = Alignment.Start
         ) {
             Text(
-                text = "内存占用",
+                text = stringResource(R.string.home_card_memory_usage),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -334,7 +337,7 @@ private fun NetworkDetectCard(
             horizontalAlignment = Alignment.Start
         ) {
             Text(
-                text = "网络检测",
+                text = stringResource(R.string.home_card_network_detect),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -411,9 +414,9 @@ private fun RoutingModeRow(
     modifier: Modifier = Modifier
 ) {
     val modes = listOf(
-        RoutingMode.RULE_BASED to "规则",
-        RoutingMode.GLOBAL_PROXY to "全局",
-        RoutingMode.DIRECT to "直连"
+        RoutingMode.RULE_BASED to stringResource(R.string.home_routing_chip_rule),
+        RoutingMode.GLOBAL_PROXY to stringResource(R.string.home_routing_chip_global),
+        RoutingMode.DIRECT to stringResource(R.string.home_routing_chip_direct)
     )
 
     Card(

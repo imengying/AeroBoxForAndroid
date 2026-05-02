@@ -232,7 +232,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
         val result = vpnRepository.switchToNode(currentNode)
         if (result is VpnConnectionResult.Success) {
-            _uiMessage.tryEmit(appContext.getString(com.aerobox.R.string.switched_to_mode, mode.displayName))
+            _uiMessage.tryEmit(
+                appContext.getString(
+                    com.aerobox.R.string.switched_to_mode,
+                    appContext.getString(mode.labelResId)
+                )
+            )
             return true
         }
         PreferenceManager.setRoutingMode(appContext, previousMode)
@@ -496,7 +501,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         connectWatchdogJob = null
         val issue = ConnectionDiagnostics.classify(rawError)
         _connectionIssue.value = issue
-        _uiMessage.tryEmit("${context.getString(com.aerobox.R.string.operation_failed)}: ${issue.title}")
+        _uiMessage.tryEmit(
+            "${context.getString(com.aerobox.R.string.operation_failed)}: " +
+                context.getString(issue.titleResId)
+        )
     }
 
     /**

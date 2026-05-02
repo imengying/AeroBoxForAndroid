@@ -149,7 +149,11 @@ class AeroBoxTileService : TileService() {
                         pendingAction = null
                         Log.e(
                             TAG,
-                            ConnectionDiagnostics.logFailureMessage(result, "Config error")
+                            ConnectionDiagnostics.logFailureMessage(
+                                result,
+                                "Config error",
+                                ::getString
+                            )
                         )
                         requestTileRefresh(applicationContext)
                     }
@@ -158,7 +162,11 @@ class AeroBoxTileService : TileService() {
                         pendingAction = null
                         Log.e(
                             TAG,
-                            ConnectionDiagnostics.logFailureMessage(result, "Failed to start VPN from tile"),
+                            ConnectionDiagnostics.logFailureMessage(
+                                result,
+                                "Failed to start VPN from tile",
+                                ::getString
+                            ),
                             result.throwable
                         )
                         requestTileRefresh(applicationContext)

@@ -49,7 +49,7 @@ fun LicenseScreen(
             context.resources.openRawResource(R.raw.project_license)
                 .bufferedReader()
                 .use { it.readText().trim() }
-        }.getOrElse { "读取 GNU 许可证失败" }
+        }.getOrElse { context.getString(R.string.license_read_failed) }
     }
 
     Scaffold(

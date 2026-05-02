@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AeroBox</string>
+    <string name="home">Главная</string>
+    <string name="settings">Настройки</string>
+    <string name="connect">Подключить</string>
+    <string name="disconnect">Отключить</string>
+    <string name="connected">Подключено</string>
+    <string name="connecting">Подключение</string>
+    <string name="disconnected">Отключено</string>
+    <string name="upload">Отправлено</string>
+    <string name="download">Получено</string>
+    <string name="add_subscription">Добавить подписку</string>
+    <string name="edit_subscription">Изменить подписку</string>
+    <string name="delete_subscription">Удалить подписку</string>
+    <string name="appearance">Оформление</string>
+    <string name="dark_mode">Тема</string>
+    <string name="dynamic_color">Динамический цвет</string>
+    <string name="connection_settings">Соединение</string>
+    <string name="auto_connect">Авто-подключение</string>
+    <string name="about">О программе</string>
+    <string name="version">Версия</string>
+    <string name="open_source_licenses">Лицензии с открытым кодом</string>
+    <string name="confirm">ОК</string>
+    <string name="cancel">Отмена</string>
+    <string name="add">Добавить</string>
+    <string name="save">Сохранить</string>
+    <string name="delete">Удалить</string>
+    <string name="no_subscription">Подписок пока нет</string>
+    <string name="subscription_name">Название подписки</string>
+    <string name="subscription_url">URL подписки</string>
+    <string name="notification_title">AeroBox</string>
+    <string name="notification_connecting">Подключение…</string>
+    <string name="notification_action_switch">Сменить</string>
+    <string name="notification_action_stop">Стоп</string>
+    <string name="hint_add_subscription">Сначала добавьте подписку, чтобы получить узлы</string>
+    <string name="refresh">Обновить</string>
+    <string name="not_selected">Узел не выбран</string>
+    <string name="permission_required">Требуется разрешение VPN</string>
+    <string name="notification_permission_hint">Разрешение на уведомления не предоставлено; уведомления в строке состояния могут не отображаться</string>
+    <string name="operation_failed">Операция не выполнена, попробуйте ещё раз</string>
+    <string name="add_node_first">Сначала выберите узел</string>
+    <string name="subscription_management">Подписки</string>
+    <string name="scan_qr">Сканировать QR</string>
+    <string name="scan_qr_permission_required">Для сканирования QR требуется разрешение камеры</string>
+    <string name="add_via_subscription_link">URL подписки</string>
+    <string name="add_via_nodes">Импорт узлов</string>
+    <string name="add_via_local_file">Импорт файла</string>
+    <string name="node_content">Содержимое узла</string>
+    <string name="subscription_auto_update">Включить авто-обновление</string>
+    <string name="subscription_update_interval_minutes">Интервал авто-обновления (мин)</string>
+    <string name="subscription_update_interval_hint">Минимум 15 мин; рекомендуется 60 или 1440</string>
+    <string name="subscription_auto_update_invalid_interval">Интервал должен быть не менее 15 минут</string>
+    <string name="subscription_traffic">Остаток трафика</string>
+    <string name="subscription_expire">Истекает</string>
+    <string name="tile_label">AeroBox</string>
+    <string name="tile_status_stopping">Остановка</string>
+    <string name="enable_ipv6">Поддержка IPv6</string>
+    <string name="connection_fix_success">Исправлено; повторите подключение</string>
+    <string name="connection_fix_failed">Исправление не удалось; проверьте сеть и повторите</string>
+    <string name="detecting_ip">Определение…</string>
+    <string name="detecting_ip_later">Будет определено автоматически…</string>
+    <string name="import_choose_group">Выбрать группу</string>
+    <string name="import_node_count">Будет импортировано узлов: %1$d</string>
+    <string name="group_ungrouped">Без группы</string>
+    <string name="group_new">Новая группа</string>
+    <string name="group_new_name_hint">Название группы</string>
+    <string name="group_node_count_suffix">Узлов: %1$d</string>
+    <string name="local_group_label">Локальная группа</string>
+    <string name="edit_group">Изменить группу</string>
+    <string name="delete_group">Удалить группу</string>
+    <string name="delete_subscription_confirm">Удалить «%1$s» и все её узлы?</string>
+    <string name="delete_local_group_confirm">Удалить группу «%1$s»? Её узлы будут перенесены в «Без группы».</string>
+    <string name="rename_group">Переименовать группу</string>
+    <string name="delete_node">Удалить узел</string>
+    <string name="delete_node_confirm">Удалить узел «%1$s»?</string>
+    <string name="group_empty_nodes">Узлов нет</string>
+    <string name="switch_node_title">Сменить узел</string>
+    <string name="detect_failed_tap_retry">Не удалось определить, нажмите для повтора</string>
+    <string name="tap_detect_exit_ip">Нажмите, чтобы определить внешний IP</string>
+    <string name="switched_to_mode">Переключено на %1$s</string>
+    <string name="subscription_refreshed_new_node">Подписка обновлена; используется подходящий новый узел: %1$s</string>
+    <string name="node_current_suffix"> · текущий</string>
+
+    <!-- Subscription import / update messages -->
+    <string name="subscription_link_invalid">Некорректный URL подписки; используйте HTTPS</string>
+    <string name="import_subscription_failed">Не удалось импортировать подписку: %1$s</string>
+    <string name="update_subscription_failed">Не удалось обновить подписку: %1$s</string>
+    <string name="group_noun">группу</string>
+    <string name="subscription_noun">подписку</string>
+    <string name="deleted_item_format">Удалена %1$s: %2$s</string>
+    <string name="modified_item_format">Изменена %1$s: %2$s</string>
+    <string name="local_group_no_refresh">Локальные группы не требуют обновления</string>
+    <string name="no_refreshable_subscription">Нет подписок, доступных для обновления</string>
+    <string name="subscription_update_complete_all_format">Обновлено подписок: %1$d (добавлено %2$d / изменено %3$d / удалено %4$d)</string>
+    <string name="subscription_update_metadata_suffix">; синхронизированы трафик/срок: %1$d</string>
+    <string name="subscription_update_partial_fail_format">Частичная неудача обновления (успешно %1$d / неудачно %2$d, добавлено %3$d / изменено %4$d / удалено %5$d)</string>
+    <string name="subscription_update_partial_fail_error_suffix">; %1$s</string>
+    <string name="import_empty_content">Содержимое импорта пустое</string>
+    <string name="import_failed">Импорт не удался: %1$s</string>
+    <string name="node_empty_content">Содержимое узла пустое</string>
+    <string name="node_content_use_subscription_entry">Для импорта URL подписки используйте пункт «URL подписки»</string>
+    <string name="local_file_too_large">Файл слишком большой; конфигурации более 8 МБ не поддерживаются</string>
+    <string name="cannot_read_local_file">Не удалось прочитать локальный файл</string>
+    <string name="import_local_file_failed">Не удалось импортировать локальный файл: %1$s</string>
+    <string name="import_success_ungrouped_format">Импорт выполнен: добавлено узлов в «Без группы»: %1$d</string>
+    <string name="import_success_with_count_format">Импорт выполнен: %1$d узлов</string>
+    <string name="import_success_metadata_suffix">; информация о трафике/сроке считана</string>
+    <string name="import_fail_local_group_target">Группы подписок нельзя использовать как цель импорта</string>
+    <string name="subscription_update_complete_format">Подписка обновлена: %1$s</string>
+    <string name="subscription_update_summary_paren_format">(%1$s)</string>
+    <string name="subscription_update_metadata_single_suffix">; информация о трафике/сроке синхронизирована</string>
+
+    <!-- Parse / network / generic errors -->
+    <string name="error_no_valid_nodes">Не удалось распарсить рабочие узлы; проверьте формат подписки</string>
+    <string name="error_no_valid_nodes_hints_format">Не удалось распарсить рабочие узлы. Возможные причины: %1$s</string>
+    <string name="error_config_exception">Ошибка конфигурации</string>
+    <string name="error_unknown_host">Не удалось подключиться к серверу подписки; проверьте сеть или URL</string>
+    <string name="error_socket_timeout">Время ожидания истекло, попробуйте позже</string>
+    <string name="error_ssl">Ошибка проверки TLS/сертификата; проверьте URL подписки</string>
+    <string name="error_http_server_returned_format">Сервер подписки вернул %1$s</string>
+    <string name="error_network_general">Сетевая ошибка, попробуйте позже</string>
+    <string name="error_unknown">Неизвестная ошибка</string>
+    <string name="error_subscription_response_too_large">Ответ подписки превышает лимит 8 МБ</string>
+    <string name="warning_insecure_nodes_format">Внимание: у %1$d узлов отключена проверка TLS-сертификата, есть риск MITM-атаки</string>
+
+    <!-- Parse diagnostics hints -->
+    <string name="diag_unsupported_subscription_content">Содержимое подписки не является поддерживаемым форматом sing-box, Clash или ссылок на узлы</string>
+    <string name="diag_missing_clash_proxies">В конфигурации Clash отсутствует список proxies</string>
+    <string name="diag_unsupported_type_or_scheme">Подписка содержит неподдерживаемые типы узлов или схемы ссылок</string>
+    <string name="diag_unsupported_transport">Подписка содержит неподдерживаемые транспорты</string>
+    <string name="diag_missing_endpoint">У части узлов отсутствует адрес или порт сервера</string>
+    <string name="diag_invalid_item">Часть записей узлов в подписке имеет некорректный формат</string>
+    <string name="diag_invalid_uri">Формат ссылки узла некорректен или содержит неподдерживаемые параметры</string>
+
+    <!-- Settings failure prefixes + composed messages -->
+    <string name="perapp_setting_failed">Не удалось применить настройки прокси для отдельных приложений</string>
+    <string name="geo_setting_failed">Не удалось применить настройки правил</string>
+    <string name="inbound_setting_failed">Не удалось применить настройки входящих соединений</string>
+    <string name="dns_setting_failed">Не удалось применить настройки DNS</string>
+    <string name="ipv6_setting_failed">Не удалось применить настройки IPv6</string>
+    <string name="dns_invalid_format">Некорректные настройки DNS: %1$s</string>
+    <string name="config_generation_failed">Не удалось сгенерировать конфигурацию</string>
+    <string name="applying">Применение</string>
+    <string name="current_node_unavailable">Текущий узел недоступен</string>
+    <string name="setting_failed_with_error_format">%1$s: %2$s</string>
+
+    <!-- Summary -->
+    <string name="summary_no_change">Без изменений</string>
+    <string name="summary_changes_format">добавлено %1$d / изменено %2$d / удалено %3$d</string>
+
+    <!-- Relative time -->
+    <string name="never_updated">Не обновлялось</string>
+    <string name="just_updated">Только что обновлено</string>
+    <string name="minutes_ago_format">%1$d мин назад</string>
+    <string name="hours_ago_format">%1$d ч назад</string>
+    <string name="days_ago_format">%1$d дн назад</string>
+
+    <!-- QR scan prompt -->
+    <string name="qr_scan_prompt">Отсканируйте QR-код подписки или узла</string>
+
+    <!-- Subscription repository -->
+    <string name="import_subscription_default_name">Импортированная подписка</string>
+    <string name="error_target_group_not_found">Целевая группа не существует</string>
+    <string name="error_local_group_no_remote_refresh">Локальные группы нельзя обновить с удалённого сервера</string>
+
+    <!-- Backend error messages -->
+    <string name="error_node_server_empty">Адрес сервера узла пуст</string>
+    <string name="error_reality_requires_sni">Узлам Reality требуется явный SNI, если сервер задан IP-адресом</string>
+    <string name="error_no_new_nodes_imported">Новые узлы не импортированы; идентичные конфигурации, возможно, уже существуют</string>
+    <string name="imported_node_default_name_format">Импортированный узел %1$d</string>
+    <string name="error_dns_address_invalid_format">Адрес «%1$s» некорректен</string>
+    <string name="error_dns_port_invalid_format">Порт «%1$s» некорректен</string>
+    <string name="error_dns_protocol_invalid_format">Протокол «%1$s» некорректен</string>
+    <string name="error_dns_path_invalid_format">Путь «%1$s» некорректен</string>
+    <string name="error_dns_no_ipv6_format">«%1$s» не может быть IPv6-адресом</string>
+    <string name="error_dns_invalid_format_generic">Формат DNS-адреса некорректен</string>
+    <string name="dns_label_remote">Удалённый DNS</string>
+    <string name="dns_label_direct">Прямой DNS</string>
+    <string name="error_rule_set_unavailable">Geo-набор правил недоступен; сначала обновите правила маршрутизации</string>
+    <string name="file_size_not_downloaded">Не загружено</string>
+
+    <!-- ConnectionDiagnostics -->
+    <string name="connection_issue_reality_title">Конфигурация Reality неполная</string>
+    <string name="connection_issue_reality_message">Узлам Reality требуется явный SNI / server_name, если сервер задан IP-адресом.</string>
+    <string name="connection_issue_geo_title">Ресурсы маршрутизации недоступны</string>
+    <string name="connection_issue_geo_message">Официальный набор правил маршрутизации недоступен или несовместим по формату.</string>
+    <string name="connection_issue_rule_title">Ошибка правил маршрутизации</string>
+    <string name="connection_issue_rule_message">Текущий режим правил может быть несовместим с узлом; попробуйте сначала переключиться в глобальный режим.</string>
+    <string name="connection_issue_node_title">Узел или подписка могут быть недействительны</string>
+    <string name="connection_issue_node_message">Параметры узла могли устареть; обновите подписку перед повторным подключением.</string>
+    <string name="connection_issue_generic_title">Ошибка конфигурации соединения</string>
+    <string name="connection_issue_generic_message">Проверьте настройки узла, DNS и маршрутизации; при необходимости обновите подписку.</string>
+    <string name="connection_fix_update_geo">Обновить ресурсы маршрутизации</string>
+    <string name="connection_fix_switch_global">Переключиться в глобальный режим</string>
+    <string name="connection_fix_refresh_subscriptions">Обновить подписку</string>
+    <string name="connection_issue_raw_error_prefix">Исходная ошибка: </string>
+    <string name="connection_issue_dismiss_for_now">Отложить</string>
+
+    <!-- RoutingMode display names -->
+    <string name="routing_mode_global_proxy">Глобальный прокси</string>
+    <string name="routing_mode_rule_based">Маршрутизация по правилам</string>
+    <string name="routing_mode_direct">Прямое соединение</string>
+
+    <!-- HomeScreen -->
+    <string name="home_card_memory_usage">Использование памяти</string>
+    <string name="home_card_network_detect">Состояние сети</string>
+    <string name="home_routing_chip_rule">Правила</string>
+    <string name="home_routing_chip_global">Глобально</string>
+    <string name="home_routing_chip_direct">Прямо</string>
+
+    <!-- LogScreen -->
+    <string name="log_screen_title">Журнал работы</string>
+    <string name="log_copied">Журнал скопирован</string>
+    <string name="log_action_copy_all">Скопировать весь журнал</string>
+    <string name="log_action_clear">Очистить журнал</string>
+    <string name="log_empty">Записей в журнале нет</string>
+
+    <!-- LicenseScreen -->
+    <string name="license_read_failed">Не удалось прочитать лицензию GNU</string>
+
+    <!-- NodeListSheet -->
+    <string name="node_list_title">Узлы</string>
+    <string name="node_list_empty_hint">Узлов пока нет; сначала добавьте подписку</string>
+    <string name="node_list_speed_test">Тест</string>
+    <string name="latency_testing">Тест</string>
+    <string name="latency_failed">Сбой</string>
+
+    <!-- PerAppProxyScreen -->
+    <string name="per_app_proxy_title">Прокси по приложениям</string>
+    <string name="per_app_proxy_chip_bypass">Исключить выбранные</string>
+    <string name="per_app_proxy_chip_only">Только выбранные</string>
+    <string name="per_app_proxy_chip_show_system">Системные</string>
+    <string name="per_app_proxy_search_hint">Поиск по имени или пакету</string>
+    <string name="per_app_proxy_loading">Загрузка</string>
+    <string name="per_app_proxy_empty">Не удалось загрузить список приложений; попробуйте позже</string>
+    <string name="per_app_proxy_no_match">Совпадений не найдено</string>
+    <string name="per_app_proxy_no_internet">Нет разрешения на сеть</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings_section_subscription">Подписки</string>
+    <string name="settings_subscription_summary">Добавление, обновление и управление подписками</string>
+    <string name="settings_section_routing">Маршрутизация</string>
+    <string name="settings_routing_title">Маршрутизация</string>
+    <string name="settings_routing_summary_format">Текущий режим · %1$s</string>
+    <string name="settings_section_per_app">Прокси по приложениям</string>
+    <string name="settings_per_app_enable">Включить прокси по приложениям</string>
+    <string name="settings_per_app_enabled">Включено</string>
+    <string name="settings_per_app_disabled">Выключено</string>
+    <string name="settings_per_app_config_title">Настроить список приложений</string>
+    <string name="settings_per_app_config_summary">Выберите, какие приложения идут через прокси или обходят его</string>
+    <string name="settings_dynamic_color_summary">Использовать динамические цвета системы</string>
+    <string name="settings_theme_dark">Тёмная</string>
+    <string name="settings_theme_light">Светлая</string>
+    <string name="settings_theme_system">Системная</string>
+    <string name="settings_section_dns">DNS</string>
+    <string name="settings_dns_server">DNS-серверы</string>
+    <string name="settings_dns_summary">Маршрутизация DNS</string>
+    <string name="settings_section_inbound">Входящие</string>
+    <string name="settings_inbound_socks5">Входящий SOCKS5</string>
+    <string name="settings_inbound_http">Входящий HTTP</string>
+    <string name="settings_inbound_port_format">Порт %1$d</string>
+    <string name="settings_auto_connect_summary">Автоподключение после загрузки</string>
+    <string name="settings_ipv6_summary">Включить поддержку IPv6</string>
+    <string name="settings_auto_reconnect">Автопереподключение при сбое</string>
+    <string name="settings_auto_reconnect_summary">Автоматически переподключаться при неожиданном разрыве VPN</string>
+    <string name="settings_log">Журнал работы</string>
+    <string name="settings_log_summary">Просмотр журнала работы sing-box</string>
+    <string name="settings_about_supporting">Проект AeroBox · GNU GPL-3.0-or-later</string>
+    <string name="dns_dialog_title">Настройки DNS</string>
+    <string name="dns_dialog_reset">Сбросить</string>
+    <string name="dns_dialog_remote_example">Пример: https://cloudflare-dns.com/dns-query, tls://1.1.1.1, udp://8.8.8.8</string>
+    <string name="dns_dialog_direct_example">Пример: udp://223.5.5.5, https://dns.alidns.com/dns-query</string>
+
+    <!-- RoutingSettingsScreen -->
+    <string name="routing_screen_title">Маршрутизация</string>
+    <string name="routing_section_rules">Правила</string>
+    <string name="routing_rules_master">Правила маршрутизации</string>
+    <string name="routing_rules_master_on">Включены; настройте отдельные правила ниже</string>
+    <string name="routing_rules_master_off">По умолчанию выключено; включайте при необходимости</string>
+    <string name="routing_block_quic">Блокировать QUIC</string>
+    <string name="routing_cn_domain">Правила доменов Китая</string>
+    <string name="routing_cn_ip">Правила IP Китая</string>
+    <string name="routing_block_ads">Блокировать рекламу</string>
+    <string name="routing_section_resources">Ресурсы</string>
+    <string name="routing_assets_updated">Ресурсы маршрутизации обновлены</string>
+    <string name="routing_assets_failed_format">Не удалось обновить %1$s; проверьте сеть</string>
+    <string name="routing_assets_update">Обновить ресурсы маршрутизации</string>
+    <string name="routing_assets_download">Загрузить ресурсы маршрутизации</string>
+    <string name="routing_assets_summary_format">CN IP: %1$s · CN-домены: %2$s · Реклама: %3$s (официальные источники)</string>
+    <string name="routing_assets_official_only">Только из официальных источников SagerNet</string>
+
+    <!-- SubscriptionScreen -->
+    <string name="subscription_loading">Загрузка подписок…</string>
+</resources>

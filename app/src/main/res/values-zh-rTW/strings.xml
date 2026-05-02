@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AeroBox</string>
+    <string name="home">主頁</string>
+    <string name="settings">設定</string>
+    <string name="connect">連線</string>
+    <string name="disconnect">中斷連線</string>
+    <string name="connected">已連線</string>
+    <string name="connecting">連線中</string>
+    <string name="disconnected">未連線</string>
+    <string name="upload">上傳</string>
+    <string name="download">下載</string>
+    <string name="add_subscription">新增訂閱</string>
+    <string name="edit_subscription">修改訂閱</string>
+    <string name="delete_subscription">刪除訂閱</string>
+    <string name="appearance">外觀</string>
+    <string name="dark_mode">主題</string>
+    <string name="dynamic_color">動態配色</string>
+    <string name="connection_settings">連線設定</string>
+    <string name="auto_connect">自動連線</string>
+    <string name="about">關於</string>
+    <string name="version">版本</string>
+    <string name="open_source_licenses">開放原始碼授權</string>
+    <string name="confirm">確定</string>
+    <string name="cancel">取消</string>
+    <string name="add">新增</string>
+    <string name="save">儲存</string>
+    <string name="delete">刪除</string>
+    <string name="no_subscription">尚無訂閱</string>
+    <string name="subscription_name">訂閱名稱</string>
+    <string name="subscription_url">訂閱連結</string>
+    <string name="notification_title">AeroBox</string>
+    <string name="notification_connecting">正在連線…</string>
+    <string name="notification_action_switch">切換</string>
+    <string name="notification_action_stop">停止</string>
+    <string name="hint_add_subscription">請先新增訂閱以取得節點配置</string>
+    <string name="refresh">重新整理</string>
+    <string name="not_selected">未選擇節點</string>
+    <string name="permission_required">需要 VPN 權限</string>
+    <string name="notification_permission_hint">未授予通知權限，狀態列通知可能不會顯示</string>
+    <string name="operation_failed">操作失敗，請稍後重試</string>
+    <string name="add_node_first">請先選擇節點</string>
+    <string name="subscription_management">訂閱管理</string>
+    <string name="scan_qr">掃碼匯入</string>
+    <string name="scan_qr_permission_required">需要相機權限才能掃碼匯入</string>
+    <string name="add_via_subscription_link">訂閱連結</string>
+    <string name="add_via_nodes">節點匯入</string>
+    <string name="add_via_local_file">本機匯入</string>
+    <string name="node_content">節點內容</string>
+    <string name="subscription_auto_update">啟用自動更新</string>
+    <string name="subscription_update_interval_minutes">自動更新間隔（分鐘）</string>
+    <string name="subscription_update_interval_hint">最少 15 分鐘，建議 60 或 1440</string>
+    <string name="subscription_auto_update_invalid_interval">間隔至少為 15 分鐘</string>
+    <string name="subscription_traffic">剩餘流量</string>
+    <string name="subscription_expire">到期時間</string>
+    <string name="tile_label">AeroBox</string>
+    <string name="tile_status_stopping">正在關閉</string>
+    <string name="enable_ipv6">IPv6 支援</string>
+    <string name="connection_fix_success">修復已完成，請重試連線</string>
+    <string name="connection_fix_failed">修復失敗，請檢查網路後重試</string>
+    <string name="detecting_ip">偵測中…</string>
+    <string name="detecting_ip_later">稍後自動偵測…</string>
+    <string name="import_choose_group">選擇分組</string>
+    <string name="import_node_count">將匯入 %1$d 個節點</string>
+    <string name="group_ungrouped">未分組</string>
+    <string name="group_new">新建分組</string>
+    <string name="group_new_name_hint">分組名稱</string>
+    <string name="group_node_count_suffix">%1$d 個節點</string>
+    <string name="local_group_label">本機分組</string>
+    <string name="edit_group">編輯分組</string>
+    <string name="delete_group">刪除分組</string>
+    <string name="delete_subscription_confirm">確定要刪除「%1$s」及其所有節點嗎？</string>
+    <string name="delete_local_group_confirm">確定要刪除分組「%1$s」嗎？其中的節點將移回未分組。</string>
+    <string name="rename_group">重新命名分組</string>
+    <string name="delete_node">刪除節點</string>
+    <string name="delete_node_confirm">確定要刪除節點「%1$s」嗎？</string>
+    <string name="group_empty_nodes">尚無節點</string>
+    <string name="switch_node_title">切換節點</string>
+    <string name="detect_failed_tap_retry">偵測失敗，點擊重試</string>
+    <string name="tap_detect_exit_ip">點擊偵測出口 IP</string>
+    <string name="switched_to_mode">已切換為%1$s</string>
+    <string name="subscription_refreshed_new_node">訂閱更新後，已使用相符的新節點：%1$s</string>
+    <string name="node_current_suffix"> · 目前</string>
+
+    <!-- Subscription import / update messages -->
+    <string name="subscription_link_invalid">訂閱連結無效，請使用 HTTPS 連結</string>
+    <string name="import_subscription_failed">匯入訂閱失敗：%1$s</string>
+    <string name="update_subscription_failed">更新訂閱失敗：%1$s</string>
+    <string name="group_noun">分組</string>
+    <string name="subscription_noun">訂閱</string>
+    <string name="deleted_item_format">已刪除%1$s：%2$s</string>
+    <string name="modified_item_format">已修改%1$s：%2$s</string>
+    <string name="local_group_no_refresh">本機分組無需重新整理</string>
+    <string name="no_refreshable_subscription">尚無可重新整理的訂閱</string>
+    <string name="subscription_update_complete_all_format">訂閱更新完成：%1$d 個（新增 %2$d / 更新 %3$d / 刪除 %4$d）</string>
+    <string name="subscription_update_metadata_suffix">，%1$d 個同步流量/到期資訊</string>
+    <string name="subscription_update_partial_fail_format">訂閱部分更新失敗（成功 %1$d / 失敗 %2$d，新增 %3$d / 更新 %4$d / 刪除 %5$d）</string>
+    <string name="subscription_update_partial_fail_error_suffix">，%1$s</string>
+    <string name="import_empty_content">匯入內容為空</string>
+    <string name="import_failed">匯入失敗：%1$s</string>
+    <string name="node_empty_content">節點內容為空</string>
+    <string name="node_content_use_subscription_entry">訂閱連結請使用“訂閱連結”入口匯入</string>
+    <string name="local_file_too_large">本機檔案過大，暫不支援超過 8 MB 的設定</string>
+    <string name="cannot_read_local_file">無法讀取本機檔案</string>
+    <string name="import_local_file_failed">匯入本機檔案失敗：%1$s</string>
+    <string name="import_success_ungrouped_format">匯入成功：已新增 %1$d 個節點到未分組</string>
+    <string name="import_success_with_count_format">匯入成功：%1$d 個節點</string>
+    <string name="import_success_metadata_suffix">，已讀取訂閱流量/到期資訊</string>
+    <string name="import_fail_local_group_target">訂閱分組不可作為匯入目標</string>
+    <string name="subscription_update_complete_format">訂閱更新完成：%1$s</string>
+    <string name="subscription_update_summary_paren_format">（%1$s）</string>
+    <string name="subscription_update_metadata_single_suffix">，已同步流量/到期資訊</string>
+
+    <!-- Parse / network / generic errors -->
+    <string name="error_no_valid_nodes">未解析到可用節點，請檢查訂閱格式</string>
+    <string name="error_no_valid_nodes_hints_format">未解析到可用節點。可能原因：%1$s</string>
+    <string name="error_config_exception">設定異常</string>
+    <string name="error_unknown_host">無法連線訂閱伺服器，請檢查網路或連結</string>
+    <string name="error_socket_timeout">連線逾時，請稍後重試</string>
+    <string name="error_ssl">TLS/憑證校驗失敗，請檢查訂閱連結</string>
+    <string name="error_http_server_returned_format">訂閱伺服器回傳 %1$s</string>
+    <string name="error_network_general">網路異常，請稍後重試</string>
+    <string name="error_unknown">未知錯誤</string>
+    <string name="error_subscription_response_too_large">訂閱回應過大，超過 8 MB 上限</string>
+    <string name="warning_insecure_nodes_format">注意：%1$d 個節點停用了 TLS 憑證校驗，存在中間人攻擊風險</string>
+
+    <!-- Parse diagnostics hints -->
+    <string name="diag_unsupported_subscription_content">訂閱內容不是支援的 sing-box、Clash 或節點連結格式</string>
+    <string name="diag_missing_clash_proxies">Clash 設定中沒有 proxies 節點清單</string>
+    <string name="diag_unsupported_type_or_scheme">訂閱包含目前不支援的節點類型或連結通訊協定</string>
+    <string name="diag_unsupported_transport">訂閱包含目前不支援的傳輸設定</string>
+    <string name="diag_missing_endpoint">部分節點缺少伺服器位址或連接埠</string>
+    <string name="diag_invalid_item">訂閱中部分節點條目格式不正確</string>
+    <string name="diag_invalid_uri">節點連結格式不正確，或包含目前不支援的參數</string>
+
+    <!-- Settings failure prefixes + composed messages -->
+    <string name="perapp_setting_failed">套用分應用代理設定失敗</string>
+    <string name="geo_setting_failed">套用規則設定失敗</string>
+    <string name="inbound_setting_failed">套用入站設定失敗</string>
+    <string name="dns_setting_failed">套用 DNS 設定失敗</string>
+    <string name="ipv6_setting_failed">套用 IPv6 設定失敗</string>
+    <string name="dns_invalid_format">DNS 設定無效：%1$s</string>
+    <string name="config_generation_failed">設定產生失敗</string>
+    <string name="applying">正在套用</string>
+    <string name="current_node_unavailable">目前節點無法使用</string>
+    <string name="setting_failed_with_error_format">%1$s：%2$s</string>
+
+    <!-- Summary -->
+    <string name="summary_no_change">無節點變更</string>
+    <string name="summary_changes_format">新增 %1$d / 更新 %2$d / 刪除 %3$d</string>
+
+    <!-- Relative time -->
+    <string name="never_updated">從未更新</string>
+    <string name="just_updated">剛剛更新</string>
+    <string name="minutes_ago_format">%1$d 分鐘前</string>
+    <string name="hours_ago_format">%1$d 小時前</string>
+    <string name="days_ago_format">%1$d 天前</string>
+
+    <!-- QR scan prompt -->
+    <string name="qr_scan_prompt">掃描訂閱或節點 QR Code</string>
+
+    <!-- Subscription repository -->
+    <string name="import_subscription_default_name">匯入訂閱</string>
+    <string name="error_target_group_not_found">目標分組不存在</string>
+    <string name="error_local_group_no_remote_refresh">本機分組無法從遠端重新整理</string>
+
+    <!-- Backend error messages -->
+    <string name="error_node_server_empty">節點伺服器位址為空</string>
+    <string name="error_reality_requires_sni">Reality 節點使用 IP 位址時必須明確填寫 SNI</string>
+    <string name="error_no_new_nodes_imported">未匯入新節點，可能已存在相同設定</string>
+    <string name="imported_node_default_name_format">匯入節點 %1$d</string>
+    <string name="error_dns_address_invalid_format">%1$s 位址無效</string>
+    <string name="error_dns_port_invalid_format">%1$s 連接埠無效</string>
+    <string name="error_dns_protocol_invalid_format">%1$s 通訊協定無效</string>
+    <string name="error_dns_path_invalid_format">%1$s 路徑無效</string>
+    <string name="error_dns_no_ipv6_format">%1$s 不能是 IPv6 位址</string>
+    <string name="error_dns_invalid_format_generic">DNS 位址格式無效</string>
+    <string name="dns_label_remote">遠端 DNS</string>
+    <string name="dns_label_direct">直連 DNS</string>
+    <string name="error_rule_set_unavailable">Geo 路由資源無法使用，請先更新規則資源後重試</string>
+    <string name="file_size_not_downloaded">未下載</string>
+
+    <!-- ConnectionDiagnostics -->
+    <string name="connection_issue_reality_title">Reality 設定不完整</string>
+    <string name="connection_issue_reality_message">Reality 節點使用 IP 位址時需要明確填寫 SNI/server name。</string>
+    <string name="connection_issue_geo_title">路由資源異常</string>
+    <string name="connection_issue_geo_message">偵測到官方路由規則集無法使用或格式不相容。</string>
+    <string name="connection_issue_rule_title">路由規則異常</string>
+    <string name="connection_issue_rule_message">目前規則模式可能與節點設定不相容，建議先切換到全域模式。</string>
+    <string name="connection_issue_node_title">節點或訂閱可能失效</string>
+    <string name="connection_issue_node_message">節點參數可能已過期，建議重新拉取訂閱後再連線。</string>
+    <string name="connection_issue_generic_title">連線設定異常</string>
+    <string name="connection_issue_generic_message">請檢查節點、DNS、分流設定，必要時更新訂閱後重試。</string>
+    <string name="connection_fix_update_geo">更新路由資源</string>
+    <string name="connection_fix_switch_global">切換為全域模式</string>
+    <string name="connection_fix_refresh_subscriptions">重新拉取訂閱</string>
+    <string name="connection_issue_raw_error_prefix">原始錯誤：</string>
+    <string name="connection_issue_dismiss_for_now">稍後手動處理</string>
+
+    <!-- RoutingMode display names -->
+    <string name="routing_mode_global_proxy">全域代理</string>
+    <string name="routing_mode_rule_based">規則分流</string>
+    <string name="routing_mode_direct">直連模式</string>
+
+    <!-- HomeScreen -->
+    <string name="home_card_memory_usage">記憶體佔用</string>
+    <string name="home_card_network_detect">網路偵測</string>
+    <string name="home_routing_chip_rule">規則</string>
+    <string name="home_routing_chip_global">全域</string>
+    <string name="home_routing_chip_direct">直連</string>
+
+    <!-- LogScreen -->
+    <string name="log_screen_title">執行日誌</string>
+    <string name="log_copied">日誌已複製</string>
+    <string name="log_action_copy_all">複製全部日誌</string>
+    <string name="log_action_clear">清空日誌</string>
+    <string name="log_empty">暫無日誌</string>
+
+    <!-- LicenseScreen -->
+    <string name="license_read_failed">讀取 GNU 授權失敗</string>
+
+    <!-- NodeListSheet -->
+    <string name="node_list_title">節點列表</string>
+    <string name="node_list_empty_hint">尚無節點，請先新增訂閱</string>
+    <string name="node_list_speed_test">測速</string>
+    <string name="latency_testing">測試中</string>
+    <string name="latency_failed">失敗</string>
+
+    <!-- PerAppProxyScreen -->
+    <string name="per_app_proxy_title">分應用代理</string>
+    <string name="per_app_proxy_chip_bypass">略過選取</string>
+    <string name="per_app_proxy_chip_only">僅代理選取</string>
+    <string name="per_app_proxy_chip_show_system">顯示系統</string>
+    <string name="per_app_proxy_search_hint">搜尋應用名稱或套件名稱</string>
+    <string name="per_app_proxy_loading">載入中</string>
+    <string name="per_app_proxy_empty">未取得應用列表，可稍後重試</string>
+    <string name="per_app_proxy_no_match">未找到符合的應用</string>
+    <string name="per_app_proxy_no_internet">無網路權限</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings_section_subscription">訂閱管理</string>
+    <string name="settings_subscription_summary">新增、更新和管理訂閱</string>
+    <string name="settings_section_routing">路由</string>
+    <string name="settings_routing_title">路由</string>
+    <string name="settings_routing_summary_format">目前模式 · %1$s</string>
+    <string name="settings_section_per_app">分應用代理</string>
+    <string name="settings_per_app_enable">啟用分應用代理</string>
+    <string name="settings_per_app_enabled">已啟用</string>
+    <string name="settings_per_app_disabled">未啟用</string>
+    <string name="settings_per_app_config_title">設定應用列表</string>
+    <string name="settings_per_app_config_summary">選擇哪些應用透過代理/略過代理</string>
+    <string name="settings_dynamic_color_summary">使用系統動態取色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_theme_light">淺色</string>
+    <string name="settings_theme_system">系統</string>
+    <string name="settings_section_dns">DNS 設定</string>
+    <string name="settings_dns_server">DNS 伺服器</string>
+    <string name="settings_dns_summary">DNS 分流</string>
+    <string name="settings_section_inbound">入站設定</string>
+    <string name="settings_inbound_socks5">SOCKS5 入站</string>
+    <string name="settings_inbound_http">HTTP 入站</string>
+    <string name="settings_inbound_port_format">連接埠 %1$d</string>
+    <string name="settings_auto_connect_summary">開機後自動連線</string>
+    <string name="settings_ipv6_summary">啟用 IPv6 網路支援</string>
+    <string name="settings_auto_reconnect">斷線自動重連</string>
+    <string name="settings_auto_reconnect_summary">VPN 意外斷線時自動重新連線</string>
+    <string name="settings_log">執行日誌</string>
+    <string name="settings_log_summary">檢視 sing-box 執行日誌</string>
+    <string name="settings_about_supporting">AeroBox 專案 · GNU GPL-3.0-or-later</string>
+    <string name="dns_dialog_title">DNS 設定</string>
+    <string name="dns_dialog_reset">恢復預設</string>
+    <string name="dns_dialog_remote_example">範例: https://cloudflare-dns.com/dns-query, tls://1.1.1.1, udp://8.8.8.8</string>
+    <string name="dns_dialog_direct_example">範例: udp://223.5.5.5, https://dns.alidns.com/dns-query</string>
+
+    <!-- RoutingSettingsScreen -->
+    <string name="routing_screen_title">路由</string>
+    <string name="routing_section_rules">規則</string>
+    <string name="routing_rules_master">規則</string>
+    <string name="routing_rules_master_on">已開啟，可按需啟用下方規則</string>
+    <string name="routing_rules_master_off">預設關閉，按需開啟</string>
+    <string name="routing_block_quic">封鎖 QUIC</string>
+    <string name="routing_cn_domain">中國域名規則</string>
+    <string name="routing_cn_ip">中國 IP 規則</string>
+    <string name="routing_block_ads">封鎖廣告</string>
+    <string name="routing_section_resources">資源</string>
+    <string name="routing_assets_updated">路由資源更新完成</string>
+    <string name="routing_assets_failed_format">%1$s 更新失敗，請檢查網路</string>
+    <string name="routing_assets_update">更新路由資源</string>
+    <string name="routing_assets_download">下載路由資源</string>
+    <string name="routing_assets_summary_format">中國 IP: %1$s · 中國域名: %2$s · 廣告: %3$s（官方源）</string>
+    <string name="routing_assets_official_only">僅使用官方源 SagerNet</string>
+
+    <!-- SubscriptionScreen -->
+    <string name="subscription_loading">正在載入訂閱…</string>
+</resources>

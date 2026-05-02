@@ -27,9 +27,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aerobox.R
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.SectionHeader
@@ -59,7 +61,7 @@ fun RoutingSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("路由") },
+                title = { Text(stringResource(R.string.routing_screen_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -79,16 +81,15 @@ fun RoutingSettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item { SectionHeader(title = "规则") }
+            item { SectionHeader(title = stringResource(R.string.routing_section_rules)) }
             item {
                 SettingItem(
                     icon = { Icon(AppIcons.Security, contentDescription = null) },
-                    title = "规则",
-                    supporting = if (enableGeoRules) {
-                        "已开启，可按需启用下方规则"
-                    } else {
-                        "默认关闭，按需开启"
-                    },
+                    title = stringResource(R.string.routing_rules_master),
+                    supporting = stringResource(
+                        if (enableGeoRules) R.string.routing_rules_master_on
+                        else R.string.routing_rules_master_off
+                    ),
                     trailing = {
                         Switch(
                             checked = enableGeoRules,
@@ -101,7 +102,7 @@ fun RoutingSettingsScreen(
                 item {
                     SettingItem(
                         icon = { Icon(AppIcons.Security, contentDescription = null) },
-                        title = "屏蔽 QUIC",
+                        title = stringResource(R.string.routing_block_quic),
                         supporting = "network: udp + port: 443",
                         trailing = {
                             Switch(
@@ -114,7 +115,7 @@ fun RoutingSettingsScreen(
                 item {
                     SettingItem(
                         icon = { Icon(AppIcons.Security, contentDescription = null) },
-                        title = "中国域名规则",
+                        title = stringResource(R.string.routing_cn_domain),
                         supporting = "rule_set: geosite-cn",
                         trailing = {
                             Switch(
@@ -127,7 +128,7 @@ fun RoutingSettingsScreen(
                 item {
                     SettingItem(
                         icon = { Icon(AppIcons.Security, contentDescription = null) },
-                        title = "中国 IP 规则",
+                        title = stringResource(R.string.routing_cn_ip),
                         supporting = "rule_set: geoip-cn",
                         trailing = {
                             Switch(
@@ -140,7 +141,7 @@ fun RoutingSettingsScreen(
                 item {
                     SettingItem(
                         icon = { Icon(AppIcons.Security, contentDescription = null) },
-                        title = "屏蔽广告",
+                        title = stringResource(R.string.routing_block_ads),
                         supporting = "rule_set: geosite-category-ads-all",
                         trailing = {
                             Switch(
@@ -152,12 +153,14 @@ fun RoutingSettingsScreen(
                 }
             }
 
-            item { SectionHeader(title = "资源") }
+            item { SectionHeader(title = stringResource(R.string.routing_section_resources)) }
             item {
                 val hasFiles = GeoAssetManager.hasLocalFiles(context)
                 val geoIpSize = GeoAssetManager.getGeoIpSize(context)
                 val geoSiteSize = GeoAssetManager.getGeoSiteSize(context)
                 val geoAdsSize = GeoAssetManager.getGeoAdsSize(context)
+                val routingAssetsUpdatedMessage = stringResource(R.string.routing_assets_updated)
+                val routingAssetsFailedFormat = stringResource(R.string.routing_assets_failed_format)
                 SettingItem(
                     onClick = {
                         if (!geoUpdating) {
@@ -166,25 +169,33 @@ fun RoutingSettingsScreen(
                                 val result = GeoAssetManager.updateAll(context)
                                 geoUpdating = false
                                 val message = if (result.allOk) {
-                                    "路由资源更新完成"
+                                    routingAssetsUpdatedMessage
                                 } else {
                                     val failed = buildList {
                                         if (!result.geoIpOk) add("GeoIP")
                                         if (!result.geoSiteCnOk) add("GeoSite-CN")
                                         if (!result.geoAdsOk) add("GeoAds")
                                     }
-                                    "${failed.joinToString("、")} 更新失败，请检查网络"
+                                    routingAssetsFailedFormat.format(failed.joinToString(", "))
                                 }
                                 snackbarHostState.showSnackbar(message)
                             }
                         }
                     },
                     icon = { Icon(AppIcons.Security, contentDescription = null) },
-                    title = if (hasFiles) "更新路由资源" else "下载路由资源",
+                    title = stringResource(
+                        if (hasFiles) R.string.routing_assets_update
+                        else R.string.routing_assets_download
+                    ),
                     supporting = if (hasFiles) {
-                        "中国 IP: $geoIpSize · 中国域名: $geoSiteSize · 广告: $geoAdsSize（官方源）"
+                        stringResource(
+                            R.string.routing_assets_summary_format,
+                            geoIpSize,
+                            geoSiteSize,
+                            geoAdsSize
+                        )
                     } else {
-                        "仅使用官方源 SagerNet"
+                        stringResource(R.string.routing_assets_official_only)
                     },
                     trailing = {
                         if (geoUpdating) {

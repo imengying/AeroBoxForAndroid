@@ -41,14 +41,20 @@ data class GroupPickerState(
     val option: GroupPickerOption,
     val newGroupName: String
 ) {
-    fun toTarget(fallbackName: String): ImportGroupTarget {
+    /**
+     * @param fallbackName preferred fallback when [newGroupName] is blank
+     *   (typically a suggested name derived from filename / subscription).
+     * @param defaultName  ultimate fallback when both are blank — caller is
+     *   expected to pass a localized string (e.g. R.string.local_group_label).
+     */
+    fun toTarget(fallbackName: String, defaultName: String): ImportGroupTarget {
         return when (val opt = option) {
             is GroupPickerOption.Ungrouped -> ImportGroupTarget.Ungrouped
             is GroupPickerOption.Existing -> ImportGroupTarget.Existing(opt.subscription.id)
             is GroupPickerOption.New -> {
                 val name = newGroupName.trim()
                     .ifBlank { fallbackName.trim() }
-                    .ifBlank { "本地分组" }
+                    .ifBlank { defaultName }
                 ImportGroupTarget.New(name)
             }
         }
@@ -218,8 +224,16 @@ fun GroupPickerDialog(
             }
         },
         confirmButton = {
+            val defaultLocalGroupName = stringResource(R.string.local_group_label)
             TextButton(
-                onClick = { onConfirm(holder.state.toTarget(suggestedName)) },
+                onClick = {
+                    onConfirm(
+                        holder.state.toTarget(
+                            fallbackName = suggestedName,
+                            defaultName = defaultLocalGroupName
+                        )
+                    )
+                },
                 enabled = holder.state.isValid
             ) {
                 Text(stringResource(R.string.confirm))

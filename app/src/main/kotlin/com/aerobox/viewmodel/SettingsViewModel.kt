@@ -275,6 +275,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         )
 
         val syntaxError = ConfigGenerator.validateDnsSettings(
+            context = appContext,
             remoteDns = remoteDns,
             directDns = directDns,
             ipv6Mode = currentPrefs.ipv6Mode

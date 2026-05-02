@@ -1,5 +1,6 @@
 package com.aerobox.core.config
 
+import android.content.Context
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.RoutingMode
@@ -25,12 +26,13 @@ object ConfigGenerator {
     const val V2RAY_API_LISTEN = "127.0.0.1:10085"
 
     fun validateDnsSettings(
+        context: Context,
         remoteDns: String,
         directDns: String,
         ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
         nodeIsIpv6Only: Boolean = false
     ): String? {
-        return DnsConfigBuilder.validateDnsSettings(remoteDns, directDns, ipv6Mode, nodeIsIpv6Only)
+        return DnsConfigBuilder.validateDnsSettings(context, remoteDns, directDns, ipv6Mode, nodeIsIpv6Only)
     }
 
     fun generateSingBoxConfig(

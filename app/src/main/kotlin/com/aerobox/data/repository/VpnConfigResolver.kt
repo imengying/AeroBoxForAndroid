@@ -3,7 +3,9 @@ package com.aerobox.data.repository
 import android.content.Context
 import android.util.Log
 import com.aerobox.AeroBoxApplication
+import com.aerobox.R
 import com.aerobox.core.config.ConfigGenerator
+import com.aerobox.core.errors.LocalizedException
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.network.NodeAddressFamilyResolver
@@ -62,9 +64,10 @@ class VpnConfigResolver(private val context: Context) {
         val prefs = preferencesOverride ?: PreferenceManager.readVpnConfigPreferences(context)
         if (prefs.enableGeoRules) {
             if (!GeoAssetManager.ensureRuleSetAssets(context)) {
-                Log.e(TAG, GeoAssetManager.RULE_SET_UNAVAILABLE_MESSAGE)
-                RuntimeLogBuffer.append("error", GeoAssetManager.RULE_SET_UNAVAILABLE_MESSAGE)
-                throw IllegalStateException(GeoAssetManager.RULE_SET_UNAVAILABLE_MESSAGE)
+                val msg = context.getString(R.string.error_rule_set_unavailable)
+                Log.e(TAG, msg)
+                RuntimeLogBuffer.append("error", msg)
+                throw LocalizedException.of(R.string.error_rule_set_unavailable)
             }
         } else {
             withContext(Dispatchers.IO) {

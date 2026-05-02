@@ -115,7 +115,8 @@ class NotificationSwitchActivity : ComponentActivity() {
                     uiMessage.tryEmit(
                         ConnectionDiagnostics.userFacingFailureMessage(
                             result = result,
-                            operationFailedText = getString(R.string.operation_failed)
+                            operationFailedText = getString(R.string.operation_failed),
+                            resolveTitle = ::getString
                         )
                     )
                     pendingNodeId.value = null

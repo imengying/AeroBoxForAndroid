@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AeroBox</string>
+    <string name="home">خانه</string>
+    <string name="settings">تنظیمات</string>
+    <string name="connect">اتصال</string>
+    <string name="disconnect">قطع اتصال</string>
+    <string name="connected">متصل شد</string>
+    <string name="connecting">در حال اتصال</string>
+    <string name="disconnected">متصل نیست</string>
+    <string name="upload">ارسال</string>
+    <string name="download">دریافت</string>
+    <string name="add_subscription">افزودن اشتراک</string>
+    <string name="edit_subscription">ویرایش اشتراک</string>
+    <string name="delete_subscription">حذف اشتراک</string>
+    <string name="appearance">نمایش</string>
+    <string name="dark_mode">پوسته</string>
+    <string name="dynamic_color">رنگ پویا</string>
+    <string name="connection_settings">اتصال</string>
+    <string name="auto_connect">اتصال خودکار</string>
+    <string name="about">درباره</string>
+    <string name="version">نسخه</string>
+    <string name="open_source_licenses">مجوزهای متن‌باز</string>
+    <string name="confirm">تأیید</string>
+    <string name="cancel">لغو</string>
+    <string name="add">افزودن</string>
+    <string name="save">ذخیره</string>
+    <string name="delete">حذف</string>
+    <string name="no_subscription">هنوز اشتراکی وجود ندارد</string>
+    <string name="subscription_name">نام اشتراک</string>
+    <string name="subscription_url">آدرس اشتراک</string>
+    <string name="notification_title">AeroBox</string>
+    <string name="notification_connecting">در حال اتصال…</string>
+    <string name="notification_action_switch">تعویض</string>
+    <string name="notification_action_stop">توقف</string>
+    <string name="hint_add_subscription">برای دریافت گره‌ها ابتدا یک اشتراک اضافه کنید</string>
+    <string name="refresh">بازخوانی</string>
+    <string name="not_selected">گره‌ای انتخاب نشده</string>
+    <string name="permission_required">مجوز VPN لازم است</string>
+    <string name="notification_permission_hint">مجوز اعلان داده نشده؛ ممکن است اعلان نوار وضعیت نمایش داده نشود</string>
+    <string name="operation_failed">عملیات ناموفق بود، دوباره تلاش کنید</string>
+    <string name="add_node_first">ابتدا یک گره انتخاب کنید</string>
+    <string name="subscription_management">اشتراک‌ها</string>
+    <string name="scan_qr">اسکن کد QR</string>
+    <string name="scan_qr_permission_required">برای اسکن کد QR مجوز دوربین لازم است</string>
+    <string name="add_via_subscription_link">آدرس اشتراک</string>
+    <string name="add_via_nodes">وارد کردن گره</string>
+    <string name="add_via_local_file">وارد کردن از فایل</string>
+    <string name="node_content">محتوای گره</string>
+    <string name="subscription_auto_update">فعال‌سازی به‌روزرسانی خودکار</string>
+    <string name="subscription_update_interval_minutes">بازه به‌روزرسانی خودکار (دقیقه)</string>
+    <string name="subscription_update_interval_hint">حداقل ۱۵ دقیقه؛ ۶۰ یا ۱۴۴۰ پیشنهاد می‌شود</string>
+    <string name="subscription_auto_update_invalid_interval">بازه باید حداقل ۱۵ دقیقه باشد</string>
+    <string name="subscription_traffic">ترافیک باقی‌مانده</string>
+    <string name="subscription_expire">انقضا</string>
+    <string name="tile_label">AeroBox</string>
+    <string name="tile_status_stopping">در حال توقف</string>
+    <string name="enable_ipv6">پشتیبانی از IPv6</string>
+    <string name="connection_fix_success">رفع شد؛ اتصال را دوباره تلاش کنید</string>
+    <string name="connection_fix_failed">رفع ناموفق بود؛ شبکه را بررسی و دوباره تلاش کنید</string>
+    <string name="detecting_ip">در حال تشخیص…</string>
+    <string name="detecting_ip_later">به‌طور خودکار تشخیص داده می‌شود…</string>
+    <string name="import_choose_group">انتخاب گروه</string>
+    <string name="import_node_count">‫%1$d‬ گره وارد می‌شود</string>
+    <string name="group_ungrouped">بدون گروه</string>
+    <string name="group_new">گروه جدید</string>
+    <string name="group_new_name_hint">نام گروه</string>
+    <string name="group_node_count_suffix">‫%1$d‬ گره</string>
+    <string name="local_group_label">گروه محلی</string>
+    <string name="edit_group">ویرایش گروه</string>
+    <string name="delete_group">حذف گروه</string>
+    <string name="delete_subscription_confirm">«%1$s» و همه گره‌های آن حذف شود؟</string>
+    <string name="delete_local_group_confirm">گروه «%1$s» حذف شود؟ گره‌های آن به «بدون گروه» منتقل می‌شوند.</string>
+    <string name="rename_group">تغییر نام گروه</string>
+    <string name="delete_node">حذف گره</string>
+    <string name="delete_node_confirm">گره «%1$s» حذف شود؟</string>
+    <string name="group_empty_nodes">گره‌ای وجود ندارد</string>
+    <string name="switch_node_title">تعویض گره</string>
+    <string name="detect_failed_tap_retry">تشخیص ناموفق بود؛ برای تلاش مجدد لمس کنید</string>
+    <string name="tap_detect_exit_ip">برای تشخیص IP خروجی لمس کنید</string>
+    <string name="switched_to_mode">تغییر یافت به %1$s</string>
+    <string name="subscription_refreshed_new_node">اشتراک به‌روز شد؛ از گره منطبق جدید استفاده می‌شود: %1$s</string>
+    <string name="node_current_suffix"> · فعلی</string>
+
+    <!-- Subscription import / update messages -->
+    <string name="subscription_link_invalid">آدرس اشتراک نامعتبر است؛ لطفاً از HTTPS استفاده کنید</string>
+    <string name="import_subscription_failed">وارد کردن اشتراک ناموفق بود: %1$s</string>
+    <string name="update_subscription_failed">به‌روزرسانی اشتراک ناموفق بود: %1$s</string>
+    <string name="group_noun">گروه</string>
+    <string name="subscription_noun">اشتراک</string>
+    <string name="deleted_item_format">%1$s حذف شد: %2$s</string>
+    <string name="modified_item_format">%1$s ویرایش شد: %2$s</string>
+    <string name="local_group_no_refresh">گروه‌های محلی نیاز به بازخوانی ندارند</string>
+    <string name="no_refreshable_subscription">اشتراک قابل بازخوانی وجود ندارد</string>
+    <string name="subscription_update_complete_all_format">به‌روزرسانی اشتراک تکمیل شد: ‫%1$d‬ مورد (افزوده ‫%2$d‬ / تغییر ‫%3$d‬ / حذف ‫%4$d‬)</string>
+    <string name="subscription_update_metadata_suffix">، اطلاعات ترافیک/انقضای ‫%1$d‬ مورد همگام شد</string>
+    <string name="subscription_update_partial_fail_format">به‌روزرسانی نسبی ناموفق (موفق ‫%1$d‬ / ناموفق ‫%2$d‬، افزوده ‫%3$d‬ / تغییر ‫%4$d‬ / حذف ‫%5$d‬)</string>
+    <string name="subscription_update_partial_fail_error_suffix">، %1$s</string>
+    <string name="import_empty_content">محتوای ورود خالی است</string>
+    <string name="import_failed">ورود ناموفق: %1$s</string>
+    <string name="node_empty_content">محتوای گره خالی است</string>
+    <string name="node_content_use_subscription_entry">برای ورود آدرس اشتراک از گزینه «آدرس اشتراک» استفاده کنید</string>
+    <string name="local_file_too_large">فایل بسیار بزرگ است؛ پیکربندی بزرگ‌تر از ۸ مگابایت پشتیبانی نمی‌شود</string>
+    <string name="cannot_read_local_file">خواندن فایل محلی امکان‌پذیر نیست</string>
+    <string name="import_local_file_failed">ورود فایل محلی ناموفق بود: %1$s</string>
+    <string name="import_success_ungrouped_format">ورود موفق: ‫%1$d‬ گره به «بدون گروه» افزوده شد</string>
+    <string name="import_success_with_count_format">ورود موفق: ‫%1$d‬ گره</string>
+    <string name="import_success_metadata_suffix">، اطلاعات ترافیک/انقضای اشتراک خوانده شد</string>
+    <string name="import_fail_local_group_target">گروه‌های اشتراک نمی‌توانند مقصد ورود باشند</string>
+    <string name="subscription_update_complete_format">اشتراک به‌روز شد: %1$s</string>
+    <string name="subscription_update_summary_paren_format">(%1$s)</string>
+    <string name="subscription_update_metadata_single_suffix">، اطلاعات ترافیک/انقضا همگام شد</string>
+
+    <!-- Parse / network / generic errors -->
+    <string name="error_no_valid_nodes">گره معتبری استخراج نشد؛ قالب اشتراک را بررسی کنید</string>
+    <string name="error_no_valid_nodes_hints_format">گره معتبری استخراج نشد. دلایل احتمالی: %1$s</string>
+    <string name="error_config_exception">خطای پیکربندی</string>
+    <string name="error_unknown_host">سرور اشتراک در دسترس نیست؛ شبکه یا آدرس را بررسی کنید</string>
+    <string name="error_socket_timeout">زمان اتصال به پایان رسید، دوباره تلاش کنید</string>
+    <string name="error_ssl">اعتبارسنجی TLS/گواهی ناموفق بود؛ آدرس اشتراک را بررسی کنید</string>
+    <string name="error_http_server_returned_format">سرور اشتراک پاسخ داد: %1$s</string>
+    <string name="error_network_general">خطای شبکه، دوباره تلاش کنید</string>
+    <string name="error_unknown">خطای ناشناخته</string>
+    <string name="error_subscription_response_too_large">پاسخ اشتراک بسیار بزرگ است؛ از حد ۸ مگابایت تجاوز کرده است</string>
+    <string name="warning_insecure_nodes_format">هشدار: ‫%1$d‬ گره اعتبارسنجی گواهی TLS را غیرفعال کرده‌اند و در معرض حمله MITM قرار دارند</string>
+
+    <!-- Parse diagnostics hints -->
+    <string name="diag_unsupported_subscription_content">محتوای اشتراک یکی از قالب‌های پشتیبانی‌شده sing-box، Clash یا لینک گره نیست</string>
+    <string name="diag_missing_clash_proxies">در پیکربندی Clash فهرست proxies یافت نشد</string>
+    <string name="diag_unsupported_type_or_scheme">اشتراک شامل نوع گره یا پروتکل لینک پشتیبانی‌نشده است</string>
+    <string name="diag_unsupported_transport">اشتراک شامل پیکربندی انتقال پشتیبانی‌نشده است</string>
+    <string name="diag_missing_endpoint">برخی گره‌ها فاقد آدرس یا پورت سرور هستند</string>
+    <string name="diag_invalid_item">قالب برخی موارد گره در اشتراک نادرست است</string>
+    <string name="diag_invalid_uri">قالب لینک گره نادرست است یا شامل پارامترهای پشتیبانی‌نشده است</string>
+
+    <!-- Settings failure prefixes + composed messages -->
+    <string name="perapp_setting_failed">اعمال تنظیمات پراکسی برای هر برنامه ناموفق بود</string>
+    <string name="geo_setting_failed">اعمال تنظیمات قوانین ناموفق بود</string>
+    <string name="inbound_setting_failed">اعمال تنظیمات ورودی ناموفق بود</string>
+    <string name="dns_setting_failed">اعمال تنظیمات DNS ناموفق بود</string>
+    <string name="ipv6_setting_failed">اعمال تنظیمات IPv6 ناموفق بود</string>
+    <string name="dns_invalid_format">تنظیمات DNS نامعتبر: %1$s</string>
+    <string name="config_generation_failed">ایجاد پیکربندی ناموفق بود</string>
+    <string name="applying">در حال اعمال</string>
+    <string name="current_node_unavailable">گره فعلی در دسترس نیست</string>
+    <string name="setting_failed_with_error_format">%1$s: %2$s</string>
+
+    <!-- Summary -->
+    <string name="summary_no_change">بدون تغییر</string>
+    <string name="summary_changes_format">افزوده ‫%1$d‬ / تغییر ‫%2$d‬ / حذف ‫%3$d‬</string>
+
+    <!-- Relative time -->
+    <string name="never_updated">هرگز به‌روز نشده</string>
+    <string name="just_updated">همین حالا به‌روز شد</string>
+    <string name="minutes_ago_format">‫%1$d‬ دقیقه پیش</string>
+    <string name="hours_ago_format">‫%1$d‬ ساعت پیش</string>
+    <string name="days_ago_format">‫%1$d‬ روز پیش</string>
+
+    <!-- QR scan prompt -->
+    <string name="qr_scan_prompt">کد QR اشتراک یا گره را اسکن کنید</string>
+
+    <!-- Subscription repository -->
+    <string name="import_subscription_default_name">اشتراک واردشده</string>
+    <string name="error_target_group_not_found">گروه مقصد وجود ندارد</string>
+    <string name="error_local_group_no_remote_refresh">گروه‌های محلی را نمی‌توان از سرور دوردست بازخوانی کرد</string>
+
+    <!-- Backend error messages -->
+    <string name="error_node_server_empty">آدرس سرور گره خالی است</string>
+    <string name="error_reality_requires_sni">برای گره‌های Reality زمانی که سرور با آدرس IP مشخص شده، باید SNI به‌صورت صریح وارد شود</string>
+    <string name="error_no_new_nodes_imported">گره جدیدی وارد نشد؛ ممکن است پیکربندی‌های یکسان از قبل وجود داشته باشند</string>
+    <string name="imported_node_default_name_format">گره واردشده %1$d</string>
+    <string name="error_dns_address_invalid_format">آدرس «%1$s» نامعتبر است</string>
+    <string name="error_dns_port_invalid_format">پورت «%1$s» نامعتبر است</string>
+    <string name="error_dns_protocol_invalid_format">پروتکل «%1$s» نامعتبر است</string>
+    <string name="error_dns_path_invalid_format">مسیر «%1$s» نامعتبر است</string>
+    <string name="error_dns_no_ipv6_format">«%1$s» نمی‌تواند آدرس IPv6 باشد</string>
+    <string name="error_dns_invalid_format_generic">قالب آدرس DNS نامعتبر است</string>
+    <string name="dns_label_remote">DNS راه دور</string>
+    <string name="dns_label_direct">DNS مستقیم</string>
+    <string name="error_rule_set_unavailable">مجموعه قوانین جئو در دسترس نیست؛ ابتدا منابع مسیریابی را به‌روزرسانی کنید</string>
+    <string name="file_size_not_downloaded">دانلود نشده</string>
+
+    <!-- ConnectionDiagnostics -->
+    <string name="connection_issue_reality_title">پیکربندی Reality ناقص است</string>
+    <string name="connection_issue_reality_message">گره‌های Reality زمانی که سرور با آدرس IP مشخص شده، نیاز به SNI/server_name صریح دارند.</string>
+    <string name="connection_issue_geo_title">منابع مسیریابی در دسترس نیستند</string>
+    <string name="connection_issue_geo_message">مجموعه قوانین مسیریابی رسمی در دسترس نیست یا قالب آن ناسازگار است.</string>
+    <string name="connection_issue_rule_title">خطای قوانین مسیریابی</string>
+    <string name="connection_issue_rule_message">حالت قوانین فعلی ممکن است با این گره ناسازگار باشد؛ ابتدا حالت سراسری را امتحان کنید.</string>
+    <string name="connection_issue_node_title">گره یا اشتراک ممکن است نامعتبر باشد</string>
+    <string name="connection_issue_node_message">پارامترهای گره ممکن است منقضی شده باشند؛ پیش از اتصال مجدد، اشتراک را بازخوانی کنید.</string>
+    <string name="connection_issue_generic_title">خطای پیکربندی اتصال</string>
+    <string name="connection_issue_generic_message">تنظیمات گره، DNS و مسیریابی را بررسی کنید؛ در صورت نیاز اشتراک را به‌روز کنید.</string>
+    <string name="connection_fix_update_geo">به‌روزرسانی منابع مسیریابی</string>
+    <string name="connection_fix_switch_global">تغییر به حالت سراسری</string>
+    <string name="connection_fix_refresh_subscriptions">به‌روزرسانی اشتراک</string>
+    <string name="connection_issue_raw_error_prefix">خطای اصلی: </string>
+    <string name="connection_issue_dismiss_for_now">بعداً انجام می‌دهم</string>
+
+    <!-- RoutingMode display names -->
+    <string name="routing_mode_global_proxy">پراکسی سراسری</string>
+    <string name="routing_mode_rule_based">مسیریابی بر اساس قوانین</string>
+    <string name="routing_mode_direct">اتصال مستقیم</string>
+
+    <!-- HomeScreen -->
+    <string name="home_card_memory_usage">مصرف حافظه</string>
+    <string name="home_card_network_detect">وضعیت شبکه</string>
+    <string name="home_routing_chip_rule">قوانین</string>
+    <string name="home_routing_chip_global">سراسری</string>
+    <string name="home_routing_chip_direct">مستقیم</string>
+
+    <!-- LogScreen -->
+    <string name="log_screen_title">گزارش اجرا</string>
+    <string name="log_copied">گزارش کپی شد</string>
+    <string name="log_action_copy_all">کپی همه گزارش‌ها</string>
+    <string name="log_action_clear">پاک کردن گزارش</string>
+    <string name="log_empty">گزارشی موجود نیست</string>
+
+    <!-- LicenseScreen -->
+    <string name="license_read_failed">خواندن مجوز GNU ناموفق بود</string>
+
+    <!-- NodeListSheet -->
+    <string name="node_list_title">گره‌ها</string>
+    <string name="node_list_empty_hint">گره‌ای وجود ندارد؛ ابتدا یک اشتراک اضافه کنید</string>
+    <string name="node_list_speed_test">تست</string>
+    <string name="latency_testing">در حال تست</string>
+    <string name="latency_failed">ناموفق</string>
+
+    <!-- PerAppProxyScreen -->
+    <string name="per_app_proxy_title">پراکسی برای هر برنامه</string>
+    <string name="per_app_proxy_chip_bypass">عبور از انتخاب‌شده‌ها</string>
+    <string name="per_app_proxy_chip_only">فقط انتخاب‌شده‌ها</string>
+    <string name="per_app_proxy_chip_show_system">نمایش سیستم</string>
+    <string name="per_app_proxy_search_hint">جست‌وجو بر اساس نام یا بسته</string>
+    <string name="per_app_proxy_loading">در حال بارگذاری</string>
+    <string name="per_app_proxy_empty">فهرست برنامه‌ها بارگیری نشد؛ بعداً تلاش کنید</string>
+    <string name="per_app_proxy_no_match">برنامه منطبقی یافت نشد</string>
+    <string name="per_app_proxy_no_internet">مجوز شبکه ندارد</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings_section_subscription">اشتراک‌ها</string>
+    <string name="settings_subscription_summary">افزودن، به‌روزرسانی و مدیریت اشتراک‌ها</string>
+    <string name="settings_section_routing">مسیریابی</string>
+    <string name="settings_routing_title">مسیریابی</string>
+    <string name="settings_routing_summary_format">حالت فعلی · %1$s</string>
+    <string name="settings_section_per_app">پراکسی برای هر برنامه</string>
+    <string name="settings_per_app_enable">فعال‌سازی پراکسی برای هر برنامه</string>
+    <string name="settings_per_app_enabled">فعال</string>
+    <string name="settings_per_app_disabled">غیرفعال</string>
+    <string name="settings_per_app_config_title">پیکربندی فهرست برنامه‌ها</string>
+    <string name="settings_per_app_config_summary">انتخاب کنید کدام برنامه‌ها از پراکسی استفاده یا آن را دور بزنند</string>
+    <string name="settings_dynamic_color_summary">استفاده از رنگ پویای سیستم</string>
+    <string name="settings_theme_dark">تیره</string>
+    <string name="settings_theme_light">روشن</string>
+    <string name="settings_theme_system">سیستم</string>
+    <string name="settings_section_dns">DNS</string>
+    <string name="settings_dns_server">سرورهای DNS</string>
+    <string name="settings_dns_summary">مسیریابی DNS</string>
+    <string name="settings_section_inbound">ورودی‌ها</string>
+    <string name="settings_inbound_socks5">ورودی SOCKS5</string>
+    <string name="settings_inbound_http">ورودی HTTP</string>
+    <string name="settings_inbound_port_format">پورت %1$d</string>
+    <string name="settings_auto_connect_summary">اتصال خودکار پس از راه‌اندازی</string>
+    <string name="settings_ipv6_summary">فعال‌سازی پشتیبانی IPv6</string>
+    <string name="settings_auto_reconnect">اتصال مجدد خودکار</string>
+    <string name="settings_auto_reconnect_summary">در صورت قطع ناگهانی VPN به‌طور خودکار اتصال مجدد برقرار شود</string>
+    <string name="settings_log">گزارش اجرا</string>
+    <string name="settings_log_summary">مشاهده گزارش اجرای sing-box</string>
+    <string name="settings_about_supporting">پروژه AeroBox · GNU GPL-3.0-or-later</string>
+    <string name="dns_dialog_title">تنظیمات DNS</string>
+    <string name="dns_dialog_reset">بازنشانی به پیش‌فرض</string>
+    <string name="dns_dialog_remote_example">مثال: https://cloudflare-dns.com/dns-query, tls://1.1.1.1, udp://8.8.8.8</string>
+    <string name="dns_dialog_direct_example">مثال: udp://223.5.5.5, https://dns.alidns.com/dns-query</string>
+
+    <!-- RoutingSettingsScreen -->
+    <string name="routing_screen_title">مسیریابی</string>
+    <string name="routing_section_rules">قوانین</string>
+    <string name="routing_rules_master">قوانین مسیریابی</string>
+    <string name="routing_rules_master_on">فعال است؛ قوانین جداگانه را در زیر تنظیم کنید</string>
+    <string name="routing_rules_master_off">به‌طور پیش‌فرض غیرفعال است؛ در صورت نیاز فعال کنید</string>
+    <string name="routing_block_quic">مسدودسازی QUIC</string>
+    <string name="routing_cn_domain">قوانین دامنه‌های چین</string>
+    <string name="routing_cn_ip">قوانین IP چین</string>
+    <string name="routing_block_ads">مسدودسازی تبلیغات</string>
+    <string name="routing_section_resources">منابع</string>
+    <string name="routing_assets_updated">منابع مسیریابی به‌روزرسانی شدند</string>
+    <string name="routing_assets_failed_format">به‌روزرسانی %1$s ناموفق بود؛ شبکه را بررسی کنید</string>
+    <string name="routing_assets_update">به‌روزرسانی منابع مسیریابی</string>
+    <string name="routing_assets_download">دانلود منابع مسیریابی</string>
+    <string name="routing_assets_summary_format">IP چین: %1$s · دامنه‌های چین: %2$s · تبلیغات: %3$s (منابع رسمی)</string>
+    <string name="routing_assets_official_only">فقط از منابع رسمی SagerNet</string>
+
+    <!-- SubscriptionScreen -->
+    <string name="subscription_loading">در حال بارگذاری اشتراک‌ها…</string>
+</resources>

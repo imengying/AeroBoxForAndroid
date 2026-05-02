@@ -94,36 +94,42 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
         // ── Subscription ──
-            item { SectionHeader(title = "订阅管理") }
+            item { SectionHeader(title = stringResource(R.string.settings_section_subscription)) }
             item {
                 SettingItem(
                     onClick = onNavigateToSubscriptions,
                     icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
-                    title = "订阅管理",
-                    supporting = "添加、更新和管理订阅",
+                    title = stringResource(R.string.subscription_management),
+                    supporting = stringResource(R.string.settings_subscription_summary),
                     trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
                 )
             }
 
         // ── Routing ──
-        item { SectionHeader(title = "路由") }
+        item { SectionHeader(title = stringResource(R.string.settings_section_routing)) }
         item {
             SettingItem(
                 onClick = onNavigateToRouting,
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
-                title = "路由",
-                supporting = "当前模式 · ${routingMode.displayName}",
+                title = stringResource(R.string.settings_routing_title),
+                supporting = stringResource(
+                    R.string.settings_routing_summary_format,
+                    stringResource(routingMode.labelResId)
+                ),
                 trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
 
         // ── Per-App Proxy ──
-        item { SectionHeader(title = "分应用代理") }
+        item { SectionHeader(title = stringResource(R.string.settings_section_per_app)) }
         item {
             SettingItem(
                 icon = { Icon(AppIcons.Speed, contentDescription = null) },
-                title = "启用分应用代理",
-                supporting = if (perAppProxyEnabled) "已启用" else "未启用",
+                title = stringResource(R.string.settings_per_app_enable),
+                supporting = stringResource(
+                    if (perAppProxyEnabled) R.string.settings_per_app_enabled
+                    else R.string.settings_per_app_disabled
+                ),
                 trailing = {
                     Switch(
                         checked = perAppProxyEnabled,
@@ -137,8 +143,8 @@ fun SettingsScreen(
                 SettingItem(
                     onClick = onNavigateToPerAppProxy,
                     icon = { Icon(AppIcons.Speed, contentDescription = null) },
-                    title = "配置应用列表",
-                    supporting = "选择哪些应用走代理/绕过代理",
+                    title = stringResource(R.string.settings_per_app_config_title),
+                    supporting = stringResource(R.string.settings_per_app_config_summary),
                     trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
                 )
             }
@@ -150,7 +156,7 @@ fun SettingsScreen(
             SettingItem(
                 icon = { Icon(AppIcons.ColorLens, contentDescription = null) },
                 title = stringResource(R.string.dynamic_color),
-                supporting = "使用系统动态取色",
+                supporting = stringResource(R.string.settings_dynamic_color_summary),
                 trailing = {
                     Switch(checked = dynamicColor, onCheckedChange = { scope.launch { viewModel.setDynamicColor(it) } })
                 }
@@ -160,27 +166,29 @@ fun SettingsScreen(
             SettingItem(
                 icon = { Icon(AppIcons.DarkMode, contentDescription = null) },
                 title = stringResource(R.string.dark_mode),
-                supporting = when (darkMode) {
-                    "on" -> "深色"
-                    "off" -> "浅色"
-                    else -> "系统"
-                },
+                supporting = stringResource(
+                    when (darkMode) {
+                        "on" -> R.string.settings_theme_dark
+                        "off" -> R.string.settings_theme_light
+                        else -> R.string.settings_theme_system
+                    }
+                ),
                 trailing = {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         FilterChip(
                             selected = darkMode == "system",
                             onClick = { scope.launch { viewModel.setDarkMode("system") } },
-                            label = { Text("系统") }
+                            label = { Text(stringResource(R.string.settings_theme_system)) }
                         )
                         FilterChip(
                             selected = darkMode == "on",
                             onClick = { scope.launch { viewModel.setDarkMode("on") } },
-                            label = { Text("深色") }
+                            label = { Text(stringResource(R.string.settings_theme_dark)) }
                         )
                         FilterChip(
                             selected = darkMode == "off",
                             onClick = { scope.launch { viewModel.setDarkMode("off") } },
-                            label = { Text("浅色") }
+                            label = { Text(stringResource(R.string.settings_theme_light)) }
                         )
                     }
                 }
@@ -188,24 +196,24 @@ fun SettingsScreen(
         }
 
         // ── DNS ──
-        item { SectionHeader(title = "DNS 设置") }
+        item { SectionHeader(title = stringResource(R.string.settings_section_dns)) }
         item {
             SettingItem(
                 onClick = { showDnsDialog = true },
                 icon = { Icon(AppIcons.Security, contentDescription = null) },
-                title = "DNS 服务器",
-                supporting = "DNS 分流",
+                title = stringResource(R.string.settings_dns_server),
+                supporting = stringResource(R.string.settings_dns_summary),
                 trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
 
         // ── Inbound ──
-        item { SectionHeader(title = "入站设置") }
+        item { SectionHeader(title = stringResource(R.string.settings_section_inbound)) }
         item {
             SettingItem(
                 icon = { Icon(AppIcons.Speed, contentDescription = null) },
-                title = "SOCKS5 入站",
-                supporting = "端口 2080",
+                title = stringResource(R.string.settings_inbound_socks5),
+                supporting = stringResource(R.string.settings_inbound_port_format, 2080),
                 trailing = {
                     Switch(
                         checked = enableSocksInbound,
@@ -217,8 +225,8 @@ fun SettingsScreen(
         item {
             SettingItem(
                 icon = { Icon(AppIcons.Speed, contentDescription = null) },
-                title = "HTTP 入站",
-                supporting = "端口 2081",
+                title = stringResource(R.string.settings_inbound_http),
+                supporting = stringResource(R.string.settings_inbound_port_format, 2081),
                 trailing = {
                     Switch(
                         checked = enableHttpInbound,
@@ -234,7 +242,7 @@ fun SettingsScreen(
             SettingItem(
                 icon = { Icon(AppIcons.Power, contentDescription = null) },
                 title = stringResource(R.string.auto_connect),
-                supporting = "开机后自动连接",
+                supporting = stringResource(R.string.settings_auto_connect_summary),
                 trailing = {
                     Switch(checked = autoConnect, onCheckedChange = { scope.launch { viewModel.setAutoConnect(it) } })
                 }
@@ -244,7 +252,7 @@ fun SettingsScreen(
             SettingItem(
                 icon = { Icon(AppIcons.Speed, contentDescription = null) },
                 title = stringResource(R.string.enable_ipv6),
-                supporting = "启用 IPv6 网络支持",
+                supporting = stringResource(R.string.settings_ipv6_summary),
                 trailing = {
                     Switch(
                         checked = ipv6Mode == IPv6Mode.ENABLE,
@@ -260,8 +268,8 @@ fun SettingsScreen(
         item {
             SettingItem(
                 icon = { Icon(AppIcons.Power, contentDescription = null) },
-                title = "断线自动重连",
-                supporting = "VPN 意外断开时自动重新连接",
+                title = stringResource(R.string.settings_auto_reconnect),
+                supporting = stringResource(R.string.settings_auto_reconnect_summary),
                 trailing = {
                     Switch(checked = autoReconnect, onCheckedChange = { scope.launch { viewModel.setAutoReconnect(it) } })
                 }
@@ -274,8 +282,8 @@ fun SettingsScreen(
             SettingItem(
                 onClick = onNavigateToLog,
                 icon = { Icon(Icons.Filled.Info, contentDescription = null) },
-                title = "运行日志",
-                supporting = "查看 sing-box 运行日志",
+                title = stringResource(R.string.settings_log),
+                supporting = stringResource(R.string.settings_log_summary),
                 trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
@@ -300,7 +308,7 @@ fun SettingsScreen(
                     onClick = onNavigateToLicense,
                     icon = { Icon(AppIcons.Security, contentDescription = null) },
                     title = stringResource(R.string.open_source_licenses),
-                    supporting = "AeroBox 项目 GNU GPL-3.0-or-later",
+                    supporting = stringResource(R.string.settings_about_supporting),
                     trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
                 )
             }
@@ -348,14 +356,14 @@ private fun DnsSettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("DNS 设置") },
+        title = { Text(stringResource(R.string.dns_dialog_title)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = remote,
                     onValueChange = { remote = it },
-                    label = { Text("远程 DNS") },
-                    supportingText = { Text("示例: https://cloudflare-dns.com/dns-query, tls://1.1.1.1, udp://8.8.8.8") },
+                    label = { Text(stringResource(R.string.dns_label_remote)) },
+                    supportingText = { Text(stringResource(R.string.dns_dialog_remote_example)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -363,8 +371,8 @@ private fun DnsSettingsDialog(
                 OutlinedTextField(
                     value = direct,
                     onValueChange = { direct = it },
-                    label = { Text("直连 DNS") },
-                    supportingText = { Text("示例: udp://223.5.5.5, https://dns.alidns.com/dns-query") },
+                    label = { Text(stringResource(R.string.dns_label_direct)) },
+                    supportingText = { Text(stringResource(R.string.dns_dialog_direct_example)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -378,7 +386,7 @@ private fun DnsSettingsDialog(
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onReset) { Text("恢复默认") }
+                TextButton(onClick = onReset) { Text(stringResource(R.string.dns_dialog_reset)) }
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             }
         }

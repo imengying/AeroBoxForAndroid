@@ -317,7 +317,7 @@ fun SubscriptionScreen(
                         CircularProgressIndicator()
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = "正在加载订阅...",
+                            text = stringResource(R.string.subscription_loading),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -589,9 +589,13 @@ private fun NodeImportDialog(
             }
         },
         confirmButton = {
+            val defaultLocalGroupName = stringResource(R.string.local_group_label)
             TextButton(
                 onClick = {
-                    val target = holder.state.toTarget(fallbackName = "")
+                    val target = holder.state.toTarget(
+                        fallbackName = "",
+                        defaultName = defaultLocalGroupName
+                    )
                     onConfirm(content.trim(), target)
                 },
                 enabled = content.isNotBlank() && holder.state.isValid

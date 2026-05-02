@@ -1,5 +1,8 @@
 package com.aerobox.core.config
 
+import android.content.Context
+import com.aerobox.R
+import com.aerobox.core.errors.LocalizedException
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.RoutingMode
 import org.json.JSONArray
@@ -120,6 +123,7 @@ internal object DnsConfigBuilder {
     }
 
     fun validateDnsSettings(
+        context: Context,
         remoteDns: String,
         directDns: String,
         ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
@@ -129,18 +133,22 @@ internal object DnsConfigBuilder {
             val normalizedRemote = normalizeRemoteDnsAddress(remoteDns, nodeIsIpv6Only)
             val normalizedDirect = normalizeDirectDnsAddress(directDns, nodeIsIpv6Only)
             validateDnsServerSpec(
-                label = "远程 DNS",
+                label = context.getString(R.string.dns_label_remote),
                 spec = parseDnsServer(normalizedRemote),
                 ipv6Mode = ipv6Mode
             )
             validateDnsServerSpec(
-                label = "直连 DNS",
+                label = context.getString(R.string.dns_label_direct),
                 spec = parseDnsServer(normalizedDirect),
                 ipv6Mode = ipv6Mode
             )
             null
         }.getOrElse { error ->
-            error.message?.takeIf { it.isNotBlank() } ?: "DNS 地址格式无效"
+            when (error) {
+                is LocalizedException -> error.resolveMessage(context)
+                else -> error.message?.takeIf { it.isNotBlank() }
+                    ?: context.getString(R.string.error_dns_invalid_format_generic)
+            }
         }
     }
 
@@ -198,15 +206,25 @@ internal object DnsConfigBuilder {
         spec: DnsServerSpec,
         ipv6Mode: IPv6Mode
     ) {
-        require(spec.server.isNotBlank()) { "$label 地址无效" }
-        require(spec.serverPort in 1..65535) { "$label 端口无效" }
-        require(spec.type in setOf("https", "tls", "tcp", "udp", "quic")) { "$label 协议无效" }
-        require(isValidDnsHostOrIp(spec.server)) { "$label 地址无效" }
-        if (spec.type == "https") {
-            require(!spec.path.isNullOrBlank() && spec.path.startsWith("/")) { "$label 路径无效" }
+        if (spec.server.isBlank()) {
+            throw LocalizedException.of(R.string.error_dns_address_invalid_format, label)
         }
-        if (ipv6Mode == IPv6Mode.DISABLE) {
-            require(!ConfigGenerator.isIpv6Literal(spec.server)) { "$label 不能是 IPv6 地址" }
+        if (spec.serverPort !in 1..65535) {
+            throw LocalizedException.of(R.string.error_dns_port_invalid_format, label)
+        }
+        if (spec.type !in setOf("https", "tls", "tcp", "udp", "quic")) {
+            throw LocalizedException.of(R.string.error_dns_protocol_invalid_format, label)
+        }
+        if (!isValidDnsHostOrIp(spec.server)) {
+            throw LocalizedException.of(R.string.error_dns_address_invalid_format, label)
+        }
+        if (spec.type == "https" &&
+            (spec.path.isNullOrBlank() || !spec.path.startsWith("/"))
+        ) {
+            throw LocalizedException.of(R.string.error_dns_path_invalid_format, label)
+        }
+        if (ipv6Mode == IPv6Mode.DISABLE && ConfigGenerator.isIpv6Literal(spec.server)) {
+            throw LocalizedException.of(R.string.error_dns_no_ipv6_format, label)
         }
     }
 

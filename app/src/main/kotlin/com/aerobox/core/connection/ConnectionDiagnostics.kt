@@ -1,16 +1,31 @@
 package com.aerobox.core.connection
 
+import androidx.annotation.StringRes
+import com.aerobox.R
 import com.aerobox.data.repository.VpnConnectionResult
 
-enum class ConnectionFixAction(val label: String) {
-    UPDATE_GEO("更新路由资源"),
-    SWITCH_GLOBAL_MODE("切换为全局模式"),
-    REFRESH_SUBSCRIPTIONS("重新拉取订阅")
+/**
+ * Suggested remediation action presented next to a [ConnectionIssue]. The
+ * label is supplied as a string resource so the UI layer can render it in
+ * the user's locale.
+ */
+enum class ConnectionFixAction(@StringRes val labelResId: Int) {
+    UPDATE_GEO(R.string.connection_fix_update_geo),
+    SWITCH_GLOBAL_MODE(R.string.connection_fix_switch_global),
+    REFRESH_SUBSCRIPTIONS(R.string.connection_fix_refresh_subscriptions)
 }
 
+/**
+ * Structured representation of a connection failure. Both [titleResId] and
+ * [messageResId] are string resources; the UI consumes them via
+ * `stringResource(...)` so that translations follow the active locale.
+ *
+ * [rawError] is intentionally kept un-translated — it's the underlying
+ * sing-box error string used for diagnostics / logs.
+ */
 data class ConnectionIssue(
-    val title: String,
-    val message: String,
+    @StringRes val titleResId: Int,
+    @StringRes val messageResId: Int,
     val rawError: String,
     val fixAction: ConnectionFixAction? = null
 )
@@ -22,8 +37,8 @@ object ConnectionDiagnostics {
         return when {
             msg.contains("reality") && msg.contains("sni") -> {
                 ConnectionIssue(
-                    title = "Reality 配置不完整",
-                    message = "Reality 节点使用 IP 地址时需要显式填写 SNI/server name。",
+                    titleResId = R.string.connection_issue_reality_title,
+                    messageResId = R.string.connection_issue_reality_message,
                     rawError = rawError
                 )
             }
@@ -35,8 +50,8 @@ object ConnectionDiagnostics {
                 msg.contains(".srs") ||
                 (msg.contains("router") && msg.contains("database")) -> {
                 ConnectionIssue(
-                    title = "路由资源异常",
-                    message = "检测到官方路由规则集不可用或格式不兼容。",
+                    titleResId = R.string.connection_issue_geo_title,
+                    messageResId = R.string.connection_issue_geo_message,
                     rawError = rawError,
                     fixAction = ConnectionFixAction.UPDATE_GEO
                 )
@@ -45,8 +60,8 @@ object ConnectionDiagnostics {
             msg.contains("rule") ||
                 (msg.contains("router") && msg.contains("parse")) -> {
                 ConnectionIssue(
-                    title = "路由规则异常",
-                    message = "当前规则模式可能与节点配置不兼容，建议先切换到全局模式。",
+                    titleResId = R.string.connection_issue_rule_title,
+                    messageResId = R.string.connection_issue_rule_message,
                     rawError = rawError,
                     fixAction = ConnectionFixAction.SWITCH_GLOBAL_MODE
                 )
@@ -57,8 +72,8 @@ object ConnectionDiagnostics {
                 msg.contains("subscription") ||
                 msg.contains("proxy") -> {
                 ConnectionIssue(
-                    title = "节点或订阅可能失效",
-                    message = "节点参数可能已过期，建议重新拉取订阅后再连接。",
+                    titleResId = R.string.connection_issue_node_title,
+                    messageResId = R.string.connection_issue_node_message,
                     rawError = rawError,
                     fixAction = ConnectionFixAction.REFRESH_SUBSCRIPTIONS
                 )
@@ -66,8 +81,8 @@ object ConnectionDiagnostics {
 
             else -> {
                 ConnectionIssue(
-                    title = "连接配置异常",
-                    message = "请检查节点、DNS、分流设置，必要时更新订阅后重试。",
+                    titleResId = R.string.connection_issue_generic_title,
+                    messageResId = R.string.connection_issue_generic_message,
                     rawError = rawError
                 )
             }
@@ -87,15 +102,35 @@ object ConnectionDiagnostics {
         }
     }
 
-    fun userFacingFailureMessage(result: VpnConnectionResult, operationFailedText: String): String {
+    /**
+     * Compose a snackbar-style failure message: a localized prefix (typically
+     * "Operation failed") plus the localized issue title.
+     *
+     * Callers in the View layer have a Context handy and can resolve the
+     * string ID; this helper is a thin convenience around that.
+     */
+    fun userFacingFailureMessage(
+        result: VpnConnectionResult,
+        operationFailedText: String,
+        resolveTitle: (Int) -> String
+    ): String {
         val issue = issueFromResult(result) ?: return operationFailedText
-        return "$operationFailedText: ${issue.title}"
+        return "$operationFailedText: ${resolveTitle(issue.titleResId)}"
     }
 
-    fun logFailureMessage(result: VpnConnectionResult, fallback: String): String {
+    /**
+     * Build a developer-facing log line. Uses the resolver to pull a localized
+     * title (so log entries stay in sync with whatever the user is seeing on
+     * screen) followed by the un-translated raw error.
+     */
+    fun logFailureMessage(
+        result: VpnConnectionResult,
+        fallback: String,
+        resolveTitle: (Int) -> String
+    ): String {
         val issue = issueFromResult(result)
         return when {
-            issue != null -> "${issue.title}: ${issue.rawError}"
+            issue != null -> "${resolveTitle(issue.titleResId)}: ${issue.rawError}"
             result is VpnConnectionResult.Failure -> result.throwable.message ?: fallback
             else -> fallback
         }

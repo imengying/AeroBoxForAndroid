@@ -34,10 +34,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aerobox.R
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.icons.AppIcons
 import com.aerobox.core.logging.RuntimeLogBuffer
@@ -75,26 +77,27 @@ fun LogScreen(
         },
         topBar = {
             TopAppBar(
-                title = { Text("运行日志") },
+                title = { Text(stringResource(R.string.log_screen_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
                 actions = {
+                    val logCopiedMessage = stringResource(R.string.log_copied)
                     IconButton(
                         onClick = {
                             copyAllLogEntries(context, logLines)
                             scope.launch {
-                                snackbarHostState.showSnackbar("日志已复制")
+                                snackbarHostState.showSnackbar(logCopiedMessage)
                             }
                         },
                         enabled = logLines.isNotEmpty()
                     ) {
-                        Icon(AppIcons.ContentCopy, contentDescription = "复制全部日志")
+                        Icon(AppIcons.ContentCopy, contentDescription = stringResource(R.string.log_action_copy_all))
                     }
                     IconButton(onClick = { RuntimeLogBuffer.clear() }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "清空日志")
+                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.log_action_clear))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -111,7 +114,7 @@ fun LogScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "暂无日志",
+                    text = stringResource(R.string.log_empty),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

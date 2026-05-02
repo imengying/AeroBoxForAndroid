@@ -41,9 +41,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.aerobox.R
 import com.aerobox.data.model.NodeLatencyState
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
@@ -61,6 +63,7 @@ fun NodeListSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val ungroupedLabel = stringResource(R.string.group_ungrouped)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -76,7 +79,7 @@ fun NodeListSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "节点列表",
+                        text = stringResource(R.string.node_list_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -88,12 +91,12 @@ fun NodeListSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "暂无节点，请先添加订阅",
+                        text = stringResource(R.string.node_list_empty_hint),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                val grouped = remember(nodes, subscriptions) {
+                val grouped = remember(nodes, subscriptions, ungroupedLabel) {
                     val subscriptionOrder = subscriptions.withIndex().associate { it.value.id to it.index }
                     val subscriptionNames = subscriptions.associate { it.id to it.name }
                     nodes
@@ -106,7 +109,7 @@ fun NodeListSheet(
                             }.thenBy { (subId, _) ->
                                 if (subId == 0L || !subscriptionNames.containsKey(subId)) 1 else 0
                             }.thenBy { (subId, _) ->
-                                subscriptionNames[subId] ?: "未分组"
+                                subscriptionNames[subId] ?: ungroupedLabel
                             }
                         )
                 }
@@ -149,7 +152,7 @@ fun NodeListSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "节点列表",
+                        text = stringResource(R.string.node_list_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -160,7 +163,7 @@ fun NodeListSheet(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text("测速")
+                        Text(stringResource(R.string.node_list_speed_test))
                     }
                 }
 
@@ -174,7 +177,7 @@ fun NodeListSheet(
                             onClick = { selectedSubscriptionId = subId },
                             label = {
                                 Text(
-                                    text = subscriptionNames[subId] ?: "未分组",
+                                    text = subscriptionNames[subId] ?: ungroupedLabel,
                                     style = MaterialTheme.typography.labelMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -293,9 +296,9 @@ private fun NodeItem(
 @Composable
 private fun LatencyBadge(latency: Int, onClick: () -> Unit) {
     val (color, text) = when {
-        latency == NodeLatencyState.TESTING -> MaterialTheme.colorScheme.primary to "测试中"
-        latency == NodeLatencyState.FAILED -> MaterialTheme.colorScheme.error to "失败"
-        latency == NodeLatencyState.UNTESTED -> MaterialTheme.colorScheme.outline to "测速"
+        latency == NodeLatencyState.TESTING -> MaterialTheme.colorScheme.primary to stringResource(R.string.latency_testing)
+        latency == NodeLatencyState.FAILED -> MaterialTheme.colorScheme.error to stringResource(R.string.latency_failed)
+        latency == NodeLatencyState.UNTESTED -> MaterialTheme.colorScheme.outline to stringResource(R.string.node_list_speed_test)
         latency < 100 -> MaterialTheme.colorScheme.primary to "${latency}ms"
         latency < 300 -> MaterialTheme.colorScheme.tertiary to "${latency}ms"
         else -> MaterialTheme.colorScheme.error to "${latency}ms"

@@ -23,7 +23,7 @@ jobs:
     env:
       ANDROID_NDK_VERSION: 29.0.14206865
       GOMOBILE_VERSION: v0.1.12
-      LIBBOX_BUILD_TAGS: with_gvisor,with_quic,with_utls,with_ech,with_v2ray_api,with_naive_outbound
+      LIBBOX_BUILD_TAGS: with_gvisor,with_quic,with_utls,with_v2ray_api,with_naive_outbound
 
     steps:
       - name: Checkout

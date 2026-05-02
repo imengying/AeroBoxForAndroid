@@ -25,7 +25,11 @@ import java.util.concurrent.TimeUnit
 object GeoAssetManager {
 
     private const val TAG = "GeoAssetManager"
-    const val RULE_SET_UNAVAILABLE_MESSAGE = "Geo rule-set 资源不可用，请先更新规则资源后重试"
+    // Internal logcat-only marker. The user-facing translated message is
+    // R.string.error_rule_set_unavailable; callers that surface this to the
+    // UI must throw LocalizedException(R.string.error_rule_set_unavailable)
+    // instead of using this constant.
+    private const val RULE_SET_UNAVAILABLE_LOG_TAG = "rule-set assets missing"
 
     data class GeoUpdateResult(
         val geoIpOk: Boolean,
@@ -78,9 +82,9 @@ object GeoAssetManager {
             getGeoAdsFile(context).exists()
     }
 
-    fun getGeoIpSize(context: Context): String = formatFileSize(getGeoIpFile(context))
-    fun getGeoSiteSize(context: Context): String = formatFileSize(getGeoSiteFile(context))
-    fun getGeoAdsSize(context: Context): String = formatFileSize(getGeoAdsFile(context))
+    fun getGeoIpSize(context: Context): String = formatFileSize(context, getGeoIpFile(context))
+    fun getGeoSiteSize(context: Context): String = formatFileSize(context, getGeoSiteFile(context))
+    fun getGeoAdsSize(context: Context): String = formatFileSize(context, getGeoAdsFile(context))
 
     suspend fun updateAll(context: Context): GeoUpdateResult = withContext(Dispatchers.IO) {
         val ipOk = downloadFile(GEOIP_CN_URL, getGeoIpFile(context))
@@ -104,7 +108,7 @@ object GeoAssetManager {
         val result = updateAll(context)
         val available = result.allOk && hasLocalFiles(context)
         if (!available) {
-            Log.w(TAG, RULE_SET_UNAVAILABLE_MESSAGE)
+            Log.w(TAG, RULE_SET_UNAVAILABLE_LOG_TAG)
         }
         available
     }
@@ -284,8 +288,8 @@ object GeoAssetManager {
         }
     }
 
-    private fun formatFileSize(file: File): String {
-        if (!file.exists()) return "未下载"
+    private fun formatFileSize(context: Context, file: File): String {
+        if (!file.exists()) return context.getString(com.aerobox.R.string.file_size_not_downloaded)
         val sizeBytes = file.length()
         return when {
             sizeBytes < 1024 -> "${sizeBytes} B"

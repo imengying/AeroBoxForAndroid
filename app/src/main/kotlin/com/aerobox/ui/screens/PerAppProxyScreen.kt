@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -53,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.viewmodel.SettingsViewModel
 import com.aerobox.data.model.InstalledAppInfo
+import com.aerobox.R
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import kotlinx.coroutines.launch
 
@@ -157,7 +159,7 @@ fun PerAppProxyScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("分应用代理") },
+                title = { Text(stringResource(R.string.per_app_proxy_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -185,14 +187,14 @@ fun PerAppProxyScreen(
                     FilterChip(
                         selected = mode == "blacklist",
                         onClick = { scope.launch { viewModel.setPerAppProxyMode("blacklist") } },
-                        label = { Text("绕过选中") }
+                        label = { Text(stringResource(R.string.per_app_proxy_chip_bypass)) }
                     )
                 }
                 item {
                     FilterChip(
                         selected = mode == "whitelist",
                         onClick = { scope.launch { viewModel.setPerAppProxyMode("whitelist") } },
-                        label = { Text("仅代理选中") }
+                        label = { Text(stringResource(R.string.per_app_proxy_chip_only)) }
                     )
                 }
                 item {
@@ -203,7 +205,7 @@ fun PerAppProxyScreen(
                             pendingShowSystem = next
                             scope.launch { viewModel.setPerAppShowSystem(next) }
                         },
-                        label = { Text("显示系统") }
+                        label = { Text(stringResource(R.string.per_app_proxy_chip_show_system)) }
                     )
                 }
             }
@@ -214,7 +216,7 @@ fun PerAppProxyScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("搜索应用名称或包名") },
+                placeholder = { Text(stringResource(R.string.per_app_proxy_search_hint)) },
                 leadingIcon = {
                     Icon(Icons.Filled.Search, contentDescription = null)
                 },
@@ -234,13 +236,15 @@ fun PerAppProxyScreen(
 
             if (filteredApps.isEmpty()) {
                 Text(
-                    text = if (isLoadingApps) {
-                        "加载中"
-                    } else if (apps.isEmpty()) {
-                        "未获取到应用列表，可稍后重试"
-                    } else {
-                        "未找到匹配的应用"
-                    },
+                    text = stringResource(
+                        if (isLoadingApps) {
+                            R.string.per_app_proxy_loading
+                        } else if (apps.isEmpty()) {
+                            R.string.per_app_proxy_empty
+                        } else {
+                            R.string.per_app_proxy_no_match
+                        }
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp)
@@ -306,7 +310,7 @@ fun PerAppProxyScreen(
                                     )
                                     if (!app.hasInternetPermission) {
                                         Text(
-                                            text = "无网络权限",
+                                            text = stringResource(R.string.per_app_proxy_no_internet),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.outline
                                         )
