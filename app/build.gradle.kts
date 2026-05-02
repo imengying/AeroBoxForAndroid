@@ -26,6 +26,13 @@ android {
         versionCode = ciVersionCode ?: 1
         versionName = ciVersionName ?: "1.0.0"
 
+        // strings.xml only ships zh-Hans. Without this filter, every androidx /
+        // Compose / Material3 / WorkManager artifact contributes its own
+        // localized strings (~50 locales) to the APK. Limiting to "zh" prunes
+        // those at packaging time. If/when EN translations land, switch to
+        // listOf("zh", "en").
+        resourceConfigurations += listOf("zh")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -70,6 +77,13 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "DebugProbesKt.bin"
             excludes += "kotlin-tooling-metadata.json"
+            // Multi-release jar duplicates and JVM-only metadata that Android
+            // never reads at runtime. Cheap, lossless trim.
+            excludes += "/META-INF/versions/9/**"
+            excludes += "/META-INF/*.kotlin_module"
+            excludes += "/META-INF/INDEX.LIST"
+            excludes += "/META-INF/io.netty.versions.properties"
+            excludes += "/META-INF/native-image/**"
         }
     }
 }

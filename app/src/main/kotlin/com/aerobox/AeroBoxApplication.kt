@@ -68,7 +68,6 @@ class AeroBoxApplication : Application() {
                 AppDatabase::class.java,
                 "aerobox.db"
             )
-                .addMigrations(AppDatabase.MIGRATION_1_2)
                 .build()
         }
 
