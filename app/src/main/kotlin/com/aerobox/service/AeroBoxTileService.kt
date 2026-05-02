@@ -9,11 +9,11 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
+import com.aerobox.AeroBoxApplication
 import com.aerobox.R
 import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.data.model.VpnState
 import com.aerobox.data.repository.VpnConnectionResult
-import com.aerobox.data.repository.VpnRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -103,7 +103,7 @@ class AeroBoxTileService : TileService() {
             toggleJob?.cancel()
             pendingAction = PendingAction.STOP
             updateTileFromState(serviceActive, vpnState)
-            VpnRepository(applicationContext).stopVpn()
+            AeroBoxApplication.vpnRepository.stopVpn()
             return
         }
 
@@ -132,7 +132,7 @@ class AeroBoxTileService : TileService() {
         updateTileFromState(serviceActive = false, vpnState = vpnState)
         toggleJob?.cancel()
         toggleJob = serviceScope.launch(Dispatchers.IO) {
-            val result = VpnRepository(applicationContext).connectSelectedNode()
+            val result = AeroBoxApplication.vpnRepository.connectSelectedNode()
             withContext(Dispatchers.Main.immediate) {
                 when (result) {
                     VpnConnectionResult.NoNodeAvailable -> {

@@ -12,7 +12,6 @@ import org.yaml.snakeyaml.constructor.SafeConstructor
  * Only reads the `proxies:` list and maps each node into the app's internal model.
  */
 object ClashParser {
-    private val supportedTransportTypes get() = SubscriptionParser.supportedTransportTypes
 
     data class ClashParseResult(
         val nodes: List<ProxyNode>,
@@ -39,7 +38,6 @@ object ClashParser {
         }
         return ClashParseResult(nodes = nodes, diagnostics = diagnostics)
     }
-
     fun isClashYaml(content: String): Boolean {
         if (!content.contains("proxies:")) return false
         val root = loadYamlRoot(content) ?: return false
@@ -401,17 +399,8 @@ object ClashParser {
         }
     }
 
-    private fun firstPortFromPortList(serverPorts: String?): Int? {
-        return serverPorts
-            ?.split(",")
-            ?.firstNotNullOfOrNull { entry ->
-                Regex("""\d{1,5}""")
-                    .find(entry)
-                    ?.value
-                    ?.toIntOrNull()
-                    ?.takeIf { it in 1..65535 }
-            }
-    }
+    private fun firstPortFromPortList(serverPorts: String?): Int? =
+        UriNodeParser.firstPortFromPortList(serverPorts)
 
     private fun booleanValue(source: Any?, vararg path: String): Boolean? {
         val resolved = value(source, *path) ?: return null
@@ -436,24 +425,11 @@ object ClashParser {
         }
     }
 
-    private fun normalizeTransportType(value: String?): String? {
-        val normalized = value?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
-        return when (normalized) {
-            "websocket" -> "ws"
-            "http-upgrade" -> "httpupgrade"
-            else -> normalized
-        }
-    }
+    private fun resolveTransportType(rawNetwork: String?): String? =
+        UriNodeParser.resolveTransportType(rawNetwork)
 
-    private fun resolveTransportType(rawNetwork: String?): String? {
-        val normalized = normalizeTransportType(rawNetwork) ?: return null
-        if (normalized == "tcp") return null
-        return normalized.takeIf { it in supportedTransportTypes }
-    }
-
-    private fun firstNonBlank(vararg values: String?): String? {
-        return values.firstOrNull { !it.isNullOrBlank() }?.trim()?.takeIf { it.isNotEmpty() }
-    }
+    private fun firstNonBlank(vararg values: String?): String? =
+        UriNodeParser.firstNonBlank(*values)
 
     // Clash entries already matched a Naive type above, so unknown/blank protocol
     // values can safely fall back to the default HTTPS transport.

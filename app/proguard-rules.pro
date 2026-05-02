@@ -1,5 +1,10 @@
 # ── R8 / ProGuard rules for AeroBox ──
 
+# Preserve attributes needed by Kotlin reflection / generic type info / Room /
+# OkHttp / SnakeYAML when they walk class metadata at runtime. Cheap to keep
+# and avoids subtle release-only NPEs the day we add a generics-aware lib.
+-keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
+
 # Keep Room entities and DAO (required by annotation processor)
 -keep class com.aerobox.data.model.** { *; }
 -keep class com.aerobox.data.database.** { *; }

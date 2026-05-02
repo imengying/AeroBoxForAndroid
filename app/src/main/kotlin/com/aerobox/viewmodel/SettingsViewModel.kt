@@ -3,6 +3,7 @@ package com.aerobox.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.aerobox.AeroBoxApplication
 import com.aerobox.R
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.data.model.IPv6Mode
@@ -11,7 +12,6 @@ import com.aerobox.data.model.RoutingMode
 import com.aerobox.data.repository.AppListRepository
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnConfigResolver
-import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.flow.first
@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
     private val appListRepository = AppListRepository(appContext)
-    private val vpnRepository = VpnRepository(appContext)
+    private val vpnRepository = AeroBoxApplication.vpnRepository
     private val configResolver = VpnConfigResolver(appContext)
 
     private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())

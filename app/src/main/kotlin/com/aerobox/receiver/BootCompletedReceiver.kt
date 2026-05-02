@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.aerobox.AeroBoxApplication
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +30,19 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 val autoConnect = PreferenceManager.autoConnectFlow(context).first()
                 if (!autoConnect) return@launch
                 if (android.net.VpnService.prepare(context) != null) return@launch
+
+                // Avoid spinning up the foreground VPN service just to have it
+                // immediately stop when no node is available — that pollutes
+                // the user's notification shade with a transient AeroBox
+                // notification on every boot.
+                val hasAnyNode = AeroBoxApplication.database.proxyNodeDao()
+                    .getAllNodes()
+                    .first()
+                    .isNotEmpty()
+                if (!hasAnyNode) {
+                    Log.w(TAG, "Auto-connect skipped: no node configured")
+                    return@launch
+                }
 
                 // Delegate heavy work (config build, geo check) to the foreground
                 // VPN service.  The service's prepareStartRequest() will resolve the

@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import com.aerobox.data.model.TrafficStats
 import com.aerobox.data.model.VpnState
+import java.util.Locale
 import kotlin.math.max
 
 fun VpnState.toTrafficStats(): TrafficStats = traffic
@@ -17,7 +18,7 @@ fun Long.formatDuration(): String {
     val hours = elapsedSeconds / 3600
     val minutes = (elapsedSeconds % 3600) / 60
     val seconds = elapsedSeconds % 60
-    return "%02d:%02d:%02d".format(hours, minutes, seconds)
+    return "%02d:%02d:%02d".format(Locale.ROOT, hours, minutes, seconds)
 }
 
 fun Context.needsNotificationPermission(): Boolean {

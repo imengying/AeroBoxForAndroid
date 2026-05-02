@@ -411,12 +411,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun testNodeLatency(node: ProxyNode, settings: UrlTestSettings): Int {
-        return vpnRepository.urlTestNode(
-            node = node,
-            directDns = settings.directDns,
-            ipv6Mode = settings.ipv6Mode,
-            timeoutMs = NODE_TEST_TIMEOUT_MS
-        )
+        return runCatching {
+            vpnRepository.urlTestNode(
+                node = node,
+                directDns = settings.directDns,
+                ipv6Mode = settings.ipv6Mode,
+                timeoutMs = NODE_TEST_TIMEOUT_MS
+            )
+        }.getOrDefault(-1)
     }
 
     fun refreshNetworkInfo() {

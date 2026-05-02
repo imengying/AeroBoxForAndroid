@@ -46,7 +46,6 @@ import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.VpnConnectionResult
-import com.aerobox.data.repository.VpnRepository
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.PreferenceManager
@@ -105,7 +104,7 @@ class NotificationSwitchActivity : ComponentActivity() {
         if (pendingNodeId.value != null) return
         pendingNodeId.value = node.id
         lifecycleScope.launch {
-            when (val result = VpnRepository(applicationContext).switchToNode(node)) {
+            when (val result = AeroBoxApplication.vpnRepository.switchToNode(node)) {
                 is VpnConnectionResult.Success -> {
                     PreferenceManager.setLastSelectedNodeId(applicationContext, result.node.id)
                     finish()

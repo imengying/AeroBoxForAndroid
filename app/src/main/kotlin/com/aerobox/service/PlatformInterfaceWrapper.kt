@@ -1,6 +1,5 @@
 package com.aerobox.service
 
-import android.annotation.SuppressLint
 import android.net.NetworkCapabilities
 import android.os.Process
 import io.nekohasekai.libbox.ConnectionOwner
@@ -129,20 +128,31 @@ interface PlatformInterfaceWrapper : PlatformInterface {
     override fun localDNSTransport(): LocalDNSTransport? = LocalResolverTransport
 
     override fun systemCertificates(): StringIterator {
-        val certificates = mutableListOf<String>()
-        val keyStore = KeyStore.getInstance("AndroidCAStore")
-        keyStore?.let {
-            it.load(null, null)
-            val aliases = it.aliases()
-            while (aliases.hasMoreElements()) {
-                val cert = it.getCertificate(aliases.nextElement())
-                certificates.add(
-                    "-----BEGIN CERTIFICATE-----\n" +
-                            android.util.Base64.encodeToString(cert.encoded, android.util.Base64.NO_WRAP) +
-                            "\n-----END CERTIFICATE-----"
-                )
+        // Wrap the whole walk: KeyStore.load / aliases / getCertificate may
+        // each throw KeyStoreException / CertificateEncodingException, and
+        // libbox calls this from a JNI thread where an unhandled exception
+        // would surface as a Go panic.
+        val certificates = runCatching {
+            val keyStore = KeyStore.getInstance("AndroidCAStore")
+            keyStore.load(null, null)
+            buildList {
+                val aliases = keyStore.aliases()
+                while (aliases.hasMoreElements()) {
+                    val cert = runCatching {
+                        keyStore.getCertificate(aliases.nextElement())
+                    }.getOrNull() ?: continue
+                    val encoded = runCatching { cert.encoded }.getOrNull() ?: continue
+                    add(
+                        "-----BEGIN CERTIFICATE-----\n" +
+                                android.util.Base64.encodeToString(
+                                    encoded,
+                                    android.util.Base64.NO_WRAP
+                                ) +
+                                "\n-----END CERTIFICATE-----"
+                    )
+                }
             }
-        }
+        }.getOrDefault(emptyList())
         return StringArray(certificates.iterator())
     }
 

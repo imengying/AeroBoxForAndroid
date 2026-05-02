@@ -18,10 +18,13 @@ internal object OutboundConfigBuilder {
     fun buildProxyOutbound(node: ProxyNode): JSONObject {
         validateTlsServerNameRequirements(node)
         val cleanServer = ConfigGenerator.normalizeOutboundServer(node.server)
+        if (cleanServer.isBlank()) {
+            throw IllegalArgumentException("节点服务器地址为空")
+        }
         val enabledNetwork = node.effectiveEnabledNetwork()
         val transportType = node.effectiveTransportType()
         val outbound = JSONObject()
-            .put("server", cleanServer.ifBlank { "127.0.0.1" })
+            .put("server", cleanServer)
             .put("server_port", node.port)
 
         when (node.type) {

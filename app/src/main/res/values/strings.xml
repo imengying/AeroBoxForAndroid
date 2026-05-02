@@ -121,6 +121,8 @@
     <string name="error_http_server_returned_format">订阅服务器返回 %1$s</string>
     <string name="error_network_general">网络异常，请稍后重试</string>
     <string name="error_unknown">未知错误</string>
+    <string name="error_subscription_response_too_large">订阅响应过大，超过 8 MB 限制</string>
+    <string name="warning_insecure_nodes_format">注意：%1$d 个节点禁用了 TLS 证书校验，存在中间人攻击风险</string>
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">订阅内容不是受支持的 sing-box、Clash 或节点链接格式</string>

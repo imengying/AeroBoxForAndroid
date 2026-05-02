@@ -12,6 +12,7 @@ import org.tukaani.xz.XZInputStream
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -288,8 +289,8 @@ object GeoAssetManager {
         val sizeBytes = file.length()
         return when {
             sizeBytes < 1024 -> "${sizeBytes} B"
-            sizeBytes < 1024 * 1024 -> "%.1f KB".format(sizeBytes / 1024.0)
-            else -> "%.1f MB".format(sizeBytes / (1024.0 * 1024.0))
+            sizeBytes < 1024 * 1024 -> "%.1f KB".format(Locale.ROOT, sizeBytes / 1024.0)
+            else -> "%.1f MB".format(Locale.ROOT, sizeBytes / (1024.0 * 1024.0))
         }
     }
 }

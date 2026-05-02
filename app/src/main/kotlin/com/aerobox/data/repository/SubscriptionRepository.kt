@@ -29,6 +29,8 @@ import okhttp3.Headers
 import okhttp3.Request
 import com.aerobox.core.network.SharedHttpClient
 import okhttp3.Response
+import okhttp3.ResponseBody
+import okio.Buffer
 import java.io.IOException
 import java.util.Base64
 
@@ -40,7 +42,10 @@ data class SubscriptionImportResult(
     val nodeCount: Int,
     val error: Throwable? = null,
     val metadataFromHeader: Boolean = false,
-    val diagnostics: ParseDiagnostics = ParseDiagnostics()
+    val diagnostics: ParseDiagnostics = ParseDiagnostics(),
+    // Number of imported nodes with TLS certificate verification disabled
+    // (allowInsecure / skip-cert-verify). Surfaces a security warning in the UI.
+    val insecureNodeCount: Int = 0
 )
 
 // Result of parsing inline content (local file / pasted text / single-node QR).
@@ -54,7 +59,9 @@ data class PreparedLocalImport(
     val expireTimestamp: Long,
     val metadataFromHeader: Boolean,
     val diagnostics: ParseDiagnostics
-)
+) {
+    val insecureNodeCount: Int get() = nodes.count { it.allowInsecure }
+}
 
 // Picker result used by local file / paste / single-node QR import flows.
 // Subscription-backed groups are not valid targets here (they are refreshed
@@ -79,10 +86,16 @@ class SubscriptionRepository(context: Context) {
         private const val NODE_MATCH_THRESHOLD = 50
         private const val MAX_CONCURRENT_SUBSCRIPTION_REFRESHES = 4
         private const val SUBSCRIPTION_USER_AGENT = "clash-verge/v1.3.8"
+        // Hard cap on subscription response body size. Aligned with Clash YAML
+        // codePointLimit so a malicious server cannot OOM the app by streaming
+        // an unbounded response into memory before parsing.
+        private const val MAX_SUBSCRIPTION_BYTES = 8L * 1024L * 1024L
         const val MIN_UPDATE_INTERVAL_MS = 15 * 60 * 1000L
         const val DEFAULT_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000L
         const val NO_VALID_NODES_ERROR = "NO_VALID_NODES"
         const val LOCAL_GROUP_TARGET_INVALID_ERROR = "LOCAL_GROUP_TARGET_INVALID"
+        const val INVALID_SUBSCRIPTION_URL_ERROR = "INVALID_SUBSCRIPTION_URL"
+        const val SUBSCRIPTION_RESPONSE_TOO_LARGE_ERROR = "SUBSCRIPTION_RESPONSE_TOO_LARGE"
         private val COMMENT_METADATA_REGEX =
             Regex("""^\s*(#|//|;)\s*([A-Za-z-]+)\s*:\s*(.+?)\s*$""")
         private val SUPPORTED_COMMENT_METADATA_KEYS = setOf(
@@ -175,10 +188,20 @@ class SubscriptionRepository(context: Context) {
         updateInterval: Long = DEFAULT_UPDATE_INTERVAL_MS
     ): SubscriptionImportResult {
         val normalizedInterval = normalizeUpdateInterval(updateInterval)
+        val trimmedUrl = url.trim()
+        if (!isValidRemoteSubscriptionUrl(trimmedUrl)) {
+            return SubscriptionImportResult(
+                subscriptionId = 0,
+                nodeCount = 0,
+                error = IllegalArgumentException(INVALID_SUBSCRIPTION_URL_ERROR),
+                metadataFromHeader = false,
+                diagnostics = ParseDiagnostics()
+            )
+        }
 
         return runCatching {
-            val prepared = prepareSubscriptionImport(url)
-            val effectiveUrl = prepared.resolvedUrl ?: url
+            val prepared = prepareSubscriptionImport(trimmedUrl)
+            val effectiveUrl = prepared.resolvedUrl ?: trimmedUrl
             val effectiveName = name.ifBlank { prepared.resolvedName ?: deriveSubscriptionName(effectiveUrl) }
                 ?: appContext.getString(R.string.import_subscription_default_name)
             val effectiveInterval = if (autoUpdate) {
@@ -206,7 +229,11 @@ class SubscriptionRepository(context: Context) {
                         id = insertedId,
                         updateTime = updatedAt,
                         nodeCount = nodes.size,
-                        type = prepared.sourceType,
+                        // Note: Subscription.type is intentionally not written
+                        // here. The column is preserved in the schema for
+                        // forward compatibility but no consumer reads it, so
+                        // we leave it at its default value to avoid pretending
+                        // it carries meaning.
                         trafficBytes = prepared.trafficBytes,
                         expireTimestamp = prepared.expireTimestamp,
                         updateInterval = effectiveInterval
@@ -225,7 +252,8 @@ class SubscriptionRepository(context: Context) {
                 nodeCount = prepared.nodes.size,
                 error = null,
                 metadataFromHeader = prepared.metadataFromHeader,
-                diagnostics = prepared.diagnostics
+                diagnostics = prepared.diagnostics,
+                insecureNodeCount = prepared.nodes.count { it.allowInsecure }
             )
         }.getOrElse { error ->
             val diagnostics = (error as? NoValidNodesException)?.diagnostics ?: ParseDiagnostics()
@@ -289,12 +317,20 @@ class SubscriptionRepository(context: Context) {
         updateInterval: Long
     ) {
         val wasLocal = subscription.isLocalGroup()
+        val trimmedUrl = url.trim()
+        // Local groups have no remote URL — preserve the empty marker so they
+        // never accidentally become refreshable subscriptions. For real
+        // subscriptions we require a valid HTTPS URL; if the caller passed an
+        // invalid one we keep the existing url to avoid breaking refresh.
+        val resolvedUrl = when {
+            wasLocal -> subscription.url
+            isValidRemoteSubscriptionUrl(trimmedUrl) -> trimmedUrl
+            else -> subscription.url
+        }
         subscriptionDao.update(
             subscription.copy(
                 name = name,
-                // Local groups have no remote URL — preserve the empty marker so
-                // they never accidentally become refreshable subscriptions.
-                url = if (wasLocal) subscription.url else url,
+                url = resolvedUrl,
                 autoUpdate = if (wasLocal) false else autoUpdate,
                 updateInterval = normalizeUpdateInterval(updateInterval)
             )
@@ -584,7 +620,8 @@ class SubscriptionRepository(context: Context) {
             subscriptionId = subscriptionId,
             nodeCount = nodes.size,
             metadataFromHeader = prepared.metadataFromHeader,
-            diagnostics = prepared.diagnostics
+            diagnostics = prepared.diagnostics,
+            insecureNodeCount = nodes.count { it.allowInsecure }
         )
     }
 
@@ -595,10 +632,14 @@ class SubscriptionRepository(context: Context) {
     }
 
     private suspend fun prepareSubscriptionImport(url: String): PreparedSubscriptionImport {
-        val fetchResult = fetchSubscription(url)
+        val trimmedUrl = url.trim()
+        if (!isValidRemoteSubscriptionUrl(trimmedUrl)) {
+            throw IllegalArgumentException(INVALID_SUBSCRIPTION_URL_ERROR)
+        }
+        val fetchResult = fetchSubscription(trimmedUrl)
         val metadata = parseImportMetadata(
             source = fetchResult.content,
-            sourceUrl = fetchResult.resolvedUrl.ifBlank { url },
+            sourceUrl = fetchResult.resolvedUrl.ifBlank { trimmedUrl },
             headers = fetchResult.headers
         )
         val parsed = SubscriptionParser.parseSubscriptionContent(metadata.sanitizedContent)
@@ -665,7 +706,7 @@ class SubscriptionRepository(context: Context) {
                                 throw IOException("HTTP ${it.code}")
                             }
                             SubscriptionFetchResult(
-                                content = it.body.string(),
+                                content = readBoundedBody(it.body, MAX_SUBSCRIPTION_BYTES),
                                 headers = it.headers,
                                 resolvedUrl = it.request.url.toString()
                             )
@@ -687,6 +728,29 @@ class SubscriptionRepository(context: Context) {
                 }
             })
         }
+
+    /**
+     * Read a [ResponseBody] into a UTF-8 string while enforcing an upper bound.
+     *
+     * Uses Okio to consume up to [maxBytes] from the source, then peeks one
+     * additional byte. If any data remains the body exceeded the limit and we
+     * abort instead of buffering the rest. This keeps memory usage bounded on
+     * a hostile server even when `Content-Length` is missing or lies.
+     */
+    private fun readBoundedBody(body: ResponseBody, maxBytes: Long): String {
+        val source = body.source()
+        val buffer = Buffer()
+        var remaining = maxBytes
+        while (remaining > 0) {
+            val read = source.read(buffer, remaining)
+            if (read == -1L) break
+            remaining -= read
+        }
+        if (source.request(1)) {
+            throw IOException(SUBSCRIPTION_RESPONSE_TOO_LARGE_ERROR)
+        }
+        return buffer.readString(Charsets.UTF_8)
+    }
 
     private fun shouldAutoUpdate(subscription: Subscription, now: Long): Boolean {
         if (subscription.isLocalGroup()) return false
@@ -716,7 +780,7 @@ class SubscriptionRepository(context: Context) {
                     url = prepared.resolvedUrl ?: subscription.url,
                     updateTime = updatedAt,
                     nodeCount = stabilizedNodes.size,
-                    type = prepared.sourceType,
+                    // type intentionally not written — see addSubscription
                     trafficBytes = prepared.trafficBytes,
                     expireTimestamp = prepared.expireTimestamp,
                     updateInterval = prepared.resolvedUpdateInterval
@@ -746,7 +810,8 @@ class SubscriptionRepository(context: Context) {
             expireTimestamp = prepared.expireTimestamp,
             summary = summary,
             metadataFromHeader = prepared.metadataFromHeader,
-            diagnostics = prepared.diagnostics
+            diagnostics = prepared.diagnostics,
+            insecureNodeCount = persistedNodes.count { it.allowInsecure }
         )
     }
 

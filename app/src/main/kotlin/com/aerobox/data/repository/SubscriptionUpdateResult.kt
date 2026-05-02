@@ -19,5 +19,7 @@ data class SubscriptionUpdateResult(
     val expireTimestamp: Long,
     val summary: SubscriptionUpdateSummary,
     val metadataFromHeader: Boolean,
-    val diagnostics: ParseDiagnostics = ParseDiagnostics()
+    val diagnostics: ParseDiagnostics = ParseDiagnostics(),
+    // Number of refreshed nodes with TLS certificate verification disabled.
+    val insecureNodeCount: Int = 0
 )

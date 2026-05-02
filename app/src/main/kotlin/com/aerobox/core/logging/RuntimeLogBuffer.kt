@@ -24,6 +24,14 @@ object RuntimeLogBuffer {
     private val hostPortRegex = Regex("""\b(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(?::\d{1,5})?\b""")
     private val ipv4PortRegex = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b""")
     private val bracketIpv6Regex = Regex("""\[[0-9A-Fa-f:%.]+\](?::\d{1,5})?""")
+    // Mask common credential-bearing key/value forms before host/IP masking
+    // runs, so the value never reaches the more permissive scrubbers above.
+    private val credentialKvRegex = Regex(
+        """(?i)\b(password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|token|bearer)\s*[=:]\s*[^\s,;&"']+"""
+    )
+    private val authorizationHeaderRegex = Regex(
+        """(?i)\bauthorization\s*[:=]\s*(?:bearer|basic|token|digest)\s+[^\s,;"']+"""
+    )
 
     private val _lines = MutableStateFlow<List<RuntimeLogEntry>>(emptyList())
     val lines: StateFlow<List<RuntimeLogEntry>> = _lines.asStateFlow()
@@ -66,6 +74,19 @@ object RuntimeLogBuffer {
     private fun sanitize(message: String): String {
         if (message.isBlank()) return message
         return message
+            // Credential scrubbing must run BEFORE host/IP masks: the host
+            // regex would otherwise leave secret values intact while only
+            // masking accompanying domains.
+            .replace(authorizationHeaderRegex) { match ->
+                val key = match.value.substringBefore(if (match.value.contains(':')) ':' else '=')
+                "$key: ***"
+            }
+            .replace(credentialKvRegex) { match ->
+                val sep = if (match.value.contains(':') &&
+                    !match.value.contains('=')) ':' else '='
+                val key = match.value.substringBefore(sep).trim()
+                "$key$sep***"
+            }
             .replace(urlRegex) { maskUrl(it.value) }
             .replace(uuidRegex) { maskUuid(it.value) }
             .replace(bracketIpv6Regex) { maskBracketIpv6(it.value) }

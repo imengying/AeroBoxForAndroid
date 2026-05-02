@@ -198,6 +198,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             val updatedCount = successResults.sumOf { it.summary.updatedCount }
             val deletedCount = successResults.sumOf { it.summary.deletedCount }
             val metadataCount = successResults.count { it.metadataFromHeader }
+            val insecureCount = successResults.sumOf { it.insecureNodeCount }
             if (failCount == 0) {
                 _uiMessage.tryEmit(
                     buildString {
@@ -212,6 +213,15 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                         )
                         if (metadataCount > 0) {
                             append(appContext.getString(R.string.subscription_update_metadata_suffix, metadataCount))
+                        }
+                        if (insecureCount > 0) {
+                            append('\n')
+                            append(
+                                appContext.getString(
+                                    R.string.warning_insecure_nodes_format,
+                                    insecureCount
+                                )
+                            )
                         }
                     }
                 )
@@ -233,6 +243,15 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                         )
                         if (metadataCount > 0) {
                             append(appContext.getString(R.string.subscription_update_metadata_suffix, metadataCount))
+                        }
+                        if (insecureCount > 0) {
+                            append('\n')
+                            append(
+                                appContext.getString(
+                                    R.string.warning_insecure_nodes_format,
+                                    insecureCount
+                                )
+                            )
                         }
                         append(suffix)
                     }
@@ -422,6 +441,15 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 if (result.metadataFromHeader) {
                     append(appContext.getString(R.string.import_success_metadata_suffix))
                 }
+                if (result.insecureNodeCount > 0) {
+                    append('\n')
+                    append(
+                        appContext.getString(
+                            R.string.warning_insecure_nodes_format,
+                            result.insecureNodeCount
+                        )
+                    )
+                }
             }
         }
 
@@ -431,6 +459,9 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
 
             error?.message == SubscriptionRepository.LOCAL_GROUP_TARGET_INVALID_ERROR ->
                 appContext.getString(R.string.import_fail_local_group_target)
+
+            error?.message == SubscriptionRepository.INVALID_SUBSCRIPTION_URL_ERROR ->
+                appContext.getString(R.string.subscription_link_invalid)
 
             error != null ->
                 toFriendlyError(error)
@@ -444,6 +475,13 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     private fun toFriendlyError(error: Throwable): String {
         return when (error) {
             is NoValidNodesException -> friendlyNoValidNodesMessage(error.diagnostics)
+            is IllegalArgumentException ->
+                when (error.message) {
+                    SubscriptionRepository.INVALID_SUBSCRIPTION_URL_ERROR ->
+                        appContext.getString(R.string.subscription_link_invalid)
+                    else -> error.message?.takeIf { it.isNotBlank() }
+                        ?: appContext.getString(R.string.error_config_exception)
+                }
             is IllegalStateException ->
                 when (error.message) {
                     SubscriptionRepository.NO_VALID_NODES_ERROR ->
@@ -458,12 +496,13 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             is SSLException -> appContext.getString(R.string.error_ssl)
             is IOException -> {
                 val text = error.message.orEmpty()
-                if (text.startsWith("HTTP ")) {
-                    appContext.getString(R.string.error_http_server_returned_format, text)
-                } else if (text.isNotBlank()) {
-                    text
-                } else {
-                    appContext.getString(R.string.error_network_general)
+                when {
+                    text == SubscriptionRepository.SUBSCRIPTION_RESPONSE_TOO_LARGE_ERROR ->
+                        appContext.getString(R.string.error_subscription_response_too_large)
+                    text.startsWith("HTTP ") ->
+                        appContext.getString(R.string.error_http_server_returned_format, text)
+                    text.isNotBlank() -> text
+                    else -> appContext.getString(R.string.error_network_general)
                 }
             }
             else -> error.message?.takeIf { it.isNotBlank() }
@@ -537,6 +576,15 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             }
             if (result.metadataFromHeader) {
                 append(appContext.getString(R.string.subscription_update_metadata_single_suffix))
+            }
+            if (result.insecureNodeCount > 0) {
+                append('\n')
+                append(
+                    appContext.getString(
+                        R.string.warning_insecure_nodes_format,
+                        result.insecureNodeCount
+                    )
+                )
             }
         }
     }
