@@ -92,6 +92,7 @@ internal object DnsConfigBuilder {
             dnsRules.put(
                 JSONObject()
                     .put("inbound", JSONArray().put("tun-in"))
+                    .put("action", "route")
                     .put("server", ConfigGenerator.DNS_FAKE_TAG)
                     .put("disable_cache", true)
             )

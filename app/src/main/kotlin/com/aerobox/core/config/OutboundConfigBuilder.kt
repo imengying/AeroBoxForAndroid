@@ -118,7 +118,6 @@ internal object OutboundConfigBuilder {
                 node.username?.takeIf { it.isNotBlank() }?.let { outbound.put("username", it) }
                 node.password?.takeIf { it.isNotBlank() }?.let { outbound.put("password", it) }
                 outbound.put("tls", buildNaiveTlsObject(node))
-                enabledNetwork?.let { outbound.put("network", it) }
                 if (node.naiveProtocol.equals("quic", ignoreCase = true) || node.transportType.equals("quic", ignoreCase = true)) {
                     outbound.put("quic", true)
                     node.congestionControl?.takeIf { it.isNotBlank() }?.let {
@@ -167,7 +166,9 @@ internal object OutboundConfigBuilder {
         }?.let {
             outbound.put("transport", buildTransport(node, it))
         }
-        applyMultiplex(outbound, node)
+        if (supportsMultiplex(node) && !outbound.has("udp_over_tcp")) {
+            applyMultiplex(outbound, node)
+        }
         if (!outbound.has("domain_resolver") && !ConfigGenerator.isIpLiteral(cleanServer)) {
             // Resolve only the proxy server address locally. Applying a global
             // address strategy here would also resolve destination domains and
@@ -310,9 +311,23 @@ internal object OutboundConfigBuilder {
         outbound.put("multiplex", multiplex)
     }
 
+    private fun supportsMultiplex(node: ProxyNode): Boolean {
+        return when (node.type) {
+            ProxyType.SHADOWSOCKS,
+            ProxyType.SHADOWSOCKS_2022,
+            ProxyType.VMESS,
+            ProxyType.VLESS,
+            ProxyType.TROJAN -> true
+            ProxyType.HYSTERIA2,
+            ProxyType.TUIC,
+            ProxyType.NAIVE,
+            ProxyType.SOCKS,
+            ProxyType.HTTP -> false
+        }
+    }
+
     private fun buildNaiveTlsObject(node: ProxyNode): JSONObject {
         val tls = JSONObject()
-            .put("enabled", true)
         node.sni?.takeIf { it.isNotBlank() }?.let { tls.put("server_name", it) }
         node.naiveCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("certificate", it) }
         node.naiveCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("certificate_path", it) }
