@@ -77,7 +77,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
@@ -232,10 +231,8 @@ fun SubscriptionScreen(
             Box {
                 val openQrImport = {
                     showImportMenu = false
-                    val hasCameraPermission = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.CAMERA
-                    ) == PackageManager.PERMISSION_GRANTED
+                    val hasCameraPermission = context.checkSelfPermission(Manifest.permission.CAMERA) ==
+                        PackageManager.PERMISSION_GRANTED
                     if (hasCameraPermission) {
                         qrScanLauncher.launch(buildQrScanOptions(context))
                     } else {

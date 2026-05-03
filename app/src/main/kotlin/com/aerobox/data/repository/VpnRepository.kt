@@ -2,9 +2,9 @@ package com.aerobox.data.repository
 
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat
 import com.aerobox.AeroBoxApplication
 import com.aerobox.core.config.ConfigGenerator
+import com.aerobox.core.errors.LocalizedException
 import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.network.NodeAddressFamilyResolver
 import com.aerobox.core.native.SingBoxNative
@@ -156,7 +156,11 @@ class VpnRepository(private val context: Context) {
                 VpnConnectionResult.Success(resolvedNode)
             }
         }.getOrElse { error ->
-            VpnConnectionResult.Failure(error)
+            if (error is LocalizedException) {
+                VpnConnectionResult.InvalidConfig(error.resolveMessage(context))
+            } else {
+                VpnConnectionResult.Failure(error)
+            }
         }
     }
 
@@ -170,7 +174,7 @@ class VpnRepository(private val context: Context) {
                 putExtra(AeroBoxVpnService.EXTRA_NODE_ID, nodeId)
             }
         }
-        ContextCompat.startForegroundService(context, intent)
+        context.startForegroundService(intent)
     }
 
     fun stopVpn() {
@@ -178,7 +182,7 @@ class VpnRepository(private val context: Context) {
         val intent = Intent(context, AeroBoxVpnService::class.java).apply {
             action = AeroBoxVpnService.ACTION_STOP
         }
-        ContextCompat.startForegroundService(context, intent)
+        context.startForegroundService(intent)
     }
 
     private suspend fun waitForServiceStop(timeoutMs: Long = 5_000L) {

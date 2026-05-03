@@ -5,7 +5,6 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
-import androidx.core.content.ContextCompat
 import com.aerobox.R
 import com.journeyapps.barcodescanner.ViewfinderView
 
@@ -20,13 +19,13 @@ class AeroBoxQrViewfinderView @JvmOverloads constructor(
     private val cornerStrokeWidth = 4f * density
 
     private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.qr_scanner_frame)
+        color = context.getColor(R.color.qr_scanner_frame)
         style = Paint.Style.STROKE
         strokeWidth = frameStrokeWidth
     }
 
     private val cornerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = ContextCompat.getColor(context, R.color.qr_scanner_corner)
+        color = context.getColor(R.color.qr_scanner_corner)
         style = Paint.Style.STROKE
         strokeWidth = cornerStrokeWidth
         strokeCap = Paint.Cap.ROUND

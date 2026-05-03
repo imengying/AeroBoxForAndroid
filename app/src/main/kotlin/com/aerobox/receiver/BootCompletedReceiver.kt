@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.aerobox.AeroBoxApplication
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.utils.PreferenceManager
@@ -51,7 +50,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 val startIntent = Intent(context, AeroBoxVpnService::class.java).apply {
                     action = AeroBoxVpnService.ACTION_START
                 }
-                ContextCompat.startForegroundService(context, startIntent)
+                context.startForegroundService(startIntent)
             } catch (e: Exception) {
                 Log.w(TAG, "Auto-connect failed after boot", e)
             } finally {
