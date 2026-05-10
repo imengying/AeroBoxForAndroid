@@ -171,26 +171,50 @@ fun SettingsScreen(
             )
         }
         item {
+            var expanded by remember { mutableStateOf(false) }
+            val currentLabel = when (darkMode) {
+                "on" -> stringResource(R.string.settings_theme_dark)
+                "off" -> stringResource(R.string.settings_theme_light)
+                else -> stringResource(R.string.settings_theme_system)
+            }
             SettingItem(
+                onClick = { expanded = true },
                 icon = { Icon(AppIcons.DarkMode, contentDescription = null) },
                 title = stringResource(R.string.dark_mode),
                 trailing = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(
-                            selected = darkMode == "system",
-                            onClick = { scope.launch { viewModel.setDarkMode("system") } },
-                            label = { Text(stringResource(R.string.settings_theme_system)) }
-                        )
-                        FilterChip(
-                            selected = darkMode == "on",
-                            onClick = { scope.launch { viewModel.setDarkMode("on") } },
-                            label = { Text(stringResource(R.string.settings_theme_dark)) }
-                        )
-                        FilterChip(
-                            selected = darkMode == "off",
-                            onClick = { scope.launch { viewModel.setDarkMode("off") } },
-                            label = { Text(stringResource(R.string.settings_theme_light)) }
-                        )
+                    Box {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = currentLabel,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                            )
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(stringResource(R.string.settings_theme_system)) },
+                                onClick = { scope.launch { viewModel.setDarkMode("system") }; expanded = false }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(stringResource(R.string.settings_theme_dark)) },
+                                onClick = { scope.launch { viewModel.setDarkMode("on") }; expanded = false }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text(stringResource(R.string.settings_theme_light)) },
+                                onClick = { scope.launch { viewModel.setDarkMode("off") }; expanded = false }
+                            )
+                        }
                     }
                 }
             )
