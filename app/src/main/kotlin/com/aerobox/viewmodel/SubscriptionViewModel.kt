@@ -17,6 +17,8 @@ import com.aerobox.data.repository.SubscriptionImportResult
 import com.aerobox.data.repository.SubscriptionRepository
 import com.aerobox.data.repository.SubscriptionUpdateResult
 import com.aerobox.data.repository.SubscriptionUpdateSummary
+import com.aerobox.utils.AppLocaleManager
+import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -52,6 +54,8 @@ data class PendingSubscriptionLink(
 class SubscriptionViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
     private val repository = AeroBoxApplication.subscriptionRepository
+    private val languageTag = PreferenceManager.languageTagFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppLocaleManager.SYSTEM_LANGUAGE_TAG)
 
     val subscriptions = repository.getAllSubscriptions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -82,7 +86,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         updateInterval: Long
     ) {
         if (!isValidSubscriptionUrl(url)) {
-            _uiMessage.tryEmit(appContext.getString(R.string.subscription_link_invalid))
+            _uiMessage.tryEmit(appString(R.string.subscription_link_invalid))
             return
         }
 
@@ -101,7 +105,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     _uiMessage.tryEmit(formatImportResultMessage(importResult))
                 }
                 .onFailure { error ->
-                    _uiMessage.tryEmit(appContext.getString(R.string.import_subscription_failed, toFriendlyError(error)))
+                    _uiMessage.tryEmit(appString(R.string.import_subscription_failed, toFriendlyError(error)))
                 }
             _isLoading.value = false
         }
@@ -110,10 +114,10 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     fun deleteSubscription(subscription: Subscription) {
         viewModelScope.launch {
             repository.deleteSubscription(subscription)
-            val tag = appContext.getString(
+            val tag = appString(
                 if (subscription.isLocalGroup()) R.string.group_noun else R.string.subscription_noun
             )
-            _uiMessage.tryEmit(appContext.getString(R.string.deleted_item_format, tag, subscription.name))
+            _uiMessage.tryEmit(appString(R.string.deleted_item_format, tag, subscription.name))
         }
     }
 
@@ -133,7 +137,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     ) {
         val isLocal = subscription.isLocalGroup()
         if (!isLocal && !isValidSubscriptionUrl(url)) {
-            _uiMessage.tryEmit(appContext.getString(R.string.subscription_link_invalid))
+            _uiMessage.tryEmit(appString(R.string.subscription_link_invalid))
             return
         }
 
@@ -145,11 +149,11 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 autoUpdate = autoUpdate,
                 updateInterval = updateInterval
             )
-            val tag = appContext.getString(
+            val tag = appString(
                 if (isLocal) R.string.group_noun else R.string.subscription_noun
             )
             _uiMessage.tryEmit(
-                appContext.getString(
+                appString(
                     R.string.modified_item_format,
                     tag,
                     name.ifBlank { subscription.name }
@@ -160,7 +164,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
 
     fun updateSubscription(subscription: Subscription) {
         if (subscription.isLocalGroup()) {
-            _uiMessage.tryEmit(appContext.getString(R.string.local_group_no_refresh))
+            _uiMessage.tryEmit(appString(R.string.local_group_no_refresh))
             return
         }
         viewModelScope.launch {
@@ -173,7 +177,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     _uiMessage.tryEmit(formatUpdateResultMessage(subscription.name, updateResult))
                 }
                 .onFailure { error ->
-                    _uiMessage.tryEmit(appContext.getString(R.string.update_subscription_failed, toFriendlyError(error)))
+                    _uiMessage.tryEmit(appString(R.string.update_subscription_failed, toFriendlyError(error)))
                 }
             _isLoading.value = false
         }
@@ -184,7 +188,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             val subs = subscriptions.value
             val refreshable = subs.filterNot { it.isLocalGroup() }
             if (refreshable.isEmpty()) {
-                _uiMessage.tryEmit(appContext.getString(R.string.no_refreshable_subscription))
+                _uiMessage.tryEmit(appString(R.string.no_refreshable_subscription))
                 return@launch
             }
 
@@ -203,7 +207,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 _uiMessage.tryEmit(
                     buildString {
                         append(
-                            appContext.getString(
+                            appString(
                                 R.string.subscription_update_complete_all_format,
                                 successCount,
                                 addedCount,
@@ -212,12 +216,12 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                             )
                         )
                         if (metadataCount > 0) {
-                            append(appContext.getString(R.string.subscription_update_metadata_suffix, metadataCount))
+                            append(appString(R.string.subscription_update_metadata_suffix, metadataCount))
                         }
                         if (insecureCount > 0) {
                             append('\n')
                             append(
-                                appContext.getString(
+                                appString(
                                     R.string.warning_insecure_nodes_format,
                                     insecureCount
                                 )
@@ -227,12 +231,12 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 )
             } else {
                 val suffix = lastError?.let {
-                    appContext.getString(R.string.subscription_update_partial_fail_error_suffix, toFriendlyError(it))
+                    appString(R.string.subscription_update_partial_fail_error_suffix, toFriendlyError(it))
                 } ?: ""
                 _uiMessage.tryEmit(
                     buildString {
                         append(
-                            appContext.getString(
+                            appString(
                                 R.string.subscription_update_partial_fail_format,
                                 successCount,
                                 failCount,
@@ -242,12 +246,12 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                             )
                         )
                         if (metadataCount > 0) {
-                            append(appContext.getString(R.string.subscription_update_metadata_suffix, metadataCount))
+                            append(appString(R.string.subscription_update_metadata_suffix, metadataCount))
                         }
                         if (insecureCount > 0) {
                             append('\n')
                             append(
-                                appContext.getString(
+                                appString(
                                     R.string.warning_insecure_nodes_format,
                                     insecureCount
                                 )
@@ -273,7 +277,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     ) {
         val trimmedSource = source.trim()
         if (trimmedSource.isBlank()) {
-            _uiMessage.tryEmit(appContext.getString(R.string.import_empty_content))
+            _uiMessage.tryEmit(appString(R.string.import_empty_content))
             return
         }
 
@@ -298,7 +302,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     )
                 }
                 .onFailure { error ->
-                    _uiMessage.tryEmit(appContext.getString(R.string.import_failed, toFriendlyError(error)))
+                    _uiMessage.tryEmit(appString(R.string.import_failed, toFriendlyError(error)))
                 }
             _isLoading.value = false
         }
@@ -312,11 +316,11 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     ) {
         val trimmedSource = source.trim()
         if (trimmedSource.isBlank()) {
-            _uiMessage.tryEmit(appContext.getString(R.string.node_empty_content))
+            _uiMessage.tryEmit(appString(R.string.node_empty_content))
             return
         }
         if (repository.isValidRemoteSubscriptionUrl(trimmedSource)) {
-            _uiMessage.tryEmit(appContext.getString(R.string.node_content_use_subscription_entry))
+            _uiMessage.tryEmit(appString(R.string.node_content_use_subscription_entry))
             return
         }
         viewModelScope.launch {
@@ -329,7 +333,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     _uiMessage.tryEmit(formatImportResultMessage(importResult))
                 }
                 .onFailure { error ->
-                    _uiMessage.tryEmit(appContext.getString(R.string.import_failed, toFriendlyError(error)))
+                    _uiMessage.tryEmit(appString(R.string.import_failed, toFriendlyError(error)))
                 }
             _isLoading.value = false
         }
@@ -351,13 +355,13 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     }
                 }
                 if (sizeBytes != null && sizeBytes > 8L * 1024L * 1024L) {
-                    throw IllegalStateException(appContext.getString(R.string.local_file_too_large))
+                    throw IllegalStateException(appString(R.string.local_file_too_large))
                 }
                 val content = resolver.openInputStream(uri)?.use { input -> input.readBytes() }
                     ?.toString(Charsets.UTF_8)
                     ?.removePrefix("\uFEFF")
                     ?.trim()
-                    ?: throw IllegalStateException(appContext.getString(R.string.cannot_read_local_file))
+                    ?: throw IllegalStateException(appString(R.string.cannot_read_local_file))
                 val baseName = displayName.orEmpty().substringBeforeLast('.')
                 val prepared = repository.prepareLocalImport(content, baseName)
                 prepared to baseName
@@ -371,7 +375,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     )
                 }
                 .onFailure { error ->
-                    _uiMessage.tryEmit(appContext.getString(R.string.import_local_file_failed, toFriendlyError(error)))
+                    _uiMessage.tryEmit(appString(R.string.import_local_file_failed, toFriendlyError(error)))
                 }
             _isLoading.value = false
         }
@@ -387,7 +391,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     _uiMessage.tryEmit(formatImportResultMessage(importResult))
                 }
                 .onFailure { error ->
-                    _uiMessage.tryEmit(appContext.getString(R.string.import_failed, toFriendlyError(error)))
+                    _uiMessage.tryEmit(appString(R.string.import_failed, toFriendlyError(error)))
                 }
             _isLoading.value = false
         }
@@ -432,19 +436,19 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         val error = result.error
         if (error == null && result.nodeCount > 0) {
             val successPrefix = if (result.subscriptionId == 0L) {
-                appContext.getString(R.string.import_success_ungrouped_format, result.nodeCount)
+                appString(R.string.import_success_ungrouped_format, result.nodeCount)
             } else {
-                appContext.getString(R.string.import_success_with_count_format, result.nodeCount)
+                appString(R.string.import_success_with_count_format, result.nodeCount)
             }
             return buildString {
                 append(successPrefix)
                 if (result.metadataFromHeader) {
-                    append(appContext.getString(R.string.import_success_metadata_suffix))
+                    append(appString(R.string.import_success_metadata_suffix))
                 }
                 if (result.insecureNodeCount > 0) {
                     append('\n')
                     append(
-                        appContext.getString(
+                        appString(
                             R.string.warning_insecure_nodes_format,
                             result.insecureNodeCount
                         )
@@ -458,10 +462,10 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 friendlyNoValidNodesMessage(result.diagnostics)
 
             error?.message == SubscriptionRepository.LOCAL_GROUP_TARGET_INVALID_ERROR ->
-                appContext.getString(R.string.import_fail_local_group_target)
+                appString(R.string.import_fail_local_group_target)
 
             error?.message == SubscriptionRepository.INVALID_SUBSCRIPTION_URL_ERROR ->
-                appContext.getString(R.string.subscription_link_invalid)
+                appString(R.string.subscription_link_invalid)
 
             error != null ->
                 toFriendlyError(error)
@@ -469,7 +473,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             else ->
                 friendlyNoValidNodesMessage(result.diagnostics)
         }
-        return appContext.getString(R.string.import_failed, detail)
+        return appString(R.string.import_failed, detail)
     }
 
     private fun toFriendlyError(error: Throwable): String {
@@ -478,35 +482,35 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             is IllegalArgumentException ->
                 when (error.message) {
                     SubscriptionRepository.INVALID_SUBSCRIPTION_URL_ERROR ->
-                        appContext.getString(R.string.subscription_link_invalid)
+                        appString(R.string.subscription_link_invalid)
                     else -> error.message?.takeIf { it.isNotBlank() }
-                        ?: appContext.getString(R.string.error_config_exception)
+                        ?: appString(R.string.error_config_exception)
                 }
             is IllegalStateException ->
                 when (error.message) {
                     SubscriptionRepository.NO_VALID_NODES_ERROR ->
-                        appContext.getString(R.string.error_no_valid_nodes)
+                        appString(R.string.error_no_valid_nodes)
                     SubscriptionRepository.LOCAL_GROUP_TARGET_INVALID_ERROR ->
-                        appContext.getString(R.string.import_fail_local_group_target)
+                        appString(R.string.import_fail_local_group_target)
                     else -> error.message?.takeIf { it.isNotBlank() }
-                        ?: appContext.getString(R.string.error_config_exception)
+                        ?: appString(R.string.error_config_exception)
                 }
-            is UnknownHostException -> appContext.getString(R.string.error_unknown_host)
-            is SocketTimeoutException -> appContext.getString(R.string.error_socket_timeout)
-            is SSLException -> appContext.getString(R.string.error_ssl)
+            is UnknownHostException -> appString(R.string.error_unknown_host)
+            is SocketTimeoutException -> appString(R.string.error_socket_timeout)
+            is SSLException -> appString(R.string.error_ssl)
             is IOException -> {
                 val text = error.message.orEmpty()
                 when {
                     text == SubscriptionRepository.SUBSCRIPTION_RESPONSE_TOO_LARGE_ERROR ->
-                        appContext.getString(R.string.error_subscription_response_too_large)
+                        appString(R.string.error_subscription_response_too_large)
                     text.startsWith("HTTP ") ->
-                        appContext.getString(R.string.error_http_server_returned_format, text)
+                        appString(R.string.error_http_server_returned_format, text)
                     text.isNotBlank() -> text
-                    else -> appContext.getString(R.string.error_network_general)
+                    else -> appString(R.string.error_network_general)
                 }
             }
             else -> error.message?.takeIf { it.isNotBlank() }
-                ?: appContext.getString(R.string.error_unknown)
+                ?: appString(R.string.error_unknown)
         }
     }
 
@@ -518,9 +522,9 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             .take(2)
 
         return if (hints.isEmpty()) {
-            appContext.getString(R.string.error_no_valid_nodes)
+            appString(R.string.error_no_valid_nodes)
         } else {
-            appContext.getString(R.string.error_no_valid_nodes_hints_format, hints.joinToString("；"))
+            appString(R.string.error_no_valid_nodes_hints_format, hints.joinToString("；"))
         }
     }
 
@@ -561,7 +565,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
 
             else -> return null
         }
-        return appContext.getString(resId)
+        return appString(resId)
     }
 
     private fun formatUpdateResultMessage(
@@ -570,17 +574,17 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     ): String {
         val summaryText = formatSummary(result.summary)
         return buildString {
-            append(appContext.getString(R.string.subscription_update_complete_format, subscriptionName))
+            append(appString(R.string.subscription_update_complete_format, subscriptionName))
             if (summaryText.isNotBlank()) {
-                append(appContext.getString(R.string.subscription_update_summary_paren_format, summaryText))
+                append(appString(R.string.subscription_update_summary_paren_format, summaryText))
             }
             if (result.metadataFromHeader) {
-                append(appContext.getString(R.string.subscription_update_metadata_single_suffix))
+                append(appString(R.string.subscription_update_metadata_single_suffix))
             }
             if (result.insecureNodeCount > 0) {
                 append('\n')
                 append(
-                    appContext.getString(
+                    appString(
                         R.string.warning_insecure_nodes_format,
                         result.insecureNodeCount
                     )
@@ -591,14 +595,25 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
 
     private fun formatSummary(summary: SubscriptionUpdateSummary): String {
         return if (summary.changedCount == 0) {
-            appContext.getString(R.string.summary_no_change)
+            appString(R.string.summary_no_change)
         } else {
-            appContext.getString(
+            appString(
                 R.string.summary_changes_format,
                 summary.addedCount,
                 summary.updatedCount,
                 summary.deletedCount
             )
+        }
+    }
+
+    private fun localizedStringContext() = AppLocaleManager.localizedContext(appContext, languageTag.value)
+
+    private fun appString(resId: Int, vararg formatArgs: Any): String {
+        val context = localizedStringContext()
+        return if (formatArgs.isEmpty()) {
+            context.getString(resId)
+        } else {
+            context.getString(resId, *formatArgs)
         }
     }
 }

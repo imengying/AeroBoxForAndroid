@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -55,7 +57,7 @@ import com.aerobox.viewmodel.SettingsViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onNavigateToSubscriptions: () -> Unit = {},
@@ -184,8 +186,12 @@ fun SettingsScreen(
                         else -> R.string.settings_theme_system
                     }
                 ),
-                trailing = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                extraContent = {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         FilterChip(
                             selected = darkMode == "system",
                             onClick = { scope.launch { viewModel.setDarkMode("system") } },
@@ -202,7 +208,8 @@ fun SettingsScreen(
                             label = { Text(stringResource(R.string.settings_theme_light)) }
                         )
                     }
-                }
+                },
+                trailing = null
             )
         }
         item {

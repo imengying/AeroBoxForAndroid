@@ -1,10 +1,12 @@
 package com.aerobox.ui.components
 
+import android.content.res.Configuration
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aerobox.utils.AppLocaleManager
@@ -21,16 +23,23 @@ fun ProvideAppLocale(content: @Composable () -> Unit) {
     val localizedContext = remember(context, languageTag) {
         AppLocaleManager.localizedContext(context, languageTag)
     }
+    val localizedConfiguration = remember(localizedContext, languageTag) {
+        Configuration(localizedContext.resources.configuration)
+    }
 
     if (activityResultRegistryOwner != null) {
         CompositionLocalProvider(
             LocalContext provides localizedContext,
+            LocalConfiguration provides localizedConfiguration,
             LocalActivityResultRegistryOwner provides activityResultRegistryOwner
         ) {
             content()
         }
     } else {
-        CompositionLocalProvider(LocalContext provides localizedContext) {
+        CompositionLocalProvider(
+            LocalContext provides localizedContext,
+            LocalConfiguration provides localizedConfiguration
+        ) {
             content()
         }
     }

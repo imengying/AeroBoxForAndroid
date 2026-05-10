@@ -13,8 +13,8 @@ import com.aerobox.data.repository.AppListRepository
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnConfigResolver
 import com.aerobox.service.VpnStateManager
+import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -124,7 +124,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             directDns = currentPrefs.directDns
         ) ?: return
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.dns_setting_failed)
+            failurePrefix = appString(R.string.dns_setting_failed)
         )
     }
 
@@ -136,7 +136,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             directDns = normalizedDns
         ) ?: return
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.dns_setting_failed)
+            failurePrefix = appString(R.string.dns_setting_failed)
         )
     }
 
@@ -148,7 +148,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             directDns = normalizedDirectDns
         ) ?: return
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.dns_setting_failed)
+            failurePrefix = appString(R.string.dns_setting_failed)
         )
     }
 
@@ -158,28 +158,28 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             directDns = PreferenceManager.DEFAULT_DIRECT_DNS
         ) ?: return
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.dns_setting_failed)
+            failurePrefix = appString(R.string.dns_setting_failed)
         )
     }
 
     suspend fun setPerAppProxyEnabled(enabled: Boolean) {
         PreferenceManager.setPerAppProxyEnabled(appContext, enabled)
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.perapp_setting_failed)
+            failurePrefix = appString(R.string.perapp_setting_failed)
         )
     }
 
     suspend fun setPerAppProxyMode(mode: String) {
         PreferenceManager.setPerAppProxyMode(appContext, mode)
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.perapp_setting_failed)
+            failurePrefix = appString(R.string.perapp_setting_failed)
         )
     }
 
     suspend fun setPerAppProxyPackages(packages: Set<String>) {
         PreferenceManager.setPerAppProxyPackages(appContext, packages)
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.perapp_setting_failed)
+            failurePrefix = appString(R.string.perapp_setting_failed)
         )
     }
 
@@ -200,7 +200,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     suspend fun setIPv6Mode(mode: IPv6Mode) {
         PreferenceManager.setIPv6Mode(appContext, mode)
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.ipv6_setting_failed)
+            failurePrefix = appString(R.string.ipv6_setting_failed)
         )
     }
 
@@ -211,35 +211,35 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     suspend fun setEnableGeoRules(enabled: Boolean) {
         PreferenceManager.setEnableGeoRules(appContext, enabled)
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.geo_setting_failed)
+            failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
 
     suspend fun setEnableGeoCnDomainRule(enabled: Boolean) {
         PreferenceManager.setEnableGeoCnDomainRule(appContext, enabled)
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.geo_setting_failed)
+            failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
 
     suspend fun setEnableGeoCnIpRule(enabled: Boolean) {
         PreferenceManager.setEnableGeoCnIpRule(appContext, enabled)
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.geo_setting_failed)
+            failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
 
     suspend fun setEnableGeoAdsBlock(enabled: Boolean) {
         PreferenceManager.setEnableGeoAdsBlock(appContext, enabled)
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.geo_setting_failed)
+            failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
 
     suspend fun setEnableGeoBlockQuic(enabled: Boolean) {
         PreferenceManager.setEnableGeoBlockQuic(appContext, enabled)
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.geo_setting_failed)
+            failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
 
@@ -267,7 +267,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun refreshActiveConnectionForInboundChange() {
         refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appContext.getString(R.string.inbound_setting_failed)
+            failurePrefix = appString(R.string.inbound_setting_failed)
         )
     }
 
@@ -282,13 +282,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         )
 
         val syntaxError = ConfigGenerator.validateDnsSettings(
-            context = appContext,
+            context = localizedStringContext(),
             remoteDns = remoteDns,
             directDns = directDns,
             ipv6Mode = currentPrefs.ipv6Mode
         )
         if (syntaxError != null) {
-            _uiMessage.tryEmit(appContext.getString(R.string.dns_invalid_format, syntaxError))
+            _uiMessage.tryEmit(appString(R.string.dns_invalid_format, syntaxError))
             return null
         }
 
@@ -302,13 +302,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 )
             }.getOrElse { error ->
                 val message = error.message?.takeIf { it.isNotBlank() }
-                    ?: appContext.getString(R.string.config_generation_failed)
-                _uiMessage.tryEmit(appContext.getString(R.string.dns_invalid_format, message))
+                    ?: appString(R.string.config_generation_failed)
+                _uiMessage.tryEmit(appString(R.string.dns_invalid_format, message))
                 return null
             }
             val configError = configResolver.validateConfig(candidateConfig)
             if (configError != null) {
-                _uiMessage.tryEmit(appContext.getString(R.string.dns_invalid_format, configError))
+                _uiMessage.tryEmit(appString(R.string.dns_invalid_format, configError))
                 return null
             }
         }
@@ -327,12 +327,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
         when (val result = vpnRepository.reloadActiveConnection(currentNode)) {
             is VpnConnectionResult.Success -> {
-                _uiMessage.tryEmit(appContext.getString(R.string.applying))
+                _uiMessage.tryEmit(appString(R.string.applying))
             }
 
             is VpnConnectionResult.InvalidConfig -> {
                 _uiMessage.tryEmit(
-                    appContext.getString(R.string.setting_failed_with_error_format, failurePrefix, result.error)
+                    appString(R.string.setting_failed_with_error_format, failurePrefix, result.error)
                 )
             }
 
@@ -340,20 +340,31 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 val details = result.throwable.message?.takeIf { it.isNotBlank() }
                 _uiMessage.tryEmit(
                     details?.let {
-                        appContext.getString(R.string.setting_failed_with_error_format, failurePrefix, it)
+                        appString(R.string.setting_failed_with_error_format, failurePrefix, it)
                     } ?: failurePrefix
                 )
             }
 
             VpnConnectionResult.NoNodeAvailable -> {
                 _uiMessage.tryEmit(
-                    appContext.getString(
+                    appString(
                         R.string.setting_failed_with_error_format,
                         failurePrefix,
-                        appContext.getString(R.string.current_node_unavailable)
+                        appString(R.string.current_node_unavailable)
                     )
                 )
             }
+        }
+    }
+
+    private fun localizedStringContext() = AppLocaleManager.localizedContext(appContext, languageTag.value)
+
+    private fun appString(resId: Int, vararg formatArgs: Any): String {
+        val context = localizedStringContext()
+        return if (formatArgs.isEmpty()) {
+            context.getString(resId)
+        } else {
+            context.getString(resId, *formatArgs)
         }
     }
 }
