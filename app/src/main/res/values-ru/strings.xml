@@ -253,6 +253,13 @@
     <string name="settings_theme_dark">Тёмная</string>
     <string name="settings_theme_light">Светлая</string>
     <string name="settings_theme_system">Системная</string>
+    <string name="settings_language">Язык</string>
+    <string name="settings_language_system">Системный</string>
+    <string name="settings_language_english">Английский</string>
+    <string name="settings_language_chinese_simplified">Китайский упрощённый</string>
+    <string name="settings_language_chinese_traditional">Китайский традиционный</string>
+    <string name="settings_language_persian">Персидский</string>
+    <string name="settings_language_russian">Русский</string>
     <string name="settings_section_dns">DNS</string>
     <string name="settings_dns_server">DNS-серверы</string>
     <string name="settings_dns_summary">Маршрутизация DNS</string>

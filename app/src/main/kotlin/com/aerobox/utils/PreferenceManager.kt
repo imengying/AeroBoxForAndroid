@@ -21,6 +21,7 @@ object PreferenceManager {
     const val DEFAULT_DIRECT_DNS = "udp://223.5.5.5"
 
     private val DARK_MODE = stringPreferencesKey("dark_mode")
+    private val LANGUAGE_TAG = stringPreferencesKey("language_tag")
     private val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
     private val AUTO_CONNECT = booleanPreferencesKey("auto_connect")
     private val LAST_SELECTED_NODE_ID = longPreferencesKey("last_selected_node_id")
@@ -47,6 +48,9 @@ object PreferenceManager {
 
     fun darkModeFlow(context: Context): Flow<String> =
         context.dataStore.data.map { it[DARK_MODE] ?: "system" }
+
+    fun languageTagFlow(context: Context): Flow<String> =
+        context.dataStore.data.map { it[LANGUAGE_TAG] ?: "" }
 
     fun dynamicColorFlow(context: Context): Flow<Boolean> =
         context.dataStore.data.map { it[DYNAMIC_COLOR] ?: true }
@@ -115,6 +119,10 @@ object PreferenceManager {
 
     suspend fun setDarkMode(context: Context, mode: String) {
         context.dataStore.edit { it[DARK_MODE] = mode }
+    }
+
+    suspend fun setLanguageTag(context: Context, languageTag: String) {
+        context.dataStore.edit { it[LANGUAGE_TAG] = languageTag }
     }
 
     suspend fun setDynamicColor(context: Context, enabled: Boolean) {

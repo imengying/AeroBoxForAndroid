@@ -13,14 +13,25 @@ import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.repository.SubscriptionRepository
 import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.VpnStateManager
+import com.aerobox.utils.AppLocaleManager
+import com.aerobox.utils.PreferenceManager
 import com.aerobox.work.SubscriptionUpdateScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class AeroBoxApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    override fun attachBaseContext(base: Context) {
+        val languageTag = runBlocking {
+            PreferenceManager.languageTagFlow(base).first()
+        }
+        super.attachBaseContext(AppLocaleManager.wrapContext(base, languageTag))
+    }
 
     override fun onCreate() {
         super.onCreate()

@@ -43,6 +43,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val darkMode: StateFlow<String> = PreferenceManager.darkModeFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "system")
 
+    val languageTag: StateFlow<String> = PreferenceManager.languageTagFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
     val dynamicColor: StateFlow<Boolean> = PreferenceManager.dynamicColorFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
@@ -99,6 +102,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     suspend fun setDarkMode(mode: String) {
         PreferenceManager.setDarkMode(appContext, mode)
+    }
+
+    suspend fun setLanguageTag(languageTag: String) {
+        PreferenceManager.setLanguageTag(appContext, languageTag)
     }
 
     suspend fun setDynamicColor(enabled: Boolean) {

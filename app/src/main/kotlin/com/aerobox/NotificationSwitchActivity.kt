@@ -1,6 +1,7 @@
 package com.aerobox
 
 import android.os.Bundle
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -48,15 +49,25 @@ import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.theme.SingBoxVPNTheme
+import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.runBlocking
 
 class NotificationSwitchActivity : ComponentActivity() {
     private val uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
     private val pendingNodeId = MutableStateFlow<Long?>(null)
+
+    override fun attachBaseContext(newBase: Context) {
+        val languageTag = runBlocking {
+            PreferenceManager.languageTagFlow(newBase).first()
+        }
+        super.attachBaseContext(AppLocaleManager.wrapContext(newBase, languageTag))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

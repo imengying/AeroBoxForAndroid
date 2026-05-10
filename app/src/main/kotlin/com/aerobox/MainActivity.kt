@@ -1,6 +1,7 @@
 package com.aerobox
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
@@ -29,10 +30,13 @@ import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.navigation.AppNavigation
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.needsNotificationPermission
+import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -43,6 +47,13 @@ class MainActivity : ComponentActivity() {
 
     private val uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
     private val pendingExternalImport = MutableStateFlow<ExternalImportRequest?>(null)
+
+    override fun attachBaseContext(newBase: Context) {
+        val languageTag = runBlocking {
+            PreferenceManager.languageTagFlow(newBase).first()
+        }
+        super.attachBaseContext(AppLocaleManager.wrapContext(newBase, languageTag))
+    }
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()

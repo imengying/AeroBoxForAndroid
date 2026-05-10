@@ -48,6 +48,7 @@ import com.aerobox.data.model.IPv6Mode
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.SectionHeader
 import com.aerobox.ui.components.SettingItem
+import com.aerobox.utils.AppLocaleManager
 import com.aerobox.viewmodel.SettingsViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -65,7 +66,9 @@ fun SettingsScreen(
     )
 ) {
     val context = LocalContext.current
+    val activity = context as androidx.activity.ComponentActivity
     val darkMode by viewModel.darkMode.collectAsStateWithLifecycle()
+    val languageTag by viewModel.languageTag.collectAsStateWithLifecycle()
     val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
     val autoConnect by viewModel.autoConnect.collectAsStateWithLifecycle()
     val routingMode by viewModel.routingMode.collectAsStateWithLifecycle()
@@ -80,6 +83,8 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showDnsDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    val effectiveLanguageTag = AppLocaleManager.currentLanguageTag(context, languageTag)
 
     LaunchedEffect(viewModel) {
         viewModel.uiMessage.collectLatest { message ->
@@ -192,6 +197,19 @@ fun SettingsScreen(
                         )
                     }
                 }
+            )
+        }
+        item {
+            val currentLanguageLabel = AppLocaleManager.supportedLanguages
+                .firstOrNull { it.tag == effectiveLanguageTag }
+                ?.labelResId
+                ?: R.string.settings_language_system
+            SettingItem(
+                onClick = { showLanguageDialog = true },
+                icon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                title = stringResource(R.string.settings_language),
+                supporting = stringResource(currentLanguageLabel),
+                trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
 
@@ -341,6 +359,59 @@ fun SettingsScreen(
         )
     }
 
+    if (showLanguageDialog) {
+        LanguageSettingsDialog(
+            selectedLanguageTag = effectiveLanguageTag,
+            onDismiss = { showLanguageDialog = false },
+            onConfirm = { selectedTag ->
+                scope.launch {
+                    val normalized = AppLocaleManager.normalize(selectedTag)
+                    viewModel.setLanguageTag(normalized)
+                    AppLocaleManager.apply(context, normalized)
+                    showLanguageDialog = false
+                    activity.recreate()
+                }
+            }
+        )
+    }
+
+}
+
+@Composable
+private fun LanguageSettingsDialog(
+    selectedLanguageTag: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var selected by remember(selectedLanguageTag) {
+        mutableStateOf(AppLocaleManager.normalize(selectedLanguageTag))
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_language)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppLocaleManager.supportedLanguages.forEach { language ->
+                    FilterChip(
+                        selected = selected == language.tag,
+                        onClick = { selected = language.tag },
+                        label = { Text(stringResource(language.labelResId)) }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selected) }) {
+                Text(stringResource(R.string.confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable

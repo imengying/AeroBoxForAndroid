@@ -253,6 +253,13 @@
     <string name="settings_theme_dark">Dark</string>
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_system">System</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system">System</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_chinese_simplified">Simplified Chinese</string>
+    <string name="settings_language_chinese_traditional">Traditional Chinese</string>
+    <string name="settings_language_persian">Persian</string>
+    <string name="settings_language_russian">Russian</string>
     <string name="settings_section_dns">DNS</string>
     <string name="settings_dns_server">DNS servers</string>
     <string name="settings_dns_summary">DNS routing</string>
