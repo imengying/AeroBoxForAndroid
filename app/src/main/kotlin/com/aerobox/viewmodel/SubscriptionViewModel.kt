@@ -55,7 +55,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     private val appContext = application.applicationContext
     private val repository = AeroBoxApplication.subscriptionRepository
     private val languageTag = PreferenceManager.languageTagFlow(appContext)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppLocaleManager.SYSTEM_LANGUAGE_TAG)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppLocaleManager.SYSTEM_LANGUAGE_TAG)
 
     val subscriptions = repository.getAllSubscriptions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

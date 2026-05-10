@@ -84,7 +84,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 snackbarHostState.showSnackbar(context.getString(R.string.notification_permission_hint))
             }
         }
-        viewModel.onVpnPermissionGranted(context)
+        viewModel.onVpnPermissionGranted()
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -92,7 +92,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         if (result.resultCode == Activity.RESULT_OK) {
             ensureNotificationPermissionThenStart(
                 context = context,
-                onContinue = { viewModel.onVpnPermissionGranted(context) },
+                onContinue = { viewModel.onVpnPermissionGranted() },
                 onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
             )
         } else {
@@ -133,7 +133,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                                 } else {
                                     ensureNotificationPermissionThenStart(
                                         context = context,
-                                        onContinue = { viewModel.onVpnPermissionGranted(context) },
+                                        onContinue = { viewModel.onVpnPermissionGranted() },
                                         onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
                                     )
                                 }
@@ -209,6 +209,12 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             subscriptions = subscriptions,
             selectedNodeId = selectedNode?.id ?: -1,
             nodeSortOrder = nodeSortOrder,
+            titleText = context.getString(R.string.node_list_title),
+            emptyHintText = context.getString(R.string.node_list_empty_hint),
+            speedTestText = context.getString(R.string.node_list_speed_test),
+            latencyTestingText = context.getString(R.string.latency_testing),
+            latencyFailedText = context.getString(R.string.latency_failed),
+            ungroupedText = context.getString(R.string.group_ungrouped),
             onNodeSelected = { node ->
                 viewModel.selectNode(node)
                 showNodeList = false
@@ -239,7 +245,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 val action = issue.fixAction
                 if (action != null) {
                     TextButton(
-                        onClick = { viewModel.applyConnectionFix(context, action) }
+                        onClick = { viewModel.applyConnectionFix(action) }
                     ) {
                         Text(stringResource(action.labelResId))
                     }

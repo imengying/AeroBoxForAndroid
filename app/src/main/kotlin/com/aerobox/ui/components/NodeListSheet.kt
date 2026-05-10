@@ -57,13 +57,24 @@ fun NodeListSheet(
     subscriptions: List<Subscription> = emptyList(),
     selectedNodeId: Long,
     nodeSortOrder: Map<Long, List<Long>> = emptyMap(),
+    titleText: String? = null,
+    emptyHintText: String? = null,
+    speedTestText: String? = null,
+    latencyTestingText: String? = null,
+    latencyFailedText: String? = null,
+    ungroupedText: String? = null,
     onNodeSelected: (ProxyNode) -> Unit,
     onTestSubscription: (List<ProxyNode>) -> Unit,
     onTestNode: (ProxyNode) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val ungroupedLabel = stringResource(R.string.group_ungrouped)
+    val resolvedTitleText = titleText ?: stringResource(R.string.node_list_title)
+    val resolvedEmptyHintText = emptyHintText ?: stringResource(R.string.node_list_empty_hint)
+    val resolvedSpeedTestText = speedTestText ?: stringResource(R.string.node_list_speed_test)
+    val resolvedLatencyTestingText = latencyTestingText ?: stringResource(R.string.latency_testing)
+    val resolvedLatencyFailedText = latencyFailedText ?: stringResource(R.string.latency_failed)
+    val resolvedUngroupedText = ungroupedText ?: stringResource(R.string.group_ungrouped)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -79,7 +90,7 @@ fun NodeListSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(R.string.node_list_title),
+                        text = resolvedTitleText,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -91,12 +102,12 @@ fun NodeListSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = stringResource(R.string.node_list_empty_hint),
+                        text = resolvedEmptyHintText,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                val grouped = remember(nodes, subscriptions, ungroupedLabel) {
+                val grouped = remember(nodes, subscriptions, resolvedUngroupedText) {
                     val subscriptionOrder = subscriptions.withIndex().associate { it.value.id to it.index }
                     val subscriptionNames = subscriptions.associate { it.id to it.name }
                     nodes
@@ -109,7 +120,7 @@ fun NodeListSheet(
                             }.thenBy { (subId, _) ->
                                 if (subId == 0L || !subscriptionNames.containsKey(subId)) 1 else 0
                             }.thenBy { (subId, _) ->
-                                subscriptionNames[subId] ?: ungroupedLabel
+                                subscriptionNames[subId] ?: resolvedUngroupedText
                             }
                         )
                 }
@@ -152,7 +163,7 @@ fun NodeListSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(R.string.node_list_title),
+                        text = resolvedTitleText,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -163,7 +174,7 @@ fun NodeListSheet(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.node_list_speed_test))
+                        Text(resolvedSpeedTestText)
                     }
                 }
 
@@ -177,7 +188,7 @@ fun NodeListSheet(
                             onClick = { selectedSubscriptionId = subId },
                             label = {
                                 Text(
-                                    text = subscriptionNames[subId] ?: ungroupedLabel,
+                                    text = subscriptionNames[subId] ?: resolvedUngroupedText,
                                     style = MaterialTheme.typography.labelMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -202,7 +213,10 @@ fun NodeListSheet(
                             node = node,
                             isSelected = node.id == selectedNodeId,
                             onClick = { onNodeSelected(node) },
-                            onTestLatency = { onTestNode(node) }
+                            onTestLatency = { onTestNode(node) },
+                            speedTestText = resolvedSpeedTestText,
+                            latencyTestingText = resolvedLatencyTestingText,
+                            latencyFailedText = resolvedLatencyFailedText
                         )
                     }
                 }
@@ -219,7 +233,10 @@ private fun NodeItem(
     node: ProxyNode,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onTestLatency: () -> Unit
+    onTestLatency: () -> Unit,
+    speedTestText: String,
+    latencyTestingText: String,
+    latencyFailedText: String
 ) {
     Card(
         onClick = onClick,
@@ -287,18 +304,27 @@ private fun NodeItem(
             // Clickable latency badge — tap to test this node
             LatencyBadge(
                 latency = node.latency,
-                onClick = onTestLatency
+                onClick = onTestLatency,
+                speedTestText = speedTestText,
+                testingText = latencyTestingText,
+                failedText = latencyFailedText
             )
         }
     }
 }
 
 @Composable
-private fun LatencyBadge(latency: Int, onClick: () -> Unit) {
+private fun LatencyBadge(
+    latency: Int,
+    onClick: () -> Unit,
+    speedTestText: String,
+    testingText: String,
+    failedText: String
+) {
     val (color, text) = when {
-        latency == NodeLatencyState.TESTING -> MaterialTheme.colorScheme.primary to stringResource(R.string.latency_testing)
-        latency == NodeLatencyState.FAILED -> MaterialTheme.colorScheme.error to stringResource(R.string.latency_failed)
-        latency == NodeLatencyState.UNTESTED -> MaterialTheme.colorScheme.outline to stringResource(R.string.node_list_speed_test)
+        latency == NodeLatencyState.TESTING -> MaterialTheme.colorScheme.primary to testingText
+        latency == NodeLatencyState.FAILED -> MaterialTheme.colorScheme.error to failedText
+        latency == NodeLatencyState.UNTESTED -> MaterialTheme.colorScheme.outline to speedTestText
         latency < 100 -> MaterialTheme.colorScheme.primary to "${latency}ms"
         latency < 300 -> MaterialTheme.colorScheme.tertiary to "${latency}ms"
         else -> MaterialTheme.colorScheme.error to "${latency}ms"
