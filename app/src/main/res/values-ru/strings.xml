@@ -114,14 +114,6 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">Не удалось распарсить рабочие узлы; проверьте формат подписки</string>
     <string name="error_no_valid_nodes_hints_format">Не удалось распарсить рабочие узлы. Возможные причины: %1$s</string>
-    <string name="error_config_exception">Ошибка конфигурации</string>
-    <string name="error_unknown_host">Не удалось подключиться к серверу подписки; проверьте сеть или URL</string>
-    <string name="error_socket_timeout">Время ожидания истекло, попробуйте позже</string>
-    <string name="error_ssl">Ошибка проверки TLS/сертификата; проверьте URL подписки</string>
-    <string name="error_http_server_returned_format">Сервер подписки вернул %1$s</string>
-    <string name="error_network_general">Сетевая ошибка, попробуйте позже</string>
-    <string name="error_unknown">Неизвестная ошибка</string>
-    <string name="error_subscription_response_too_large">Ответ подписки превышает лимит 8 МБ</string>
     <string name="warning_insecure_nodes_format">Внимание: у %1$d узлов отключена проверка TLS-сертификата, есть риск MITM-атаки</string>
 
     <!-- Parse diagnostics hints -->

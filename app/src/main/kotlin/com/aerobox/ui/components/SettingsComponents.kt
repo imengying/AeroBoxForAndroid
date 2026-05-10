@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,12 +38,11 @@ fun SectionHeader(title: String) {
 fun SettingItem(
     icon: @Composable () -> Unit,
     title: String,
-    supporting: String,
+    supporting: String? = null,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
     enabled: Boolean = true,
-    modifier: Modifier = Modifier,
-    extraContent: (@Composable () -> Unit)? = null
+    modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(16.dp)
     val colors = CardDefaults.cardColors(
@@ -63,8 +61,7 @@ fun SettingItem(
                 icon = icon,
                 title = title,
                 supporting = supporting,
-                trailing = trailing,
-                extraContent = extraContent
+                trailing = trailing
             )
         }
     } else {
@@ -77,8 +74,7 @@ fun SettingItem(
                 icon = icon,
                 title = title,
                 supporting = supporting,
-                trailing = trailing,
-                extraContent = extraContent
+                trailing = trailing
             )
         }
     }
@@ -88,9 +84,8 @@ fun SettingItem(
 private fun SettingItemContent(
     icon: @Composable () -> Unit,
     title: String,
-    supporting: String,
-    trailing: (@Composable () -> Unit)?,
-    extraContent: (@Composable () -> Unit)?
+    supporting: String?,
+    trailing: (@Composable () -> Unit)?
 ) {
     Row(
         modifier = Modifier
@@ -117,14 +112,12 @@ private fun SettingItemContent(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
-            Text(
-                text = supporting,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (extraContent != null) {
-                Spacer(Modifier.height(8.dp))
-                extraContent()
+            if (!supporting.isNullOrBlank()) {
+                Text(
+                    text = supporting,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         if (trailing != null) {

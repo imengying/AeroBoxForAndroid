@@ -114,14 +114,6 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">No usable nodes parsed; check the subscription format</string>
     <string name="error_no_valid_nodes_hints_format">No usable nodes parsed. Possible reasons: %1$s</string>
-    <string name="error_config_exception">Configuration error</string>
-    <string name="error_unknown_host">Unable to reach the subscription server; check the network or URL</string>
-    <string name="error_socket_timeout">Connection timed out, please try again</string>
-    <string name="error_ssl">TLS/certificate validation failed; check the subscription URL</string>
-    <string name="error_http_server_returned_format">Subscription server returned %1$s</string>
-    <string name="error_network_general">Network error, please try again</string>
-    <string name="error_unknown">Unknown error</string>
-    <string name="error_subscription_response_too_large">Subscription response too large; exceeds the 8 MB limit</string>
     <string name="warning_insecure_nodes_format">Warning: %1$d nodes have TLS verification disabled, exposing them to MITM attacks</string>
 
     <!-- Parse diagnostics hints -->

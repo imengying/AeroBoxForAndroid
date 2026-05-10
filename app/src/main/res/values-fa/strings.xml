@@ -114,14 +114,6 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">گره معتبری استخراج نشد؛ قالب اشتراک را بررسی کنید</string>
     <string name="error_no_valid_nodes_hints_format">گره معتبری استخراج نشد. دلایل احتمالی: %1$s</string>
-    <string name="error_config_exception">خطای پیکربندی</string>
-    <string name="error_unknown_host">سرور اشتراک در دسترس نیست؛ شبکه یا آدرس را بررسی کنید</string>
-    <string name="error_socket_timeout">زمان اتصال به پایان رسید، دوباره تلاش کنید</string>
-    <string name="error_ssl">اعتبارسنجی TLS/گواهی ناموفق بود؛ آدرس اشتراک را بررسی کنید</string>
-    <string name="error_http_server_returned_format">سرور اشتراک پاسخ داد: %1$s</string>
-    <string name="error_network_general">خطای شبکه، دوباره تلاش کنید</string>
-    <string name="error_unknown">خطای ناشناخته</string>
-    <string name="error_subscription_response_too_large">پاسخ اشتراک بسیار بزرگ است؛ از حد ۸ مگابایت تجاوز کرده است</string>
     <string name="warning_insecure_nodes_format">هشدار: ‫%1$d‬ گره اعتبارسنجی گواهی TLS را غیرفعال کرده‌اند و در معرض حمله MITM قرار دارند</string>
 
     <!-- Parse diagnostics hints -->

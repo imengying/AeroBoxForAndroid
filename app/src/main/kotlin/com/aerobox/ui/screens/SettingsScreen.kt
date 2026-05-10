@@ -5,14 +5,12 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -20,12 +18,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import com.aerobox.ui.icons.AppIcons
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarHostState
@@ -58,7 +52,6 @@ import com.aerobox.viewmodel.SettingsViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onNavigateToSubscriptions: () -> Unit = {},
@@ -93,6 +86,7 @@ fun SettingsScreen(
 
     var showDnsDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
     val effectiveLanguageTag = AppLocaleManager.currentLanguageTag(activity, languageTag)
 
     LaunchedEffect(viewModel) {
@@ -178,39 +172,10 @@ fun SettingsScreen(
         }
         item {
             SettingItem(
+                onClick = { showThemeDialog = true },
                 icon = { Icon(AppIcons.DarkMode, contentDescription = null) },
                 title = stringResource(R.string.dark_mode),
-                supporting = stringResource(
-                    when (darkMode) {
-                        "on" -> R.string.settings_theme_dark
-                        "off" -> R.string.settings_theme_light
-                        else -> R.string.settings_theme_system
-                    }
-                ),
-                extraContent = {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        FilterChip(
-                            selected = darkMode == "system",
-                            onClick = { scope.launch { viewModel.setDarkMode("system") } },
-                            label = { Text(stringResource(R.string.settings_theme_system)) }
-                        )
-                        FilterChip(
-                            selected = darkMode == "on",
-                            onClick = { scope.launch { viewModel.setDarkMode("on") } },
-                            label = { Text(stringResource(R.string.settings_theme_dark)) }
-                        )
-                        FilterChip(
-                            selected = darkMode == "off",
-                            onClick = { scope.launch { viewModel.setDarkMode("off") } },
-                            label = { Text(stringResource(R.string.settings_theme_light)) }
-                        )
-                    }
-                },
-                trailing = null
+                trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
             )
         }
         item {
@@ -394,6 +359,62 @@ fun SettingsScreen(
         )
     }
 
+    if (showThemeDialog) {
+        ThemeSettingsDialog(
+            selectedMode = darkMode,
+            onDismiss = { showThemeDialog = false },
+            onConfirm = { selectedMode ->
+                scope.launch {
+                    viewModel.setDarkMode(selectedMode)
+                    showThemeDialog = false
+                }
+            }
+        )
+    }
+
+}
+
+@Composable
+private fun ThemeSettingsDialog(
+    selectedMode: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var selected by remember(selectedMode) { mutableStateOf(selectedMode) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dark_mode)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = selected == "system",
+                    onClick = { selected = "system" },
+                    label = { Text(stringResource(R.string.settings_theme_system)) }
+                )
+                FilterChip(
+                    selected = selected == "on",
+                    onClick = { selected = "on" },
+                    label = { Text(stringResource(R.string.settings_theme_dark)) }
+                )
+                FilterChip(
+                    selected = selected == "off",
+                    onClick = { selected = "off" },
+                    label = { Text(stringResource(R.string.settings_theme_light)) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selected) }) {
+                Text(stringResource(R.string.confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable

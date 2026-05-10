@@ -114,14 +114,6 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">未解析到可用節點，請檢查訂閱格式</string>
     <string name="error_no_valid_nodes_hints_format">未解析到可用節點。可能原因：%1$s</string>
-    <string name="error_config_exception">設定異常</string>
-    <string name="error_unknown_host">無法連線訂閱伺服器，請檢查網路或連結</string>
-    <string name="error_socket_timeout">連線逾時，請稍後重試</string>
-    <string name="error_ssl">TLS/憑證校驗失敗，請檢查訂閱連結</string>
-    <string name="error_http_server_returned_format">訂閱伺服器回傳 %1$s</string>
-    <string name="error_network_general">網路異常，請稍後重試</string>
-    <string name="error_unknown">未知錯誤</string>
-    <string name="error_subscription_response_too_large">訂閱回應過大，超過 8 MB 上限</string>
     <string name="warning_insecure_nodes_format">注意：%1$d 個節點停用了 TLS 憑證校驗，存在中間人攻擊風險</string>
 
     <!-- Parse diagnostics hints -->

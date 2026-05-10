@@ -33,8 +33,6 @@ android {
         // languages outside this list will fall back to English rather than
         // Simplified Chinese.
         resourceConfigurations += listOf("en", "zh-rCN", "zh-rTW", "fa", "ru")
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
