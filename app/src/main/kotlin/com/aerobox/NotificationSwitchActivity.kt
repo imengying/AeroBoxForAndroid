@@ -1,7 +1,6 @@
 package com.aerobox
 
 import android.os.Bundle
-import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,6 +27,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,60 +53,59 @@ import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.runBlocking
 
 class NotificationSwitchActivity : ComponentActivity() {
     private val uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
     private val pendingNodeId = MutableStateFlow<Long?>(null)
-
-    override fun attachBaseContext(newBase: Context) {
-        val languageTag = runBlocking {
-            PreferenceManager.languageTagFlow(newBase).first()
-        }
-        super.attachBaseContext(AppLocaleManager.wrapContext(newBase, languageTag))
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
-            val darkMode by PreferenceManager.darkModeFlow(this)
+            val context = LocalContext.current
+            val darkMode by PreferenceManager.darkModeFlow(context)
                 .collectAsStateWithLifecycle(initialValue = "system")
-            val dynamicColor by PreferenceManager.dynamicColorFlow(this)
+            val dynamicColor by PreferenceManager.dynamicColorFlow(context)
                 .collectAsStateWithLifecycle(initialValue = true)
+            val languageTag by PreferenceManager.languageTagFlow(context)
+                .collectAsStateWithLifecycle(initialValue = "")
+            val localizedContext = remember(context, languageTag) {
+                AppLocaleManager.localizedContext(context, languageTag)
+            }
 
-            SingBoxVPNTheme(
-                darkTheme = when (darkMode) {
-                    "on" -> true
-                    "off" -> false
-                    else -> androidx.compose.foundation.isSystemInDarkTheme()
-                },
-                dynamicColor = dynamicColor
-            ) {
-                val snackbarHostState = remember { SnackbarHostState() }
-                val pendingNodeIdState by pendingNodeId.collectAsStateWithLifecycle()
-                LaunchedEffect(Unit) {
-                    uiMessage.collectLatest { message ->
-                        snackbarHostState.showSnackbar(message)
-                    }
-                }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    NotificationSwitchDialog(
-                        pendingNodeId = pendingNodeIdState,
-                        onDismiss = { finish() },
-                        onNodeSelected = { node ->
-                            switchToNode(node)
+            CompositionLocalProvider(LocalContext provides localizedContext) {
+                SingBoxVPNTheme(
+                    darkTheme = when (darkMode) {
+                        "on" -> true
+                        "off" -> false
+                        else -> androidx.compose.foundation.isSystemInDarkTheme()
+                    },
+                    dynamicColor = dynamicColor
+                ) {
+                    val snackbarHostState = remember { SnackbarHostState() }
+                    val pendingNodeIdState by pendingNodeId.collectAsStateWithLifecycle()
+                    LaunchedEffect(Unit) {
+                        uiMessage.collectLatest { message ->
+                            snackbarHostState.showSnackbar(message)
                         }
-                    )
-                    AppSnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                    }
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        NotificationSwitchDialog(
+                            pendingNodeId = pendingNodeIdState,
+                            onDismiss = { finish() },
+                            onNodeSelected = { node ->
+                                switchToNode(node)
+                            }
+                        )
+                        AppSnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    }
                 }
             }
         }

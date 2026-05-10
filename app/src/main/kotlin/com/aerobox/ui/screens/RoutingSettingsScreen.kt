@@ -27,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,6 +38,7 @@ import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.SectionHeader
 import com.aerobox.ui.components.SettingItem
 import com.aerobox.ui.icons.AppIcons
+import com.aerobox.utils.findComponentActivity
 import com.aerobox.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
 
@@ -45,7 +47,9 @@ import kotlinx.coroutines.launch
 fun RoutingSettingsScreen(
     onNavigateBack: () -> Unit,
     viewModel: SettingsViewModel = viewModel(
-        viewModelStoreOwner = LocalContext.current as androidx.activity.ComponentActivity
+        viewModelStoreOwner = requireNotNull(LocalView.current.context.findComponentActivity()) {
+            "RoutingSettingsScreen requires a ComponentActivity"
+        }
     )
 ) {
     val enableGeoRules by viewModel.enableGeoRules.collectAsStateWithLifecycle()

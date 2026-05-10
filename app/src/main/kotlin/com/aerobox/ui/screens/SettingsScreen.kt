@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,6 +50,7 @@ import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.SectionHeader
 import com.aerobox.ui.components.SettingItem
 import com.aerobox.utils.AppLocaleManager
+import com.aerobox.utils.findComponentActivity
 import com.aerobox.viewmodel.SettingsViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -62,11 +64,15 @@ fun SettingsScreen(
     onNavigateToLog: () -> Unit = {},
     onNavigateToLicense: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(
-        viewModelStoreOwner = LocalContext.current as androidx.activity.ComponentActivity
+        viewModelStoreOwner = requireNotNull(LocalView.current.context.findComponentActivity()) {
+            "SettingsScreen requires a ComponentActivity"
+        }
     )
 ) {
     val context = LocalContext.current
-    val activity = context as androidx.activity.ComponentActivity
+    val activity = requireNotNull(LocalView.current.context.findComponentActivity()) {
+        "SettingsScreen requires a ComponentActivity"
+    }
     val darkMode by viewModel.darkMode.collectAsStateWithLifecycle()
     val languageTag by viewModel.languageTag.collectAsStateWithLifecycle()
     val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
@@ -84,7 +90,7 @@ fun SettingsScreen(
 
     var showDnsDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
-    val effectiveLanguageTag = AppLocaleManager.currentLanguageTag(context, languageTag)
+    val effectiveLanguageTag = AppLocaleManager.currentLanguageTag(activity, languageTag)
 
     LaunchedEffect(viewModel) {
         viewModel.uiMessage.collectLatest { message ->
@@ -367,7 +373,7 @@ fun SettingsScreen(
                 scope.launch {
                     val normalized = AppLocaleManager.normalize(selectedTag)
                     viewModel.setLanguageTag(normalized)
-                    AppLocaleManager.apply(context, normalized)
+                    AppLocaleManager.apply(activity, normalized)
                     showLanguageDialog = false
                     activity.recreate()
                 }

@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -55,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.viewmodel.SettingsViewModel
 import com.aerobox.data.model.InstalledAppInfo
 import com.aerobox.R
+import com.aerobox.utils.findComponentActivity
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import kotlinx.coroutines.launch
 
@@ -93,7 +95,9 @@ private fun buildHighlightedText(
 fun PerAppProxyScreen(
     onNavigateBack: () -> Unit,
     viewModel: SettingsViewModel = viewModel(
-        viewModelStoreOwner = LocalContext.current as androidx.activity.ComponentActivity
+        viewModelStoreOwner = requireNotNull(LocalView.current.context.findComponentActivity()) {
+            "PerAppProxyScreen requires a ComponentActivity"
+        }
     )
 ) {
     val context = LocalContext.current

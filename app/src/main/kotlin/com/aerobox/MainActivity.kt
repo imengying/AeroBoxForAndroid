@@ -1,7 +1,6 @@
 package com.aerobox
 
 import android.Manifest
-import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -29,14 +29,12 @@ import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.navigation.AppNavigation
 import com.aerobox.ui.theme.SingBoxVPNTheme
-import com.aerobox.utils.needsNotificationPermission
 import com.aerobox.utils.AppLocaleManager
+import com.aerobox.utils.needsNotificationPermission
 import com.aerobox.utils.PreferenceManager
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -47,13 +45,6 @@ class MainActivity : ComponentActivity() {
 
     private val uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
     private val pendingExternalImport = MutableStateFlow<ExternalImportRequest?>(null)
-
-    override fun attachBaseContext(newBase: Context) {
-        val languageTag = runBlocking {
-            PreferenceManager.languageTagFlow(newBase).first()
-        }
-        super.attachBaseContext(AppLocaleManager.wrapContext(newBase, languageTag))
-    }
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -83,6 +74,11 @@ class MainActivity : ComponentActivity() {
                 .collectAsStateWithLifecycle(initialValue = "system")
             val dynamicColor by PreferenceManager.dynamicColorFlow(context)
                 .collectAsStateWithLifecycle(initialValue = true)
+            val languageTag by PreferenceManager.languageTagFlow(context)
+                .collectAsStateWithLifecycle(initialValue = "")
+            val localizedContext = remember(context, languageTag) {
+                AppLocaleManager.localizedContext(context, languageTag)
+            }
 
             val useDarkTheme = when (darkMode) {
                 "on" -> true
@@ -90,31 +86,33 @@ class MainActivity : ComponentActivity() {
                 else -> isSystemInDarkTheme()
             }
 
-            SingBoxVPNTheme(
-                darkTheme = useDarkTheme,
-                dynamicColor = dynamicColor
-            ) {
-                val snackbarHostState = remember { SnackbarHostState() }
-                val importRequest by pendingExternalImport.collectAsStateWithLifecycle()
-                LaunchedEffect(Unit) {
-                    uiMessage.collectLatest { message ->
-                        snackbarHostState.showSnackbar(message)
-                    }
-                }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    AppNavigation(
-                        pendingExternalImport = importRequest,
-                        onExternalImportHandled = { requestId ->
-                            val current = pendingExternalImport.value
-                            if (current?.id == requestId) {
-                                pendingExternalImport.value = null
-                            }
+            CompositionLocalProvider(LocalContext provides localizedContext) {
+                SingBoxVPNTheme(
+                    darkTheme = useDarkTheme,
+                    dynamicColor = dynamicColor
+                ) {
+                    val snackbarHostState = remember { SnackbarHostState() }
+                    val importRequest by pendingExternalImport.collectAsStateWithLifecycle()
+                    LaunchedEffect(Unit) {
+                        uiMessage.collectLatest { message ->
+                            snackbarHostState.showSnackbar(message)
                         }
-                    )
-                    AppSnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                    }
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AppNavigation(
+                            pendingExternalImport = importRequest,
+                            onExternalImportHandled = { requestId ->
+                                val current = pendingExternalImport.value
+                                if (current?.id == requestId) {
+                                    pendingExternalImport.value = null
+                                }
+                            }
+                        )
+                        AppSnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    }
                 }
             }
         }
