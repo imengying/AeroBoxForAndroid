@@ -103,34 +103,29 @@ object ConnectionDiagnostics {
     }
 
     /**
-     * Compose a snackbar-style failure message: a localized prefix (typically
-     * "Operation failed") plus the localized issue title.
-     *
-     * Callers in the View layer have a Context handy and can resolve the
-     * string ID; this helper is a thin convenience around that.
+     * Compose a snackbar-style failure message. Prefer the un-translated raw
+     * core error because it is more useful for diagnostics and should not vary
+     * with the device/app language.
      */
     fun userFacingFailureMessage(
         result: VpnConnectionResult,
-        operationFailedText: String,
-        resolveTitle: (Int) -> String
+        operationFailedText: String
     ): String {
         val issue = issueFromResult(result) ?: return operationFailedText
-        return "$operationFailedText: ${resolveTitle(issue.titleResId)}"
+        return issue.rawError.takeIf { it.isNotBlank() } ?: operationFailedText
     }
 
     /**
-     * Build a developer-facing log line. Uses the resolver to pull a localized
-     * title (so log entries stay in sync with whatever the user is seeing on
-     * screen) followed by the un-translated raw error.
+     * Build a developer-facing log line using the raw core error. Logs should
+     * stay language-neutral so they are easy to search and compare.
      */
     fun logFailureMessage(
         result: VpnConnectionResult,
-        fallback: String,
-        resolveTitle: (Int) -> String
+        fallback: String
     ): String {
         val issue = issueFromResult(result)
         return when {
-            issue != null -> "${resolveTitle(issue.titleResId)}: ${issue.rawError}"
+            issue?.rawError?.isNotBlank() == true -> issue.rawError
             result is VpnConnectionResult.Failure -> result.throwable.message ?: fallback
             else -> fallback
         }

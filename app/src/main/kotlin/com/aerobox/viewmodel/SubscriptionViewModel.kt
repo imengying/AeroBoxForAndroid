@@ -29,9 +29,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.IOException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
-import javax.net.ssl.SSLException
 
 // Content that was successfully parsed but is waiting for the user to choose a
 // target local group. The UI observes this and shows GroupPickerDialog.
@@ -52,6 +49,11 @@ data class PendingSubscriptionLink(
 )
 
 class SubscriptionViewModel(application: Application) : AndroidViewModel(application) {
+    private companion object {
+        const val DEFAULT_CONFIG_ERROR = "Configuration error"
+        const val DEFAULT_UNKNOWN_ERROR = "Unknown error"
+    }
+
     private val appContext = application.applicationContext
     private val repository = AeroBoxApplication.subscriptionRepository
     private val languageTag = PreferenceManager.languageTagFlow(appContext)
@@ -484,7 +486,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     SubscriptionRepository.INVALID_SUBSCRIPTION_URL_ERROR ->
                         appString(R.string.subscription_link_invalid)
                     else -> error.message?.takeIf { it.isNotBlank() }
-                        ?: appString(R.string.error_config_exception)
+                        ?: DEFAULT_CONFIG_ERROR
                 }
             is IllegalStateException ->
                 when (error.message) {
@@ -493,24 +495,20 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     SubscriptionRepository.LOCAL_GROUP_TARGET_INVALID_ERROR ->
                         appString(R.string.import_fail_local_group_target)
                     else -> error.message?.takeIf { it.isNotBlank() }
-                        ?: appString(R.string.error_config_exception)
+                        ?: DEFAULT_CONFIG_ERROR
                 }
-            is UnknownHostException -> appString(R.string.error_unknown_host)
-            is SocketTimeoutException -> appString(R.string.error_socket_timeout)
-            is SSLException -> appString(R.string.error_ssl)
             is IOException -> {
                 val text = error.message.orEmpty()
                 when {
                     text == SubscriptionRepository.SUBSCRIPTION_RESPONSE_TOO_LARGE_ERROR ->
-                        appString(R.string.error_subscription_response_too_large)
-                    text.startsWith("HTTP ") ->
-                        appString(R.string.error_http_server_returned_format, text)
+                        "Subscription response too large; exceeds the 8 MB limit"
                     text.isNotBlank() -> text
-                    else -> appString(R.string.error_network_general)
+                    else -> error.toString()
                 }
             }
             else -> error.message?.takeIf { it.isNotBlank() }
-                ?: appString(R.string.error_unknown)
+                ?: error.toString().takeIf { it.isNotBlank() }
+                ?: DEFAULT_UNKNOWN_ERROR
         }
     }
 

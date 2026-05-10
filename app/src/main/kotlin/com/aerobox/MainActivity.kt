@@ -172,8 +172,7 @@ class MainActivity : ComponentActivity() {
                     uiMessage.tryEmit(
                         ConnectionDiagnostics.userFacingFailureMessage(
                             result = result,
-                            operationFailedText = getString(R.string.operation_failed),
-                            resolveTitle = ::getString
+                            operationFailedText = getString(R.string.operation_failed)
                         )
                     )
                 }

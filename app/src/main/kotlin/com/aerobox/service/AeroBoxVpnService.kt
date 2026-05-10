@@ -23,6 +23,7 @@ import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.repository.VpnConfigResolver
+import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.NetworkUtils
 import com.aerobox.utils.PreferenceManager
 import io.nekohasekai.libbox.CommandServer
@@ -36,6 +37,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
@@ -78,8 +80,11 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
     private var vpnInterface: ParcelFileDescriptor? = null
     private var speedTickerJob: Job? = null
+    private var notificationLanguageJob: Job? = null
     private var commandServer: CommandServer? = null
     private var receiverRegistered = false
+    @Volatile
+    private var notificationLanguageTag = AppLocaleManager.SYSTEM_LANGUAGE_TAG
 
     // Guards mutable tunnel state that is accessed from both the serviceScope
     // coroutines and the libbox JNI callback thread (openTun).
@@ -186,6 +191,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startNotificationLanguageObserver()
         when (intent?.action) {
             ACTION_START, ACTION_SWITCH, ACTION_RELOAD -> {
                 val config = intent.getStringExtra(EXTRA_CONFIG)?.takeIf { it.isNotBlank() }
@@ -217,6 +223,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         serviceScope.launch {
             startMutex.withLock {
                 runCatching {
+                    refreshNotificationLanguage()
                     logInfo("Starting sing-box service")
                     startForeground(
                         NOTIFICATION_ID,
@@ -413,7 +420,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             notificationManager.notify(
                 NOTIFICATION_ID,
                 buildNotification(
-                    contentText = getString(R.string.notification_connecting),
+                    contentText = notificationString(R.string.notification_connecting),
                     connected = false
                 )
             )
@@ -702,6 +709,30 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         )
     }
 
+    private fun startNotificationLanguageObserver() {
+        if (notificationLanguageJob?.isActive == true) return
+        notificationLanguageJob = serviceScope.launch {
+            PreferenceManager.languageTagFlow(applicationContext).collect { languageTag ->
+                notificationLanguageTag = AppLocaleManager.normalize(languageTag)
+            }
+        }
+    }
+
+    private suspend fun refreshNotificationLanguage() {
+        notificationLanguageTag = AppLocaleManager.normalize(
+            PreferenceManager.languageTagFlow(applicationContext).first()
+        )
+    }
+
+    private fun notificationString(resId: Int, vararg formatArgs: Any): String {
+        val localizedContext = AppLocaleManager.localizedContext(this, notificationLanguageTag)
+        return if (formatArgs.isEmpty()) {
+            localizedContext.getString(resId)
+        } else {
+            localizedContext.getString(resId, *formatArgs)
+        }
+    }
+
     private fun buildNotification(contentText: String = "", connected: Boolean = false): Notification {
         val displayNode = if (connected) {
             VpnStateManager.vpnState.value.currentNode ?: cachedConnectedNode
@@ -711,11 +742,11 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         val title = displayNode
             ?.name
             ?.takeIf { it.isNotBlank() }
-            ?: getString(R.string.notification_title)
+            ?: notificationString(R.string.notification_title)
         val mergedContent = when {
             connected && contentText.isNotBlank() -> contentText
             connected -> "↑ 0 B/s  ↓ 0 B/s"
-            contentText.isBlank() -> getString(R.string.notification_connecting)
+            contentText.isBlank() -> notificationString(R.string.notification_connecting)
             else -> contentText
         }
 
@@ -733,18 +764,18 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             builder
                 .addAction(
                     android.R.drawable.ic_menu_rotate,
-                    getString(R.string.notification_action_switch),
+                    notificationString(R.string.notification_action_switch),
                     switchPendingIntent
                 )
                 .addAction(
                     android.R.drawable.ic_media_pause,
-                    getString(R.string.notification_action_stop),
+                    notificationString(R.string.notification_action_stop),
                     stopPendingIntent
                 )
         } else {
             builder.addAction(
                 android.R.drawable.ic_media_pause,
-                getString(R.string.notification_action_stop),
+                notificationString(R.string.notification_action_stop),
                 stopPendingIntent
             )
         }
