@@ -372,10 +372,11 @@ fun SettingsScreen(
             onConfirm = { selectedTag ->
                 scope.launch {
                     val normalized = AppLocaleManager.normalize(selectedTag)
-                    viewModel.setLanguageTag(normalized)
-                    AppLocaleManager.apply(activity, normalized)
+                    val applied = AppLocaleManager.apply(activity, normalized)
+                    viewModel.setLanguageTag(
+                        if (applied) normalized else AppLocaleManager.SYSTEM_LANGUAGE_TAG
+                    )
                     showLanguageDialog = false
-                    activity.recreate()
                 }
             }
         )

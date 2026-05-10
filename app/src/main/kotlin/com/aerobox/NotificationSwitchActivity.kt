@@ -27,7 +27,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,7 +48,6 @@ import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.theme.SingBoxVPNTheme
-import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -66,46 +63,38 @@ class NotificationSwitchActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
-            val context = LocalContext.current
-            val darkMode by PreferenceManager.darkModeFlow(context)
+            val darkMode by PreferenceManager.darkModeFlow(this)
                 .collectAsStateWithLifecycle(initialValue = "system")
-            val dynamicColor by PreferenceManager.dynamicColorFlow(context)
+            val dynamicColor by PreferenceManager.dynamicColorFlow(this)
                 .collectAsStateWithLifecycle(initialValue = true)
-            val languageTag by PreferenceManager.languageTagFlow(context)
-                .collectAsStateWithLifecycle(initialValue = "")
-            val localizedContext = remember(context, languageTag) {
-                AppLocaleManager.localizedContext(context, languageTag)
-            }
 
-            CompositionLocalProvider(LocalContext provides localizedContext) {
-                SingBoxVPNTheme(
-                    darkTheme = when (darkMode) {
-                        "on" -> true
-                        "off" -> false
-                        else -> androidx.compose.foundation.isSystemInDarkTheme()
-                    },
-                    dynamicColor = dynamicColor
-                ) {
-                    val snackbarHostState = remember { SnackbarHostState() }
-                    val pendingNodeIdState by pendingNodeId.collectAsStateWithLifecycle()
-                    LaunchedEffect(Unit) {
-                        uiMessage.collectLatest { message ->
-                            snackbarHostState.showSnackbar(message)
+            SingBoxVPNTheme(
+                darkTheme = when (darkMode) {
+                    "on" -> true
+                    "off" -> false
+                    else -> androidx.compose.foundation.isSystemInDarkTheme()
+                },
+                dynamicColor = dynamicColor
+            ) {
+                val snackbarHostState = remember { SnackbarHostState() }
+                val pendingNodeIdState by pendingNodeId.collectAsStateWithLifecycle()
+                LaunchedEffect(Unit) {
+                    uiMessage.collectLatest { message ->
+                        snackbarHostState.showSnackbar(message)
+                    }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    NotificationSwitchDialog(
+                        pendingNodeId = pendingNodeIdState,
+                        onDismiss = { finish() },
+                        onNodeSelected = { node ->
+                            switchToNode(node)
                         }
-                    }
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        NotificationSwitchDialog(
-                            pendingNodeId = pendingNodeIdState,
-                            onDismiss = { finish() },
-                            onNodeSelected = { node ->
-                                switchToNode(node)
-                            }
-                        )
-                        AppSnackbarHost(
-                            hostState = snackbarHostState,
-                            modifier = Modifier.align(Alignment.BottomCenter)
-                        )
-                    }
+                    )
+                    AppSnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
                 }
             }
         }

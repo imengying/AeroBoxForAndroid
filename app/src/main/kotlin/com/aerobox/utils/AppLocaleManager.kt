@@ -1,7 +1,6 @@
 package com.aerobox.utils
 
 import android.content.Context
-import android.content.res.Configuration
 import android.os.Build
 import android.os.LocaleList
 
@@ -24,29 +23,21 @@ object AppLocaleManager {
             ?: SYSTEM_LANGUAGE_TAG
     }
 
-    fun localizedContext(base: Context, languageTag: String): Context {
-        val normalized = normalize(languageTag)
-        if (normalized.isBlank()) return base
-
-        val configuration = Configuration(base.resources.configuration)
-        configuration.setLocales(LocaleList.forLanguageTags(normalized))
-        return base.createConfigurationContext(configuration)
-    }
-
-    fun apply(context: Context, languageTag: String) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    fun apply(context: Context, languageTag: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
         val normalized = normalize(languageTag)
         val locales = if (normalized.isBlank()) {
             LocaleList.getEmptyLocaleList()
         } else {
             LocaleList.forLanguageTags(normalized)
         }
-        runCatching {
-            val localeManager = context.getSystemService(LOCALE_SERVICE_NAME) ?: return@runCatching
+        return runCatching {
+            val localeManager = context.getSystemService(LOCALE_SERVICE_NAME) ?: return false
             localeManager.javaClass
                 .getMethod("setApplicationLocales", LocaleList::class.java)
                 .invoke(localeManager, locales)
-        }
+            true
+        }.getOrDefault(false)
     }
 
     fun currentLanguageTag(context: Context, storedLanguageTag: String): String {
@@ -62,7 +53,11 @@ object AppLocaleManager {
                 return normalize(systemTags.substringBefore(','))
             }
         }
-        return normalize(storedLanguageTag)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            normalize(storedLanguageTag)
+        } else {
+            SYSTEM_LANGUAGE_TAG
+        }
     }
 }
 

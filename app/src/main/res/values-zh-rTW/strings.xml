@@ -255,11 +255,11 @@
     <string name="settings_theme_system">系統</string>
     <string name="settings_language">語言</string>
     <string name="settings_language_system">跟隨系統</string>
-    <string name="settings_language_english">英文</string>
-    <string name="settings_language_chinese_simplified">簡體中文</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_language_chinese_simplified">简体中文</string>
     <string name="settings_language_chinese_traditional">繁體中文</string>
-    <string name="settings_language_persian">波斯文</string>
-    <string name="settings_language_russian">俄文</string>
+    <string name="settings_language_persian">فارسی</string>
+    <string name="settings_language_russian">Русский</string>
     <string name="settings_section_dns">DNS 設定</string>
     <string name="settings_dns_server">DNS 伺服器</string>
     <string name="settings_dns_summary">DNS 分流</string>
