@@ -118,7 +118,7 @@ fun SettingsScreen(
         item {
             SettingItem(
                 onClick = onNavigateToRouting,
-                icon = { Icon(AppIcons.Security, contentDescription = null) },
+                icon = { Icon(AppIcons.Route, contentDescription = null) },
                 title = stringResource(R.string.settings_routing_title),
                 supporting = stringResource(
                     R.string.settings_routing_summary_format,
@@ -132,7 +132,7 @@ fun SettingsScreen(
         item { SectionHeader(title = stringResource(R.string.settings_section_per_app)) }
         item {
             SettingItem(
-                icon = { Icon(AppIcons.Speed, contentDescription = null) },
+                icon = { Icon(AppIcons.Apps, contentDescription = null) },
                 title = stringResource(R.string.settings_per_app_enable),
                 supporting = stringResource(
                     if (perAppProxyEnabled) R.string.settings_per_app_enabled
@@ -150,7 +150,7 @@ fun SettingsScreen(
             item {
                 SettingItem(
                     onClick = onNavigateToPerAppProxy,
-                    icon = { Icon(AppIcons.Speed, contentDescription = null) },
+                    icon = { Icon(AppIcons.Apps, contentDescription = null) },
                     title = stringResource(R.string.settings_per_app_config_title),
                     supporting = stringResource(R.string.settings_per_app_config_summary),
                     trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
@@ -226,7 +226,7 @@ fun SettingsScreen(
                 ?: R.string.settings_language_system
             SettingItem(
                 onClick = { showLanguageDialog = true },
-                icon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                icon = { Icon(AppIcons.Translate, contentDescription = null) },
                 title = stringResource(R.string.settings_language),
                 supporting = stringResource(currentLanguageLabel),
                 trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
@@ -238,7 +238,7 @@ fun SettingsScreen(
         item {
             SettingItem(
                 onClick = { showDnsDialog = true },
-                icon = { Icon(AppIcons.Security, contentDescription = null) },
+                icon = { Icon(AppIcons.Dns, contentDescription = null) },
                 title = stringResource(R.string.settings_dns_server),
                 supporting = stringResource(R.string.settings_dns_summary),
                 trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
@@ -249,7 +249,7 @@ fun SettingsScreen(
         item { SectionHeader(title = stringResource(R.string.settings_section_inbound)) }
         item {
             SettingItem(
-                icon = { Icon(AppIcons.Speed, contentDescription = null) },
+                icon = { Icon(AppIcons.Input, contentDescription = null) },
                 title = stringResource(R.string.settings_inbound_socks5),
                 supporting = stringResource(R.string.settings_inbound_port_format, 2080),
                 trailing = {
@@ -262,7 +262,7 @@ fun SettingsScreen(
         }
         item {
             SettingItem(
-                icon = { Icon(AppIcons.Speed, contentDescription = null) },
+                icon = { Icon(AppIcons.Input, contentDescription = null) },
                 title = stringResource(R.string.settings_inbound_http),
                 supporting = stringResource(R.string.settings_inbound_port_format, 2081),
                 trailing = {
@@ -288,7 +288,7 @@ fun SettingsScreen(
         }
         item {
             SettingItem(
-                icon = { Icon(AppIcons.Speed, contentDescription = null) },
+                icon = { Icon(AppIcons.Public, contentDescription = null) },
                 title = stringResource(R.string.enable_ipv6),
                 supporting = stringResource(R.string.settings_ipv6_summary),
                 trailing = {
@@ -305,7 +305,7 @@ fun SettingsScreen(
         }
         item {
             SettingItem(
-                icon = { Icon(AppIcons.Power, contentDescription = null) },
+                icon = { Icon(AppIcons.Autorenew, contentDescription = null) },
                 title = stringResource(R.string.settings_auto_reconnect),
                 supporting = stringResource(R.string.settings_auto_reconnect_summary),
                 trailing = {
@@ -319,7 +319,7 @@ fun SettingsScreen(
         item {
             SettingItem(
                 onClick = onNavigateToLog,
-                icon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                icon = { Icon(AppIcons.Description, contentDescription = null) },
                 title = stringResource(R.string.settings_log),
                 supporting = stringResource(R.string.settings_log_summary),
                 trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
@@ -344,7 +344,7 @@ fun SettingsScreen(
             item {
                 SettingItem(
                     onClick = onNavigateToLicense,
-                    icon = { Icon(AppIcons.Security, contentDescription = null) },
+                    icon = { Icon(AppIcons.Description, contentDescription = null) },
                     title = stringResource(R.string.open_source_licenses),
                     supporting = stringResource(R.string.settings_about_supporting),
                     trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
