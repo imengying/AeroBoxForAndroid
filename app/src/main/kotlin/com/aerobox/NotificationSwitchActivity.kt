@@ -47,6 +47,7 @@ import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.ui.components.AppSnackbarHost
+import com.aerobox.ui.components.ProvideAppLocale
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.launch
@@ -83,18 +84,20 @@ class NotificationSwitchActivity : ComponentActivity() {
                         snackbarHostState.showSnackbar(message)
                     }
                 }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    NotificationSwitchDialog(
-                        pendingNodeId = pendingNodeIdState,
-                        onDismiss = { finish() },
-                        onNodeSelected = { node ->
-                            switchToNode(node)
-                        }
-                    )
-                    AppSnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                ProvideAppLocale {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        NotificationSwitchDialog(
+                            pendingNodeId = pendingNodeIdState,
+                            onDismiss = { finish() },
+                            onNodeSelected = { node ->
+                                switchToNode(node)
+                            }
+                        )
+                        AppSnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    }
                 }
             }
         }

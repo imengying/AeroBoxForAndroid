@@ -1,6 +1,7 @@
 package com.aerobox.utils
 
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Build
 import android.os.LocaleList
 
@@ -31,13 +32,23 @@ object AppLocaleManager {
         } else {
             LocaleList.forLanguageTags(normalized)
         }
+        val localeManager = context.getSystemService(LOCALE_SERVICE_NAME) ?: return false
         return runCatching {
-            val localeManager = context.getSystemService(LOCALE_SERVICE_NAME) ?: return false
             localeManager.javaClass
                 .getMethod("setApplicationLocales", LocaleList::class.java)
                 .invoke(localeManager, locales)
             true
         }.getOrDefault(false)
+    }
+
+    fun localizedContext(base: Context, languageTag: String): Context {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return base
+        val normalized = normalize(languageTag)
+        if (normalized.isBlank()) return base
+
+        val configuration = Configuration(base.resources.configuration)
+        configuration.setLocales(LocaleList.forLanguageTags(normalized))
+        return base.createConfigurationContext(configuration)
     }
 
     fun currentLanguageTag(context: Context, storedLanguageTag: String): String {
@@ -53,11 +64,7 @@ object AppLocaleManager {
                 return normalize(systemTags.substringBefore(','))
             }
         }
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            normalize(storedLanguageTag)
-        } else {
-            SYSTEM_LANGUAGE_TAG
-        }
+        return normalize(storedLanguageTag)
     }
 }
 

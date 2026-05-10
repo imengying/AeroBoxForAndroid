@@ -374,7 +374,11 @@ fun SettingsScreen(
                     val normalized = AppLocaleManager.normalize(selectedTag)
                     val applied = AppLocaleManager.apply(activity, normalized)
                     viewModel.setLanguageTag(
-                        if (applied) normalized else AppLocaleManager.SYSTEM_LANGUAGE_TAG
+                        if (applied || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+                            normalized
+                        } else {
+                            AppLocaleManager.SYSTEM_LANGUAGE_TAG
+                        }
                     )
                     showLanguageDialog = false
                 }

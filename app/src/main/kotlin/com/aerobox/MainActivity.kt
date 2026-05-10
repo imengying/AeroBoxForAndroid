@@ -26,6 +26,7 @@ import com.aerobox.imports.ExternalImportParser
 import com.aerobox.imports.ExternalImportRequest
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.ui.components.AppSnackbarHost
+import com.aerobox.ui.components.ProvideAppLocale
 import com.aerobox.ui.navigation.AppNavigation
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.needsNotificationPermission
@@ -90,20 +91,22 @@ class MainActivity : ComponentActivity() {
                         snackbarHostState.showSnackbar(message)
                     }
                 }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    AppNavigation(
-                        pendingExternalImport = importRequest,
-                        onExternalImportHandled = { requestId ->
-                            val current = pendingExternalImport.value
-                            if (current?.id == requestId) {
-                                pendingExternalImport.value = null
+                ProvideAppLocale {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AppNavigation(
+                            pendingExternalImport = importRequest,
+                            onExternalImportHandled = { requestId ->
+                                val current = pendingExternalImport.value
+                                if (current?.id == requestId) {
+                                    pendingExternalImport.value = null
+                                }
                             }
-                        }
-                    )
-                    AppSnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                        )
+                        AppSnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    }
                 }
             }
         }
