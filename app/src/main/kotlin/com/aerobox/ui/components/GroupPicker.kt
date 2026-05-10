@@ -99,22 +99,29 @@ data class GroupPickerStateHolder(
 fun GroupPickerSection(
     holder: GroupPickerStateHolder,
     localGroups: List<Subscription>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    chooseGroupText: String? = null,
+    ungroupedText: String? = null,
+    newGroupText: String? = null,
+    newGroupNameHint: String? = null,
+    nodeCountSuffix: ((Int) -> String)? = null
 ) {
-    val ungroupedLabel = stringResource(R.string.group_ungrouped)
-    val newGroupLabel = stringResource(R.string.group_new)
+    val resolvedChooseGroupText = chooseGroupText ?: stringResource(R.string.import_choose_group)
+    val resolvedUngroupedText = ungroupedText ?: stringResource(R.string.group_ungrouped)
+    val resolvedNewGroupText = newGroupText ?: stringResource(R.string.group_new)
+    val resolvedNewGroupNameHint = newGroupNameHint ?: stringResource(R.string.group_new_name_hint)
 
     val displayText = when (val opt = holder.state.option) {
-        is GroupPickerOption.Ungrouped -> ungroupedLabel
+        is GroupPickerOption.Ungrouped -> resolvedUngroupedText
         is GroupPickerOption.Existing -> opt.subscription.name
-        is GroupPickerOption.New -> newGroupLabel
+        is GroupPickerOption.New -> resolvedNewGroupText
     }
 
     var expanded by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = stringResource(R.string.import_choose_group),
+            text = resolvedChooseGroupText,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold
         )
@@ -139,43 +146,44 @@ fun GroupPickerSection(
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
             ) {
-                // "未分组"
-                DropdownMenuItem(
-                    text = { Text(ungroupedLabel) },
-                    onClick = {
-                        holder.onOptionChange(GroupPickerOption.Ungrouped)
-                        expanded = false
+                ProvideAppLocale {
+                    DropdownMenuItem(
+                        text = { Text(resolvedUngroupedText) },
+                        onClick = {
+                            holder.onOptionChange(GroupPickerOption.Ungrouped)
+                            expanded = false
+                        }
+                    )
+                    localGroups.forEach { group ->
+                        DropdownMenuItem(
+                            text = {
+                                val suffix = nodeCountSuffix?.invoke(group.nodeCount)
+                                    ?: stringResource(R.string.group_node_count_suffix, group.nodeCount)
+                                Text(
+                                    text = "${group.name}（$suffix）",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            onClick = {
+                                holder.onOptionChange(GroupPickerOption.Existing(group))
+                                expanded = false
+                            }
+                        )
                     }
-                )
-                // Existing local groups
-                localGroups.forEach { group ->
                     DropdownMenuItem(
                         text = {
                             Text(
-                                text = "${group.name}（${stringResource(R.string.group_node_count_suffix, group.nodeCount)}）",
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                text = resolvedNewGroupText,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         },
                         onClick = {
-                            holder.onOptionChange(GroupPickerOption.Existing(group))
+                            holder.onOptionChange(GroupPickerOption.New)
                             expanded = false
                         }
                     )
                 }
-                // "新建分组"
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = newGroupLabel,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    onClick = {
-                        holder.onOptionChange(GroupPickerOption.New)
-                        expanded = false
-                    }
-                )
             }
         }
 
@@ -184,7 +192,7 @@ fun GroupPickerSection(
             OutlinedTextField(
                 value = holder.state.newGroupName,
                 onValueChange = holder.onNewNameChange,
-                label = { Text(stringResource(R.string.group_new_name_hint)) },
+                label = { Text(resolvedNewGroupNameHint) },
                 singleLine = true,
                 isError = holder.state.newGroupName.isBlank(),
                 modifier = Modifier.fillMaxWidth()
@@ -198,51 +206,74 @@ fun GroupPickerDialog(
     nodeCount: Int,
     suggestedName: String,
     localGroups: List<Subscription>,
+    chooseGroupText: String? = null,
+    importNodeCountText: String? = null,
+    confirmText: String? = null,
+    cancelText: String? = null,
+    defaultLocalGroupName: String? = null,
+    ungroupedText: String? = null,
+    newGroupText: String? = null,
+    newGroupNameHint: String? = null,
+    nodeCountSuffix: ((Int) -> String)? = null,
     onConfirm: (ImportGroupTarget) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val resolvedChooseGroupText = chooseGroupText ?: stringResource(R.string.import_choose_group)
+    val resolvedImportNodeCountText = importNodeCountText ?: stringResource(R.string.import_node_count, nodeCount)
+    val resolvedConfirmText = confirmText ?: stringResource(R.string.confirm)
+    val resolvedCancelText = cancelText ?: stringResource(R.string.cancel)
+    val resolvedDefaultLocalGroupName = defaultLocalGroupName ?: stringResource(R.string.local_group_label)
+    val resolvedUngroupedText = ungroupedText ?: stringResource(R.string.group_ungrouped)
+    val resolvedNewGroupText = newGroupText ?: stringResource(R.string.group_new)
+    val resolvedNewGroupNameHint = newGroupNameHint ?: stringResource(R.string.group_new_name_hint)
     val holder = rememberGroupPickerState(
         suggestedName = suggestedName,
         localGroups = localGroups
     )
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.import_choose_group)) },
-        text = {
-            Column {
-                Text(
-                    text = stringResource(R.string.import_node_count, nodeCount),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
-                GroupPickerSection(
-                    holder = holder,
-                    localGroups = localGroups
-                )
-            }
-        },
-        confirmButton = {
-            val defaultLocalGroupName = stringResource(R.string.local_group_label)
-            TextButton(
-                onClick = {
-                    onConfirm(
-                        holder.state.toTarget(
-                            fallbackName = suggestedName,
-                            defaultName = defaultLocalGroupName
-                        )
+    ProvideAppLocale {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(resolvedChooseGroupText) },
+            text = {
+                Column {
+                    Text(
+                        text = resolvedImportNodeCountText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                },
-                enabled = holder.state.isValid
-            ) {
-                Text(stringResource(R.string.confirm))
+                    Spacer(Modifier.height(12.dp))
+                    GroupPickerSection(
+                        holder = holder,
+                        localGroups = localGroups,
+                        chooseGroupText = resolvedChooseGroupText,
+                        ungroupedText = resolvedUngroupedText,
+                        newGroupText = resolvedNewGroupText,
+                        newGroupNameHint = resolvedNewGroupNameHint,
+                        nodeCountSuffix = nodeCountSuffix
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onConfirm(
+                            holder.state.toTarget(
+                                fallbackName = suggestedName,
+                                defaultName = resolvedDefaultLocalGroupName
+                            )
+                        )
+                    },
+                    enabled = holder.state.isValid
+                ) {
+                    Text(resolvedConfirmText)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(resolvedCancelText)
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
-    )
+        )
+    }
 }

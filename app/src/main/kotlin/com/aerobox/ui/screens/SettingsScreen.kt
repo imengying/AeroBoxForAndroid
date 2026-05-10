@@ -49,6 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.ui.components.AppSnackbarHost
+import com.aerobox.ui.components.ProvideAppLocale
 import com.aerobox.ui.components.SectionHeader
 import com.aerobox.ui.components.SettingItem
 import com.aerobox.utils.AppLocaleManager
@@ -405,31 +406,33 @@ private fun LanguageSettingsDialog(
         mutableStateOf(AppLocaleManager.normalize(selectedLanguageTag))
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_language)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppLocaleManager.supportedLanguages.forEach { language ->
-                    FilterChip(
-                        selected = selected == language.tag,
-                        onClick = { selected = language.tag },
-                        label = { Text(stringResource(language.labelResId)) }
-                    )
+    ProvideAppLocale {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.settings_language)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppLocaleManager.supportedLanguages.forEach { language ->
+                        FilterChip(
+                            selected = selected == language.tag,
+                            onClick = { selected = language.tag },
+                            label = { Text(stringResource(language.labelResId)) }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onConfirm(selected) }) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(selected) }) {
-                Text(stringResource(R.string.confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
-    )
+        )
+    }
 }
 
 @Composable
@@ -443,41 +446,43 @@ private fun DnsSettingsDialog(
     var remote by remember { mutableStateOf(remoteDns) }
     var direct by remember { mutableStateOf(directDns) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.dns_dialog_title)) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = remote,
-                    onValueChange = { remote = it },
-                    label = { Text(stringResource(R.string.dns_label_remote)) },
-                    supportingText = { Text(stringResource(R.string.dns_dialog_remote_example)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = direct,
-                    onValueChange = { direct = it },
-                    label = { Text(stringResource(R.string.dns_label_direct)) },
-                    supportingText = { Text(stringResource(R.string.dns_dialog_direct_example)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+    ProvideAppLocale {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.dns_dialog_title)) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = remote,
+                        onValueChange = { remote = it },
+                        label = { Text(stringResource(R.string.dns_label_remote)) },
+                        supportingText = { Text(stringResource(R.string.dns_dialog_remote_example)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = direct,
+                        onValueChange = { direct = it },
+                        label = { Text(stringResource(R.string.dns_label_direct)) },
+                        supportingText = { Text(stringResource(R.string.dns_dialog_direct_example)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { onConfirm(remote.trim(), direct.trim()) },
+                    enabled = remote.isNotBlank() && direct.isNotBlank()
+                ) { Text(stringResource(R.string.confirm)) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = onReset) { Text(stringResource(R.string.dns_dialog_reset)) }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(remote.trim(), direct.trim()) },
-                enabled = remote.isNotBlank() && direct.isNotBlank()
-            ) { Text(stringResource(R.string.confirm)) }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = onReset) { Text(stringResource(R.string.dns_dialog_reset)) }
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-            }
-        }
-    )
+        )
+    }
 }
