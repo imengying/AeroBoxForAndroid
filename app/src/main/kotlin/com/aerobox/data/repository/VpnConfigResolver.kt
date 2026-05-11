@@ -115,6 +115,7 @@ class VpnConfigResolver(private val context: Context) {
             geoIpCnRuleSetPath = geoIpCnRuleSetPath,
             geoSiteCnRuleSetPath = geoSiteCnRuleSetPath,
             geoSiteAdsRuleSetPath = geoSiteAdsRuleSetPath,
+            customRuleSets = prefs.customRuleSets,
             nodeIsIpv6OnlyOverride = nodeIsIpv6Only
         )
         return config

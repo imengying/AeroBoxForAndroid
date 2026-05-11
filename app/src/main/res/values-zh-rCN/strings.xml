@@ -281,6 +281,23 @@
     <string name="routing_cn_domain">中国域名规则</string>
     <string name="routing_cn_ip">中国 IP 规则</string>
     <string name="routing_block_ads">屏蔽广告</string>
+    <string name="routing_section_custom_rules">自定义规则</string>
+    <string name="routing_custom_rule_add">添加自定义规则</string>
+    <string name="routing_custom_rule_edit">编辑自定义规则</string>
+    <string name="routing_custom_rule_summary">远程 sing-box 规则集链接</string>
+    <string name="routing_custom_rule_name">名称</string>
+    <string name="routing_custom_rule_name_empty">规则名称不能为空</string>
+    <string name="routing_custom_rule_url">规则链接</string>
+    <string name="routing_custom_rule_url_hint">支持 http:// 或 https:// 规则集链接</string>
+    <string name="routing_custom_rule_url_invalid">规则链接无效</string>
+    <string name="routing_custom_rule_action">动作</string>
+    <string name="routing_custom_rule_action_direct">直连</string>
+    <string name="routing_custom_rule_action_proxy">代理</string>
+    <string name="routing_custom_rule_action_reject">拒绝</string>
+    <string name="routing_custom_rule_format">格式</string>
+    <string name="routing_custom_rule_format_binary">二进制 (.srs)</string>
+    <string name="routing_custom_rule_format_source">源 JSON</string>
+    <string name="routing_custom_rule_enabled">启用</string>
     <string name="routing_section_resources">资源</string>
     <string name="routing_assets_updated">路由资源更新完成</string>
     <string name="routing_assets_failed_format">%1$s 更新失败，请检查网络</string>
@@ -288,6 +305,7 @@
     <string name="routing_assets_download">下载路由资源</string>
     <string name="routing_assets_summary_format">中国 IP: %1$s · 中国域名: %2$s · 广告: %3$s（官方源）</string>
     <string name="routing_assets_official_only">仅使用官方源 SagerNet</string>
+    <string name="routing_assets_no_enabled_rules">没有已启用的内置规则需要更新</string>
 
     <!-- SubscriptionScreen -->
     <string name="subscription_loading">正在加载订阅…</string>

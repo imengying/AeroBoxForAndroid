@@ -523,4 +523,25 @@ object AppIcons {
             }
         }.build()
     }
+
+    val Add: ImageVector by lazy {
+        ImageVector.Builder("Add", 24.dp, 24.dp, 24f, 24f).apply {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(19f, 13f)
+                horizontalLineToRelative(-6f)
+                verticalLineToRelative(6f)
+                horizontalLineToRelative(-2f)
+                verticalLineToRelative(-6f)
+                horizontalLineTo(5f)
+                verticalLineToRelative(-2f)
+                horizontalLineToRelative(6f)
+                verticalLineTo(5f)
+                horizontalLineToRelative(2f)
+                verticalLineToRelative(6f)
+                horizontalLineToRelative(6f)
+                verticalLineToRelative(2f)
+                close()
+            }
+        }.build()
+    }
 }

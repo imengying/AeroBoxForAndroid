@@ -1,6 +1,7 @@
 package com.aerobox.core.config
 
 import android.content.Context
+import com.aerobox.data.model.CustomRuleSet
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.RoutingMode
@@ -50,12 +51,15 @@ object ConfigGenerator {
         geoIpCnRuleSetPath: String? = null,
         geoSiteCnRuleSetPath: String? = null,
         geoSiteAdsRuleSetPath: String? = null,
+        customRuleSets: List<CustomRuleSet> = emptyList(),
         nodeIsIpv6OnlyOverride: Boolean? = null
     ): String {
         val config = JSONObject()
         val hasGeoSiteCn = !geoSiteCnRuleSetPath.isNullOrBlank()
         val hasGeoIpCn = !geoIpCnRuleSetPath.isNullOrBlank()
         val hasGeoAds = !geoSiteAdsRuleSetPath.isNullOrBlank()
+        val enabledCustomRuleSets = customRuleSets
+            .filter { it.enabled && routingMode == RoutingMode.RULE_BASED }
 
         config.put(
             "log",
@@ -102,10 +106,11 @@ object ConfigGenerator {
                 enableGeoCnDomainRule = enableGeoCnDomainRule && hasGeoSiteCn,
                 enableGeoCnIpRule = enableGeoCnIpRule && hasGeoIpCn,
                 enableGeoAdsBlock = enableGeoAdsBlock && hasGeoAds,
-                enableGeoBlockQuic = enableGeoBlockQuic
+                enableGeoBlockQuic = enableGeoBlockQuic,
+                customRuleSets = enabledCustomRuleSets
             )
         )
-        config.put("experimental", buildExperimental())
+        config.put("experimental", buildExperimental(enableCacheFile = enabledCustomRuleSets.isNotEmpty()))
 
         return config.toString(2)
     }
@@ -201,8 +206,15 @@ object ConfigGenerator {
 
     // ── Private helpers ─────────────────────────────────────────────
 
-    private fun buildExperimental(): JSONObject {
-        return JSONObject().put(
+    private fun buildExperimental(enableCacheFile: Boolean = false): JSONObject {
+        return JSONObject().apply {
+            if (enableCacheFile) {
+                put(
+                    "cache_file",
+                    JSONObject().put("enabled", true)
+                )
+            }
+            put(
             "v2ray_api",
             JSONObject()
                 .put("listen", V2RAY_API_LISTEN)
@@ -212,7 +224,8 @@ object ConfigGenerator {
                         .put("enabled", true)
                         .put("outbounds", JSONArray().put("proxy").put("direct"))
                 )
-        )
+            )
+        }
     }
 
     private fun buildInbounds(

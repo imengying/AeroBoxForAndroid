@@ -1,7 +1,9 @@
 package com.aerobox.core.config
 
+import com.aerobox.data.model.CustomRuleSet
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.RoutingMode
+import com.aerobox.data.model.RuleSetAction
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -23,7 +25,8 @@ internal object RouteConfigBuilder {
         enableGeoCnDomainRule: Boolean = true,
         enableGeoCnIpRule: Boolean = true,
         enableGeoAdsBlock: Boolean = true,
-        enableGeoBlockQuic: Boolean = true
+        enableGeoBlockQuic: Boolean = true,
+        customRuleSets: List<CustomRuleSet> = emptyList()
     ): JSONObject {
         val route = JSONObject()
             .put("auto_detect_interface", true)
@@ -37,6 +40,9 @@ internal object RouteConfigBuilder {
         }
         if (!geoSiteAdsRuleSetPath.isNullOrBlank()) {
             ruleSets.put(buildLocalRuleSet("geosite-category-ads-all", geoSiteAdsRuleSetPath))
+        }
+        customRuleSets.forEach { ruleSet ->
+            ruleSets.put(buildRemoteRuleSet(ruleSet))
         }
         if (ruleSets.length() > 0) {
             route.put("rule_set", ruleSets)
@@ -70,6 +76,10 @@ internal object RouteConfigBuilder {
                             .put("rule_set", JSONArray().put("geosite-category-ads-all"))
                             .put("action", "reject")
                     )
+                }
+
+                customRuleSets.forEach { ruleSet ->
+                    rules.put(buildCustomRule(ruleSet))
                 }
 
                 if (enableGeoCnDomainRule) {
@@ -117,6 +127,33 @@ internal object RouteConfigBuilder {
             .put("type", "local")
             .put("format", "binary")
             .put("path", path)
+    }
+
+    private fun buildRemoteRuleSet(ruleSet: CustomRuleSet): JSONObject {
+        return JSONObject()
+            .put("tag", ruleSet.tag)
+            .put("type", "remote")
+            .put("format", ruleSet.format.configValue)
+            .put("url", ruleSet.url)
+            .put("update_interval", "1d")
+            .put(
+                "http_client",
+                JSONObject().put("detour", ConfigGenerator.PROXY_OUTBOUND_TAG)
+            )
+    }
+
+    private fun buildCustomRule(ruleSet: CustomRuleSet): JSONObject {
+        val rule = JSONObject()
+            .put("rule_set", JSONArray().put(ruleSet.tag))
+        return when (ruleSet.action) {
+            RuleSetAction.DIRECT -> rule
+                .put("action", "route")
+                .put("outbound", "direct")
+            RuleSetAction.PROXY -> rule
+                .put("action", "route")
+                .put("outbound", ConfigGenerator.PROXY_OUTBOUND_TAG)
+            RuleSetAction.REJECT -> rule.put("action", "reject")
+        }
     }
 
     private fun buildBaseRouteRules(nodeIsIpv6Only: Boolean): JSONArray {

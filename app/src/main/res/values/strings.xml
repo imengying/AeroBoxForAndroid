@@ -281,6 +281,23 @@
     <string name="routing_cn_domain">China domain rules</string>
     <string name="routing_cn_ip">China IP rules</string>
     <string name="routing_block_ads">Block ads</string>
+    <string name="routing_section_custom_rules">Custom rules</string>
+    <string name="routing_custom_rule_add">Add custom rule</string>
+    <string name="routing_custom_rule_edit">Edit custom rule</string>
+    <string name="routing_custom_rule_summary">Remote sing-box rule-set URL</string>
+    <string name="routing_custom_rule_name">Name</string>
+    <string name="routing_custom_rule_name_empty">Rule name cannot be empty</string>
+    <string name="routing_custom_rule_url">Rule URL</string>
+    <string name="routing_custom_rule_url_hint">Supports http:// or https:// rule-set links</string>
+    <string name="routing_custom_rule_url_invalid">Rule URL is invalid</string>
+    <string name="routing_custom_rule_action">Action</string>
+    <string name="routing_custom_rule_action_direct">Direct</string>
+    <string name="routing_custom_rule_action_proxy">Proxy</string>
+    <string name="routing_custom_rule_action_reject">Reject</string>
+    <string name="routing_custom_rule_format">Format</string>
+    <string name="routing_custom_rule_format_binary">Binary (.srs)</string>
+    <string name="routing_custom_rule_format_source">Source JSON</string>
+    <string name="routing_custom_rule_enabled">Enabled</string>
     <string name="routing_section_resources">Assets</string>
     <string name="routing_assets_updated">Routing assets updated</string>
     <string name="routing_assets_failed_format">%1$s update failed; check the network</string>
@@ -288,6 +305,7 @@
     <string name="routing_assets_download">Download routing assets</string>
     <string name="routing_assets_summary_format">CN IP: %1$s · CN domains: %2$s · Ads: %3$s (official sources)</string>
     <string name="routing_assets_official_only">Sourced from SagerNet only</string>
+    <string name="routing_assets_no_enabled_rules">No enabled built-in rules to update</string>
 
     <!-- SubscriptionScreen -->
     <string name="subscription_loading">Loading subscriptions…</string>

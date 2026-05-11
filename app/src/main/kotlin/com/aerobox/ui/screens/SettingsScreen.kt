@@ -69,7 +69,6 @@ fun SettingsScreen(
     val activity = requireNotNull(LocalView.current.context.findComponentActivity()) {
         "SettingsScreen requires a ComponentActivity"
     }
-    val darkMode by viewModel.darkMode.collectAsStateWithLifecycle()
     val languageTag by viewModel.languageTag.collectAsStateWithLifecycle()
     val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
     val autoConnect by viewModel.autoConnect.collectAsStateWithLifecycle()
@@ -174,32 +173,17 @@ fun SettingsScreen(
             val themeSystemText = context.getString(R.string.settings_theme_system)
             val themeDarkText = context.getString(R.string.settings_theme_dark)
             val themeLightText = context.getString(R.string.settings_theme_light)
-            val currentLabel = when (darkMode) {
-                "on" -> themeDarkText
-                "off" -> themeLightText
-                else -> themeSystemText
-            }
             SettingItem(
                 onClick = { expanded = true },
                 icon = { Icon(AppIcons.DarkMode, contentDescription = null) },
                 title = stringResource(R.string.dark_mode),
                 trailing = {
                     Box {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = currentLabel,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
-                            )
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         androidx.compose.material3.DropdownMenu(
                             expanded = expanded,
                             onDismissRequest = { expanded = false }
@@ -333,7 +317,7 @@ fun SettingsScreen(
                     activity.startActivity(
                         Intent(
                             Intent.ACTION_VIEW,
-                            Uri.parse("https://github.com/imengying/AeroBoxForAndroid")
+                            Uri.parse("https://github.com/imengying/AeroBoxForAndroid/releases/latest")
                         )
                     )
                 },

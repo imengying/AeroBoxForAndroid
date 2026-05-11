@@ -30,10 +30,12 @@ import com.aerobox.ui.components.ProvideAppLocale
 import com.aerobox.ui.navigation.AppNavigation
 import com.aerobox.ui.theme.SingBoxVPNTheme
 import com.aerobox.utils.needsNotificationPermission
+import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -51,14 +53,18 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == RESULT_OK) {
             ensureNotificationPermissionThenStartVpn()
         } else {
-            uiMessage.tryEmit(getString(R.string.permission_required))
+            lifecycleScope.launch {
+                uiMessage.tryEmit(appString(R.string.permission_required))
+            }
         }
     }
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (!granted) {
-            uiMessage.tryEmit(getString(R.string.notification_permission_hint))
+            lifecycleScope.launch {
+                uiMessage.tryEmit(appString(R.string.notification_permission_hint))
+            }
         }
         startVpnFromIntent()
     }
@@ -163,7 +169,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             when (val result = AeroBoxApplication.vpnRepository.connectSelectedNode()) {
                 VpnConnectionResult.NoNodeAvailable -> {
-                    uiMessage.tryEmit(getString(R.string.add_node_first))
+                    uiMessage.tryEmit(appString(R.string.add_node_first))
                 }
 
                 is VpnConnectionResult.Success -> Unit
@@ -172,11 +178,21 @@ class MainActivity : ComponentActivity() {
                     uiMessage.tryEmit(
                         ConnectionDiagnostics.userFacingFailureMessage(
                             result = result,
-                            operationFailedText = getString(R.string.operation_failed)
+                            operationFailedText = appString(R.string.operation_failed)
                         )
                     )
                 }
             }
+        }
+    }
+
+    private suspend fun appString(resId: Int, vararg formatArgs: Any): String {
+        val languageTag = PreferenceManager.languageTagFlow(applicationContext).first()
+        val localizedContext = AppLocaleManager.localizedContext(this, languageTag)
+        return if (formatArgs.isEmpty()) {
+            localizedContext.getString(resId)
+        } else {
+            localizedContext.getString(resId, *formatArgs)
         }
     }
 }

@@ -49,11 +49,13 @@ import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.ProvideAppLocale
 import com.aerobox.ui.theme.SingBoxVPNTheme
+import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 
 class NotificationSwitchActivity : ComponentActivity() {
     private val uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -118,12 +120,22 @@ class NotificationSwitchActivity : ComponentActivity() {
                     uiMessage.tryEmit(
                         ConnectionDiagnostics.userFacingFailureMessage(
                             result = result,
-                            operationFailedText = getString(R.string.operation_failed)
+                            operationFailedText = appString(R.string.operation_failed)
                         )
                     )
                     pendingNodeId.value = null
                 }
             }
+        }
+    }
+
+    private suspend fun appString(resId: Int, vararg formatArgs: Any): String {
+        val languageTag = PreferenceManager.languageTagFlow(applicationContext).first()
+        val localizedContext = AppLocaleManager.localizedContext(this, languageTag)
+        return if (formatArgs.isEmpty()) {
+            localizedContext.getString(resId)
+        } else {
+            localizedContext.getString(resId, *formatArgs)
         }
     }
 }

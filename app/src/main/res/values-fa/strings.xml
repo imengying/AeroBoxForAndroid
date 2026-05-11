@@ -281,6 +281,23 @@
     <string name="routing_cn_domain">قوانین دامنه‌های چین</string>
     <string name="routing_cn_ip">قوانین IP چین</string>
     <string name="routing_block_ads">مسدودسازی تبلیغات</string>
+    <string name="routing_section_custom_rules">قوانین سفارشی</string>
+    <string name="routing_custom_rule_add">افزودن قانون سفارشی</string>
+    <string name="routing_custom_rule_edit">ویرایش قانون سفارشی</string>
+    <string name="routing_custom_rule_summary">لینک rule-set راه دور sing-box</string>
+    <string name="routing_custom_rule_name">نام</string>
+    <string name="routing_custom_rule_name_empty">نام قانون نمی‌تواند خالی باشد</string>
+    <string name="routing_custom_rule_url">لینک قانون</string>
+    <string name="routing_custom_rule_url_hint">از لینک‌های rule-set با http:// یا https:// پشتیبانی می‌شود</string>
+    <string name="routing_custom_rule_url_invalid">لینک قانون نامعتبر است</string>
+    <string name="routing_custom_rule_action">اقدام</string>
+    <string name="routing_custom_rule_action_direct">مستقیم</string>
+    <string name="routing_custom_rule_action_proxy">پراکسی</string>
+    <string name="routing_custom_rule_action_reject">رد کردن</string>
+    <string name="routing_custom_rule_format">قالب</string>
+    <string name="routing_custom_rule_format_binary">باینری (.srs)</string>
+    <string name="routing_custom_rule_format_source">JSON منبع</string>
+    <string name="routing_custom_rule_enabled">فعال</string>
     <string name="routing_section_resources">منابع</string>
     <string name="routing_assets_updated">منابع مسیریابی به‌روزرسانی شدند</string>
     <string name="routing_assets_failed_format">به‌روزرسانی %1$s ناموفق بود؛ شبکه را بررسی کنید</string>
@@ -288,6 +305,7 @@
     <string name="routing_assets_download">دانلود منابع مسیریابی</string>
     <string name="routing_assets_summary_format">IP چین: %1$s · دامنه‌های چین: %2$s · تبلیغات: %3$s (منابع رسمی)</string>
     <string name="routing_assets_official_only">فقط از منابع رسمی SagerNet</string>
+    <string name="routing_assets_no_enabled_rules">هیچ قانون داخلی فعالی برای به‌روزرسانی وجود ندارد</string>
 
     <!-- SubscriptionScreen -->
     <string name="subscription_loading">در حال بارگذاری اشتراک‌ها…</string>

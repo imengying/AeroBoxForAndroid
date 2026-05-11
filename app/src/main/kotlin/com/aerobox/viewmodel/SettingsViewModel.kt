@@ -6,8 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.aerobox.AeroBoxApplication
 import com.aerobox.R
 import com.aerobox.core.config.ConfigGenerator
+import com.aerobox.data.model.CustomRuleSet
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.InstalledAppInfo
+import com.aerobox.data.model.RuleSetAction
+import com.aerobox.data.model.RuleSetFormat
 import com.aerobox.data.model.RoutingMode
 import com.aerobox.data.repository.AppListRepository
 import com.aerobox.data.repository.VpnConnectionResult
@@ -99,6 +102,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     val enableGeoBlockQuic: StateFlow<Boolean> = PreferenceManager.enableGeoBlockQuicFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val customRuleSets: StateFlow<List<CustomRuleSet>> = PreferenceManager.customRuleSetsFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     suspend fun setDarkMode(mode: String) {
         PreferenceManager.setDarkMode(appContext, mode)
@@ -243,6 +249,64 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
+    suspend fun saveCustomRuleSet(
+        existingId: Long?,
+        name: String,
+        url: String,
+        format: RuleSetFormat,
+        action: RuleSetAction,
+        enabled: Boolean
+    ): Boolean {
+        val normalizedName = name.trim()
+        val normalizedUrl = url.trim()
+        val validationError = validateCustomRuleSetInput(normalizedName, normalizedUrl)
+        if (validationError != null) {
+            _uiMessage.tryEmit(validationError)
+            return false
+        }
+
+        val current = customRuleSets.value
+        val id = existingId?.takeIf { it > 0L } ?: generateRuleSetId(current)
+        val updatedRuleSet = CustomRuleSet(
+            id = id,
+            name = normalizedName,
+            url = normalizedUrl,
+            format = format,
+            action = action,
+            enabled = enabled
+        )
+        val updated = if (existingId != null && current.any { it.id == existingId }) {
+            current.map { if (it.id == existingId) updatedRuleSet else it }
+        } else {
+            current + updatedRuleSet
+        }
+        PreferenceManager.setCustomRuleSets(appContext, updated)
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = appString(R.string.geo_setting_failed)
+        )
+        return true
+    }
+
+    suspend fun deleteCustomRuleSet(ruleSet: CustomRuleSet) {
+        PreferenceManager.setCustomRuleSets(
+            appContext,
+            customRuleSets.value.filterNot { it.id == ruleSet.id }
+        )
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = appString(R.string.geo_setting_failed)
+        )
+    }
+
+    suspend fun setCustomRuleSetEnabled(ruleSet: CustomRuleSet, enabled: Boolean) {
+        PreferenceManager.setCustomRuleSets(
+            appContext,
+            customRuleSets.value.map { if (it.id == ruleSet.id) it.copy(enabled = enabled) else it }
+        )
+        refreshActiveConnectionForRuntimeChange(
+            failurePrefix = appString(R.string.geo_setting_failed)
+        )
+    }
+
     fun loadInstalledApps(forceRefresh: Boolean = false) {
         val explicitPackages = perAppProxyPackages.value
         val visiblePackages = _installedApps.value.asSequence().map { it.packageName }.toSet()
@@ -269,6 +333,29 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         refreshActiveConnectionForRuntimeChange(
             failurePrefix = appString(R.string.inbound_setting_failed)
         )
+    }
+
+    private fun validateCustomRuleSetInput(name: String, url: String): String? {
+        if (name.isBlank()) return appString(R.string.routing_custom_rule_name_empty)
+        val uri = runCatching { java.net.URI(url) }.getOrNull()
+            ?: return appString(R.string.routing_custom_rule_url_invalid)
+        val scheme = uri.scheme?.lowercase()
+        if (scheme != "https" && scheme != "http") {
+            return appString(R.string.routing_custom_rule_url_invalid)
+        }
+        if (uri.host.isNullOrBlank()) {
+            return appString(R.string.routing_custom_rule_url_invalid)
+        }
+        return null
+    }
+
+    private fun generateRuleSetId(current: List<CustomRuleSet>): Long {
+        val used = current.mapTo(mutableSetOf()) { it.id }
+        var candidate = System.currentTimeMillis()
+        while (candidate <= 0L || candidate in used) {
+            candidate++
+        }
+        return candidate
     }
 
     private suspend fun validateAndPersistDnsSettings(

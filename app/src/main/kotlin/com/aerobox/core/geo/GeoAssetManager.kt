@@ -39,6 +39,14 @@ object GeoAssetManager {
         val allOk: Boolean get() = geoIpOk && geoSiteCnOk && geoAdsOk
     }
 
+    data class GeoUpdateTargets(
+        val geoIpCn: Boolean = true,
+        val geoSiteCn: Boolean = true,
+        val geoAds: Boolean = true
+    ) {
+        val hasAny: Boolean get() = geoIpCn || geoSiteCn || geoAds
+    }
+
     private const val GEOIP_REPO = "SagerNet/sing-geoip"
     private const val GEOSITE_REPO = "SagerNet/sing-geosite"
 
@@ -86,14 +94,33 @@ object GeoAssetManager {
     fun getGeoSiteSize(context: Context): String = formatFileSize(context, getGeoSiteFile(context))
     fun getGeoAdsSize(context: Context): String = formatFileSize(context, getGeoAdsFile(context))
 
-    suspend fun updateAll(context: Context): GeoUpdateResult = withContext(Dispatchers.IO) {
-        val ipOk = downloadFile(GEOIP_CN_URL, getGeoIpFile(context))
-        if (ipOk) {
+    suspend fun updateAll(
+        context: Context,
+        targets: GeoUpdateTargets = GeoUpdateTargets()
+    ): GeoUpdateResult = withContext(Dispatchers.IO) {
+        if (!targets.hasAny) {
+            return@withContext GeoUpdateResult(geoIpOk = true, geoSiteCnOk = true, geoAdsOk = true)
+        }
+
+        val ipOk = if (targets.geoIpCn) {
+            downloadFile(GEOIP_CN_URL, getGeoIpFile(context))
+        } else {
+            true
+        }
+        if (targets.geoIpCn && ipOk) {
             writeVersionFile(getGeoIpVersionFile(context), fetchLatestReleaseTag(GEOIP_REPO))
         }
-        val cnOk = downloadFile(GEOSITE_CN_URL, getGeoSiteFile(context))
-        val adsOk = downloadFile(GEOSITE_ADS_URL, getGeoAdsFile(context))
-        if (cnOk && adsOk) {
+        val cnOk = if (targets.geoSiteCn) {
+            downloadFile(GEOSITE_CN_URL, getGeoSiteFile(context))
+        } else {
+            true
+        }
+        val adsOk = if (targets.geoAds) {
+            downloadFile(GEOSITE_ADS_URL, getGeoAdsFile(context))
+        } else {
+            true
+        }
+        if ((targets.geoSiteCn || targets.geoAds) && (!targets.geoSiteCn || cnOk) && (!targets.geoAds || adsOk)) {
             writeVersionFile(getGeoSiteVersionFile(context), fetchLatestReleaseTag(GEOSITE_REPO))
         }
         GeoUpdateResult(geoIpOk = ipOk, geoSiteCnOk = cnOk, geoAdsOk = adsOk)

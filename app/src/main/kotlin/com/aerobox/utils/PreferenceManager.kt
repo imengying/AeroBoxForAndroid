@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.aerobox.data.model.CustomRuleSet
+import com.aerobox.data.model.CustomRuleSetCodec
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.RoutingMode
 import kotlinx.coroutines.flow.Flow
@@ -42,6 +44,7 @@ object PreferenceManager {
     private val ENABLE_GEO_CN_IP_RULE = booleanPreferencesKey("enable_geo_cn_ip_rule")
     private val ENABLE_GEO_ADS_BLOCK = booleanPreferencesKey("enable_geo_ads_block")
     private val ENABLE_GEO_BLOCK_QUIC = booleanPreferencesKey("enable_geo_block_quic")
+    private val CUSTOM_RULE_SETS = stringPreferencesKey("custom_rule_sets")
     private val PER_APP_SHOW_SYSTEM = booleanPreferencesKey("per_app_show_system")
 
     // ── Existing settings ──
@@ -114,6 +117,9 @@ object PreferenceManager {
 
     fun enableGeoBlockQuicFlow(context: Context): Flow<Boolean> =
         context.dataStore.data.map { it[ENABLE_GEO_BLOCK_QUIC] ?: false }
+
+    fun customRuleSetsFlow(context: Context): Flow<List<CustomRuleSet>> =
+        context.dataStore.data.map { CustomRuleSetCodec.decode(it[CUSTOM_RULE_SETS]) }
 
     // ── Setters ──
 
@@ -205,6 +211,10 @@ object PreferenceManager {
         context.dataStore.edit { it[ENABLE_GEO_BLOCK_QUIC] = enabled }
     }
 
+    suspend fun setCustomRuleSets(context: Context, ruleSets: List<CustomRuleSet>) {
+        context.dataStore.edit { it[CUSTOM_RULE_SETS] = CustomRuleSetCodec.encode(ruleSets) }
+    }
+
     /**
      * Read all VPN config preferences in a single atomic snapshot.
      */
@@ -219,7 +229,8 @@ object PreferenceManager {
         val enableGeoCnDomainRule: Boolean,
         val enableGeoCnIpRule: Boolean,
         val enableGeoAdsBlock: Boolean,
-        val enableGeoBlockQuic: Boolean
+        val enableGeoBlockQuic: Boolean,
+        val customRuleSets: List<CustomRuleSet>
     )
 
     suspend fun readVpnConfigPreferences(context: Context): VpnConfigPreferences {
@@ -239,7 +250,8 @@ object PreferenceManager {
             enableGeoCnDomainRule = prefs[ENABLE_GEO_CN_DOMAIN_RULE] ?: false,
             enableGeoCnIpRule = prefs[ENABLE_GEO_CN_IP_RULE] ?: false,
             enableGeoAdsBlock = prefs[ENABLE_GEO_ADS_BLOCK] ?: false,
-            enableGeoBlockQuic = prefs[ENABLE_GEO_BLOCK_QUIC] ?: false
+            enableGeoBlockQuic = prefs[ENABLE_GEO_BLOCK_QUIC] ?: false,
+            customRuleSets = CustomRuleSetCodec.decode(prefs[CUSTOM_RULE_SETS])
         )
     }
 }
