@@ -194,10 +194,10 @@ class AeroBoxTileService : TileService() {
             pendingAction == PendingAction.START || serviceActive -> VisualState.CONNECTING
             else -> VisualState.INACTIVE
         }
-        updateTile(visualState = visualState, labelOverride = vpnState.currentNode?.name)
+        updateTile(visualState = visualState)
     }
 
-    private fun updateTile(visualState: VisualState, labelOverride: String? = null) {
+    private fun updateTile(visualState: VisualState) {
         val tile = qsTile ?: return
         tile.state = when (visualState) {
             VisualState.CONNECTED, VisualState.CONNECTING -> Tile.STATE_ACTIVE
@@ -205,16 +205,7 @@ class AeroBoxTileService : TileService() {
             VisualState.INACTIVE -> Tile.STATE_INACTIVE
         }
         tile.icon = Icon.createWithResource(this, R.drawable.ic_qs_aerobox)
-        tile.label = when (visualState) {
-            VisualState.CONNECTED -> {
-                labelOverride
-                    ?: VpnStateManager.vpnState.value.currentNode
-                        ?.name
-                        ?.takeIf { it.isNotBlank() }
-                    ?: getString(R.string.tile_label)
-            }
-            else -> getString(R.string.tile_label)
-        }
+        tile.label = getString(R.string.tile_label)
         tile.subtitle = when (visualState) {
             VisualState.CONNECTED -> getString(R.string.connected)
             VisualState.CONNECTING -> getString(R.string.connecting)
