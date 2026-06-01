@@ -266,6 +266,12 @@
     <string name="settings_log">執行日誌</string>
     <string name="settings_log_summary">檢視 sing-box 執行日誌</string>
     <string name="settings_about_supporting">AeroBox 專案 · GNU GPL-3.0-or-later</string>
+    <string name="app_update_checking">正在檢查更新…</string>
+    <string name="app_update_already_latest">已是最新版本</string>
+    <string name="app_update_check_failed">檢查更新失敗，請稍後再試</string>
+    <string name="app_update_available_title">發現新版本</string>
+    <string name="app_update_available_message">AeroBox %2$s 已發布。目前版本：%1$s。</string>
+    <string name="app_update_open_release">開啟 GitHub</string>
     <string name="dns_dialog_title">DNS 設定</string>
     <string name="dns_dialog_reset">恢復預設</string>
     <string name="dns_dialog_remote_example">範例: https://cloudflare-dns.com/dns-query, tls://1.1.1.1, udp://8.8.8.8</string>

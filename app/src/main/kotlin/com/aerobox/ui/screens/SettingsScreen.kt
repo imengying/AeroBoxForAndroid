@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import com.aerobox.ui.icons.AppIcons
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -80,6 +81,8 @@ fun SettingsScreen(
     val enableHttpInbound by viewModel.enableHttpInbound.collectAsStateWithLifecycle()
     val ipv6Mode by viewModel.ipv6Mode.collectAsStateWithLifecycle()
     val autoReconnect by viewModel.autoReconnect.collectAsStateWithLifecycle()
+    val isCheckingAppUpdate by viewModel.isCheckingAppUpdate.collectAsStateWithLifecycle()
+    val availableAppUpdate by viewModel.availableAppUpdate.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -314,17 +317,22 @@ fun SettingsScreen(
         item {
             SettingItem(
                 onClick = {
-                    activity.startActivity(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse("https://github.com/imengying/AeroBoxForAndroid/releases/latest")
-                        )
-                    )
+                    viewModel.checkForAppUpdate()
                 },
+                enabled = !isCheckingAppUpdate,
                 icon = { Icon(Icons.Filled.Info, contentDescription = null) },
                 title = stringResource(R.string.version),
                 supporting = "${com.aerobox.BuildConfig.VERSION_NAME} (sing-box ${com.aerobox.core.native.SingBoxNative.getVersion()})",
-                trailing = {}
+                trailing = {
+                    if (isCheckingAppUpdate) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .width(20.dp)
+                                .height(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
             )
         }
             item {
@@ -341,6 +349,26 @@ fun SettingsScreen(
         AppSnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+
+    availableAppUpdate?.let { update ->
+        AppUpdateDialog(
+            titleText = context.getString(R.string.app_update_available_title),
+            messageText = context.getString(
+                R.string.app_update_available_message,
+                update.currentVersion,
+                update.latestVersion
+            ),
+            openText = context.getString(R.string.app_update_open_release),
+            cancelText = context.getString(R.string.cancel),
+            onDismiss = viewModel::dismissAppUpdateDialog,
+            onOpenRelease = {
+                viewModel.dismissAppUpdateDialog()
+                activity.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(update.releaseUrl))
+                )
+            }
         )
     }
 
@@ -402,6 +430,32 @@ fun SettingsScreen(
 
 
 
+}
+
+@Composable
+private fun AppUpdateDialog(
+    titleText: String,
+    messageText: String,
+    openText: String,
+    cancelText: String,
+    onDismiss: () -> Unit,
+    onOpenRelease: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(titleText) },
+        text = { Text(messageText) },
+        confirmButton = {
+            TextButton(onClick = onOpenRelease) {
+                Text(openText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(cancelText)
+            }
+        }
+    )
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)

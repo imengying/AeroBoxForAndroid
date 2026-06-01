@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aerobox.AeroBoxApplication
+import com.aerobox.BuildConfig
 import com.aerobox.R
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.data.model.CustomRuleSet
@@ -12,12 +13,15 @@ import com.aerobox.data.model.InstalledAppInfo
 import com.aerobox.data.model.RuleSetAction
 import com.aerobox.data.model.RuleSetFormat
 import com.aerobox.data.model.RoutingMode
+import com.aerobox.data.repository.AppUpdateInfo
+import com.aerobox.data.repository.AppUpdateRepository
 import com.aerobox.data.repository.AppListRepository
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.data.repository.VpnConfigResolver
 import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -27,10 +31,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val appContext = application.applicationContext
     private val appListRepository = AppListRepository(appContext)
+    private val appUpdateRepository = AppUpdateRepository()
     private val vpnRepository = AeroBoxApplication.vpnRepository
     private val configResolver = VpnConfigResolver(appContext)
 
@@ -42,6 +48,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val _uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val uiMessage: SharedFlow<String> = _uiMessage.asSharedFlow()
+
+    private val _isCheckingAppUpdate = MutableStateFlow(false)
+    val isCheckingAppUpdate: StateFlow<Boolean> = _isCheckingAppUpdate.asStateFlow()
+
+    private val _availableAppUpdate = MutableStateFlow<AppUpdateInfo?>(null)
+    val availableAppUpdate: StateFlow<AppUpdateInfo?> = _availableAppUpdate.asStateFlow()
 
     val darkMode: StateFlow<String> = PreferenceManager.darkModeFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "system")
@@ -327,6 +339,32 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
             _isLoadingInstalledApps.value = false
         }
+    }
+
+    fun checkForAppUpdate() {
+        if (_isCheckingAppUpdate.value) return
+        viewModelScope.launch {
+            _isCheckingAppUpdate.value = true
+            _uiMessage.tryEmit(appString(R.string.app_update_checking))
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    appUpdateRepository.checkLatestRelease(BuildConfig.VERSION_NAME)
+                }
+            }.onSuccess { update ->
+                if (update.isUpdateAvailable) {
+                    _availableAppUpdate.value = update
+                } else {
+                    _uiMessage.tryEmit(appString(R.string.app_update_already_latest))
+                }
+            }.onFailure {
+                _uiMessage.tryEmit(appString(R.string.app_update_check_failed))
+            }
+            _isCheckingAppUpdate.value = false
+        }
+    }
+
+    fun dismissAppUpdateDialog() {
+        _availableAppUpdate.value = null
     }
 
     private suspend fun refreshActiveConnectionForInboundChange() {

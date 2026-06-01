@@ -266,6 +266,12 @@
     <string name="settings_log">Runtime log</string>
     <string name="settings_log_summary">View the sing-box runtime log</string>
     <string name="settings_about_supporting">AeroBox project · GNU GPL-3.0-or-later</string>
+    <string name="app_update_checking">Checking for updates…</string>
+    <string name="app_update_already_latest">You are already on the latest version</string>
+    <string name="app_update_check_failed">Failed to check for updates; please try again later</string>
+    <string name="app_update_available_title">New version available</string>
+    <string name="app_update_available_message">AeroBox %2$s is available. Current version: %1$s.</string>
+    <string name="app_update_open_release">Open GitHub</string>
     <string name="dns_dialog_title">DNS settings</string>
     <string name="dns_dialog_reset">Reset to default</string>
     <string name="dns_dialog_remote_example">Example: https://cloudflare-dns.com/dns-query, tls://1.1.1.1, udp://8.8.8.8</string>

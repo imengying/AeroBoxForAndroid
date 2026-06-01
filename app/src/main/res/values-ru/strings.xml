@@ -266,6 +266,12 @@
     <string name="settings_log">Журнал работы</string>
     <string name="settings_log_summary">Просмотр журнала работы sing-box</string>
     <string name="settings_about_supporting">Проект AeroBox · GNU GPL-3.0-or-later</string>
+    <string name="app_update_checking">Проверка обновлений…</string>
+    <string name="app_update_already_latest">Установлена последняя версия</string>
+    <string name="app_update_check_failed">Не удалось проверить обновления; повторите попытку позже</string>
+    <string name="app_update_available_title">Доступна новая версия</string>
+    <string name="app_update_available_message">Доступен AeroBox %2$s. Текущая версия: %1$s.</string>
+    <string name="app_update_open_release">Открыть GitHub</string>
     <string name="dns_dialog_title">Настройки DNS</string>
     <string name="dns_dialog_reset">Сбросить</string>
     <string name="dns_dialog_remote_example">Пример: https://cloudflare-dns.com/dns-query, tls://1.1.1.1, udp://8.8.8.8</string>
