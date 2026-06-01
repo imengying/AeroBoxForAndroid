@@ -26,13 +26,16 @@ android {
         versionCode = ciVersionCode ?: 1
         versionName = ciVersionName ?: "1.0.0"
 
+    }
+
+    androidResources {
         // Restrict packaged locales to those we actually translate. Without
         // this filter, every androidx / Compose / Material3 / WorkManager
         // artifact contributes its own localized strings (~50 locales) to the
         // APK. Default fallback (values/strings.xml) is English; system
         // languages outside this list will fall back to English rather than
         // Simplified Chinese.
-        resourceConfigurations += listOf("en", "zh-rCN", "zh-rTW", "fa", "ru")
+        localeFilters += listOf("en", "zh-rCN", "zh-rTW", "fa", "ru")
     }
 
     buildTypes {

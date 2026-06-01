@@ -15,7 +15,7 @@ import androidx.annotation.StringRes
  * the message in the active locale.
  */
 class LocalizedException(
-    @StringRes val messageResId: Int,
+    @param:StringRes val messageResId: Int,
     val formatArgs: List<Any?> = emptyList(),
     cause: Throwable? = null
 ) : RuntimeException(messageResId.toString(), cause) {

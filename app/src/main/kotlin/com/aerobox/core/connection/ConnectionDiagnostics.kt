@@ -9,7 +9,7 @@ import com.aerobox.data.repository.VpnConnectionResult
  * label is supplied as a string resource so the UI layer can render it in
  * the user's locale.
  */
-enum class ConnectionFixAction(@StringRes val labelResId: Int) {
+enum class ConnectionFixAction(@param:StringRes val labelResId: Int) {
     UPDATE_GEO(R.string.connection_fix_update_geo),
     SWITCH_GLOBAL_MODE(R.string.connection_fix_switch_global),
     REFRESH_SUBSCRIPTIONS(R.string.connection_fix_refresh_subscriptions)
@@ -24,8 +24,8 @@ enum class ConnectionFixAction(@StringRes val labelResId: Int) {
  * sing-box error string used for diagnostics / logs.
  */
 data class ConnectionIssue(
-    @StringRes val titleResId: Int,
-    @StringRes val messageResId: Int,
+    @param:StringRes val titleResId: Int,
+    @param:StringRes val messageResId: Int,
     val rawError: String,
     val fixAction: ConnectionFixAction? = null
 )
