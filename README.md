@@ -32,6 +32,7 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 - TUIC
 - SOCKS
 - HTTP Proxy
+- Naive
 
 ## 支持的订阅格式 / Supported Subscription Formats
 
