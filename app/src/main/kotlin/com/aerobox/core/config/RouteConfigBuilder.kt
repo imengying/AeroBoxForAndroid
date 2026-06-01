@@ -53,13 +53,13 @@ internal object RouteConfigBuilder {
                 route.put("final", "proxy")
                 route.put(
                     "rules",
-                    buildBaseRouteRules(nodeIsIpv6Only)
+                    buildBaseRouteRules(ipv6Mode, nodeIsIpv6Only)
                 )
             }
 
             RoutingMode.RULE_BASED -> {
                 route.put("final", "proxy")
-                val rules = buildBaseRouteRules(nodeIsIpv6Only)
+                val rules = buildBaseRouteRules(ipv6Mode, nodeIsIpv6Only)
 
                 if (enableGeoBlockQuic) {
                     rules.put(
@@ -110,7 +110,7 @@ internal object RouteConfigBuilder {
                 route.put("final", "direct")
                 route.put(
                     "rules",
-                    buildBaseRouteRules(nodeIsIpv6Only)
+                    buildBaseRouteRules(ipv6Mode, nodeIsIpv6Only)
                 )
             }
 
@@ -156,7 +156,7 @@ internal object RouteConfigBuilder {
         }
     }
 
-    private fun buildBaseRouteRules(nodeIsIpv6Only: Boolean): JSONArray {
+    private fun buildBaseRouteRules(ipv6Mode: IPv6Mode, nodeIsIpv6Only: Boolean): JSONArray {
         return JSONArray().apply {
             put(JSONObject().put("action", "sniff"))
 
@@ -164,7 +164,7 @@ internal object RouteConfigBuilder {
                 put(
                     JSONObject()
                         .put("action", "resolve")
-                        .put("strategy", "ipv4_only")
+                        .put("strategy", ipv6Mode.domainStrategy())
                 )
             }
 

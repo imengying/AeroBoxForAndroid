@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -192,15 +193,33 @@ fun SettingsScreen(
                             onDismissRequest = { expanded = false }
                         ) {
                             androidx.compose.material3.DropdownMenuItem(
-                                text = { Text(themeSystemText) },
+                                text = {
+                                    Text(
+                                        text = themeSystemText,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                },
                                 onClick = { scope.launch { viewModel.setDarkMode("system") }; expanded = false }
                             )
                             androidx.compose.material3.DropdownMenuItem(
-                                text = { Text(themeDarkText) },
+                                text = {
+                                    Text(
+                                        text = themeDarkText,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                },
                                 onClick = { scope.launch { viewModel.setDarkMode("on") }; expanded = false }
                             )
                             androidx.compose.material3.DropdownMenuItem(
-                                text = { Text(themeLightText) },
+                                text = {
+                                    Text(
+                                        text = themeLightText,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center
+                                    )
+                                },
                                 onClick = { scope.launch { viewModel.setDarkMode("off") }; expanded = false }
                             )
                         }
