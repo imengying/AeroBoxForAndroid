@@ -123,8 +123,54 @@ jobs:
 
       - name: Upload installable debug APKs
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
-          name: aerobox-ci-debug-${{ github.ref_name }}-${{ github.run_number }}
+          name: aerobox-ci-debug-apks
           path: app/build/outputs/apk/debug/dist/*.apk
           if-no-files-found: error
+
+  prerelease:
+    needs: build-check
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download debug APK artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: aerobox-ci-debug-apks
+          path: apk/
+
+      - name: Delete Pre-Release and move beta tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view beta >/dev/null 2>&1; then
+            gh release delete beta -y --cleanup-tag
+          fi
+          git tag -f beta "${GITHUB_SHA}"
+          git push origin -f refs/tags/beta
+
+      - name: Publish Beta Pre-Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          APKS=(apk/*.apk)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::error::No APK files found for beta release upload"
+            exit 1
+          fi
+
+          gh release create beta "${APKS[@]}" \
+            --title "beta" \
+            --notes "此版本为测试版，使用调试签名，可能存在不稳定情况，升级前请务必备份好数据。" \
+            --prerelease
