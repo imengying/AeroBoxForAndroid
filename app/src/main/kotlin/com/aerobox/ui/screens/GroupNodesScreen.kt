@@ -18,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -40,11 +40,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aerobox.R
 import com.aerobox.data.model.ProxyNode
@@ -59,7 +59,6 @@ fun GroupNodesScreen(
     onNavigateBack: () -> Unit
 ) {
     val isUngrouped = subscriptionId == 0L
-    val context = LocalContext.current
     val repository = AeroBoxApplication.subscriptionRepository
     val subscription by repository.observeSubscriptionById(subscriptionId)
         .collectAsStateWithLifecycle(initialValue = null)
@@ -86,7 +85,7 @@ fun GroupNodesScreen(
         }
     }
 
-    val isLocal = isUngrouped || subscription?.isLocalGroup() == true
+    val isEditableLocalGroup = !isUngrouped && subscription?.isLocalGroup() == true
     val ungroupedLabel = stringResource(R.string.group_ungrouped)
     val groupName = if (isUngrouped) ungroupedLabel else subscription?.name.orEmpty()
 
@@ -106,7 +105,7 @@ fun GroupNodesScreen(
                     }
                 },
                 actions = {
-                    if (isLocal) {
+                    if (isEditableLocalGroup) {
                         IconButton(onClick = { showRenameDialog = true }) {
                             Icon(
                                 Icons.Filled.Edit,
@@ -160,26 +159,49 @@ fun GroupNodesScreen(
     }
 
     deleteNodeTarget?.let { node ->
-        AlertDialog(
-            onDismissRequest = { deleteNodeTarget = null },
-            title = { Text(stringResource(R.string.delete_node)) },
-            text = {
-                Text(stringResource(R.string.delete_node_confirm, node.name.ifBlank { node.server }))
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch { repository.deleteNode(node.id) }
-                    deleteNodeTarget = null
-                }) {
-                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteNodeTarget = null }) {
-                    Text(stringResource(R.string.cancel))
+        Dialog(onDismissRequest = { deleteNodeTarget = null }) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.delete_node),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.delete_node_confirm,
+                            node.name.ifBlank { node.server }
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { deleteNodeTarget = null }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(onClick = {
+                            scope.launch { repository.deleteNode(node.id) }
+                            deleteNodeTarget = null
+                        }) {
+                            Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 
     if (showRenameDialog) {
@@ -202,37 +224,55 @@ fun GroupNodesScreen(
 
     if (showDeleteGroupDialog) {
         val currentSubscription = subscription
-        AlertDialog(
-            onDismissRequest = { showDeleteGroupDialog = false },
-            title = { Text(stringResource(R.string.delete_group)) },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.delete_local_group_confirm,
-                        currentSubscription?.name.orEmpty()
+        Dialog(onDismissRequest = { showDeleteGroupDialog = false }) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.delete_group),
+                        style = MaterialTheme.typography.titleMedium
                     )
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val sub = currentSubscription
-                    showDeleteGroupDialog = false
-                    if (sub != null) {
-                        scope.launch {
-                            repository.deleteSubscription(sub)
-                            onNavigateBack()
+                    Text(
+                        text = stringResource(
+                            R.string.delete_local_group_confirm,
+                            currentSubscription?.name.orEmpty()
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { showDeleteGroupDialog = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(onClick = {
+                            val sub = currentSubscription
+                            showDeleteGroupDialog = false
+                            if (sub != null) {
+                                scope.launch {
+                                    repository.deleteSubscription(sub)
+                                    onNavigateBack()
+                                }
+                            }
+                        }) {
+                            Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                         }
                     }
-                }) {
-                    Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteGroupDialog = false }) {
-                    Text(stringResource(R.string.cancel))
                 }
             }
-        )
+        }
     }
 }
 
@@ -292,30 +332,47 @@ private fun RenameGroupDialog(
     onConfirm: (String) -> Unit
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.rename_group)) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(R.string.group_new_name_hint)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(name.trim()) },
-                enabled = name.isNotBlank()
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(stringResource(R.string.save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
+                Text(
+                    text = stringResource(R.string.rename_group),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.group_new_name_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    TextButton(
+                        onClick = { onConfirm(name.trim()) },
+                        enabled = name.isNotBlank()
+                    ) {
+                        Text(stringResource(R.string.save))
+                    }
+                }
             }
         }
-    )
+    }
 }

@@ -23,21 +23,23 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -571,24 +573,46 @@ fun SubscriptionScreen(
         val deleteText = context.getString(R.string.delete)
         val cancelText = context.getString(R.string.cancel)
         ProvideAppLocale {
-            AlertDialog(
-                onDismissRequest = { deleteTarget = null },
-                title = { Text(deleteTitle) },
-                text = { Text(deleteMessage) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.deleteSubscription(subscription)
-                        deleteTarget = null
-                    }) {
-                        Text(deleteText, color = MaterialTheme.colorScheme.error)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { deleteTarget = null }) {
-                        Text(cancelText)
+            Dialog(onDismissRequest = { deleteTarget = null }) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 6.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = deleteTitle,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = deleteMessage,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(onClick = { deleteTarget = null }) {
+                                Text(cancelText)
+                            }
+                            Spacer(Modifier.width(4.dp))
+                            TextButton(onClick = {
+                                viewModel.deleteSubscription(subscription)
+                                deleteTarget = null
+                            }) {
+                                Text(deleteText, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
                     }
                 }
-            )
+            }
         }
     }
 }
@@ -626,50 +650,72 @@ private fun NodeImportDialog(
     )
 
     ProvideAppLocale {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text(title) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = content,
-                        onValueChange = { content = it },
-                        label = { Text(nodeContentLabel) },
-                        minLines = 4,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    GroupPickerSection(
-                        holder = holder,
-                        localGroups = localGroups,
-                        chooseGroupText = chooseGroupText,
-                        ungroupedText = ungroupedText,
-                        newGroupText = newGroupText,
-                        newGroupNameHint = newGroupNameHint,
-                        nodeCountSuffix = nodeCountSuffix
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val target = holder.state.toTarget(
-                            fallbackName = "",
-                            defaultName = defaultLocalGroupName
-                        )
-                        onConfirm(content.trim(), target)
-                    },
-                    enabled = content.isNotBlank() && holder.state.isValid
+        Dialog(onDismissRequest = onDismiss) {
+            Surface(
+                modifier = Modifier.width(320.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(addText)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(cancelText)
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = content,
+                            onValueChange = { content = it },
+                            label = { Text(nodeContentLabel) },
+                            minLines = 3,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        GroupPickerSection(
+                            holder = holder,
+                            localGroups = localGroups,
+                            chooseGroupText = chooseGroupText,
+                            ungroupedText = ungroupedText,
+                            newGroupText = newGroupText,
+                            newGroupNameHint = newGroupNameHint,
+                            nodeCountSuffix = nodeCountSuffix
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(cancelText)
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(
+                            onClick = {
+                                val target = holder.state.toTarget(
+                                    fallbackName = "",
+                                    defaultName = defaultLocalGroupName
+                                )
+                                onConfirm(content.trim(), target)
+                            },
+                            enabled = content.isNotBlank()
+                        ) {
+                            Text(addText)
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 }
 
@@ -947,20 +993,20 @@ private fun SubscriptionEditorDialog(
         Dialog(onDismissRequest = onDismiss) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 6.dp
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
+                        .padding(20.dp)
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.headlineSmall
+                        style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(14.dp))
 
                     OutlinedTextField(
                         value = name,

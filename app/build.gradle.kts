@@ -50,6 +50,10 @@ android {
         debug {
             isMinifyEnabled = false
         }
+        create("beta") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+        }
     }
 
     compileOptions {

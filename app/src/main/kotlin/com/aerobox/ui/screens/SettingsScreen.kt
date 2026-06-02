@@ -20,7 +20,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import com.aerobox.ui.icons.AppIcons
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -195,37 +194,47 @@ fun SettingsScreen(
                         )
                         androidx.compose.material3.DropdownMenu(
                             expanded = expanded,
-                            onDismissRequest = { expanded = false }
+                            onDismissRequest = { expanded = false },
+                            modifier = Modifier.width(108.dp)
                         ) {
                             androidx.compose.material3.DropdownMenuItem(
+                                modifier = Modifier.height(40.dp),
                                 text = {
                                     Text(
                                         text = themeSystemText,
                                         modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Center
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.labelLarge
                                     )
                                 },
-                                onClick = { scope.launch { viewModel.setDarkMode("system") }; expanded = false }
+                                onClick = { scope.launch { viewModel.setDarkMode("system") }; expanded = false },
+                                contentPadding = PaddingValues(horizontal = 8.dp)
                             )
                             androidx.compose.material3.DropdownMenuItem(
+                                modifier = Modifier.height(40.dp),
                                 text = {
                                     Text(
                                         text = themeDarkText,
                                         modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Center
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.labelLarge
                                     )
                                 },
-                                onClick = { scope.launch { viewModel.setDarkMode("on") }; expanded = false }
+                                onClick = { scope.launch { viewModel.setDarkMode("on") }; expanded = false },
+                                contentPadding = PaddingValues(horizontal = 8.dp)
                             )
                             androidx.compose.material3.DropdownMenuItem(
+                                modifier = Modifier.height(40.dp),
                                 text = {
                                     Text(
                                         text = themeLightText,
                                         modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Center
+                                        textAlign = TextAlign.Center,
+                                        style = MaterialTheme.typography.labelLarge
                                     )
                                 },
-                                onClick = { scope.launch { viewModel.setDarkMode("off") }; expanded = false }
+                                onClick = { scope.launch { viewModel.setDarkMode("off") }; expanded = false },
+                                contentPadding = PaddingValues(horizontal = 8.dp)
                             )
                         }
                     }
@@ -468,8 +477,8 @@ private fun AppUpdateDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
             Column(
@@ -520,36 +529,58 @@ private fun LanguageSettingsDialog(
         mutableStateOf(AppLocaleManager.normalize(selectedLanguageTag))
     }
 
-    AlertDialog(
-        modifier = Modifier.width(320.dp),
-        onDismissRequest = onDismiss,
-        title = { Text(titleText) },
-        text = {
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.width(292.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 8.dp)
             ) {
-                languageOptions.forEach { (tag, label) ->
-                    FilterChip(
-                        selected = selected == tag,
-                        onClick = { selected = tag },
-                        label = { Text(label) }
-                    )
+                Text(
+                    text = titleText,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    languageOptions.forEach { (tag, label) ->
+                        FilterChip(
+                            selected = selected == tag,
+                            onClick = { selected = tag },
+                            label = {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(cancelText)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    TextButton(onClick = { onConfirm(selected) }) {
+                        Text(confirmText)
+                    }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(selected) }) {
-                Text(confirmText)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(cancelText)
-            }
         }
-    )
+    }
 }
 
 @Composable
@@ -574,8 +605,8 @@ private fun DnsSettingsDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
         ) {
             Column(

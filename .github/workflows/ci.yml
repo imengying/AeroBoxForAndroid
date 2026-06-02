@@ -8,6 +8,7 @@ on:
       - "**"
     tags-ignore:
       - "v*"
+      - "beta"
 
 permissions:
   contents: read
@@ -68,32 +69,74 @@ jobs:
           set -euo pipefail
           gradle --stacktrace :app:assembleRelease
 
-      - name: Build installable debug APK
+      - name: Build installable beta APK
         if: github.event_name != 'pull_request'
         run: |
           set -euo pipefail
-          gradle --stacktrace :app:assembleDebug
+          gradle --stacktrace :app:assembleBeta
 
-      - name: Prepare debug APK artifacts
+      - name: Sign beta APKs (v3 only)
         if: github.event_name != 'pull_request'
-        env:
-          CI_REF_NAME: ${{ github.ref_name }}
-          CI_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          SRC_DIR="${GITHUB_WORKSPACE}/app/build/outputs/apk/debug"
+          SRC_DIR="${GITHUB_WORKSPACE}/app/build/outputs/apk/beta"
+          APKSIGNER="${ANDROID_SDK_ROOT}/build-tools/36.0.0/apksigner"
+          KEYSTORE_PATH="${RUNNER_TEMP}/beta-debug.jks"
+
+          if [ ! -x "${APKSIGNER}" ]; then
+            echo "::error::apksigner not found at ${APKSIGNER}"
+            exit 1
+          fi
+
+          keytool -genkeypair \
+            -keystore "${KEYSTORE_PATH}" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+          shopt -s nullglob
+          APKS=("${SRC_DIR}"/*.apk)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::error::No beta APK files found in ${SRC_DIR}"
+            exit 1
+          fi
+
+          for apk in "${APKS[@]}"; do
+            signed_apk="${apk%.apk}-signed.apk"
+            "${APKSIGNER}" sign \
+              --ks "${KEYSTORE_PATH}" \
+              --ks-key-alias androiddebugkey \
+              --ks-pass pass:android \
+              --key-pass pass:android \
+              --v1-signing-enabled false \
+              --v2-signing-enabled false \
+              --v3-signing-enabled true \
+              --v4-signing-enabled false \
+              --out "${signed_apk}" \
+              "${apk}"
+
+            mv -f "${signed_apk}" "${apk}"
+            "${APKSIGNER}" verify --min-sdk-version 31 --verbose "${apk}"
+          done
+
+      - name: Prepare beta APK artifacts
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          SRC_DIR="${GITHUB_WORKSPACE}/app/build/outputs/apk/beta"
           DIST_DIR="${SRC_DIR}/dist"
           mkdir -p "${DIST_DIR}"
 
           shopt -s nullglob
           APKS=("${SRC_DIR}"/*.apk)
           if [ "${#APKS[@]}" -eq 0 ]; then
-            echo "::error::No debug APK files found in ${SRC_DIR}"
+            echo "::error::No beta APK files found in ${SRC_DIR}"
             exit 1
           fi
-
-          SHORT_SHA="${CI_SHA::7}"
-          SAFE_REF="$(printf '%s' "${CI_REF_NAME}" | tr '/:@' '---')"
 
           for apk in "${APKS[@]}"; do
             filename="$(basename "${apk}")"
@@ -104,10 +147,10 @@ jobs:
               *x86_64*) abi="x86_64" ;;
               *x86*) abi="x86" ;;
             esac
-            cp -f "${apk}" "${DIST_DIR}/AeroBox-${SAFE_REF}-${SHORT_SHA}-${abi}-debug.apk"
+            cp -f "${apk}" "${DIST_DIR}/AeroBox-${abi}.apk"
           done
 
-          echo "Prepared debug APK outputs:"
+          echo "Prepared beta APK outputs:"
           ls -la "${DIST_DIR}"
 
       - name: Debug logs on failure
@@ -121,12 +164,12 @@ jobs:
             find "${GITHUB_WORKSPACE}/app/build/outputs" -maxdepth 5 -print | sort
           fi
 
-      - name: Upload installable debug APKs
+      - name: Upload installable beta APKs
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v7
         with:
-          name: aerobox-ci-debug-apks
-          path: app/build/outputs/apk/debug/dist/*.apk
+          name: aerobox-ci-beta-apks
+          path: app/build/outputs/apk/beta/dist/*.apk
           if-no-files-found: error
 
   prerelease:
@@ -141,10 +184,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download debug APK artifacts
+      - name: Download beta APK artifacts
         uses: actions/download-artifact@v7
         with:
-          name: aerobox-ci-debug-apks
+          name: aerobox-ci-beta-apks
           path: apk/
 
       - name: Delete Pre-Release and move beta tag
@@ -172,5 +215,5 @@ jobs:
 
           gh release create beta "${APKS[@]}" \
             --title "beta" \
-            --notes "此版本为测试版，使用调试签名，可能存在不稳定情况，升级前请务必备份好数据。" \
+            --notes "此版本为测试版，使用 v3-only 调试签名，并启用正式版同等压缩优化；可能存在不稳定情况，升级前请务必备份好数据。" \
             --prerelease

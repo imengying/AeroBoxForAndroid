@@ -21,11 +21,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
@@ -226,49 +227,64 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     }
 
     connectionIssue?.let { issue ->
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissConnectionIssue() },
-            title = { Text(stringResource(issue.titleResId)) },
-            text = {
-                Text(
-                    buildString {
-                        append(stringResource(issue.messageResId))
-                        if (issue.rawError.isNotBlank()) {
-                            append("\n\n")
-                            append(stringResource(R.string.connection_issue_raw_error_prefix))
-                            append(issue.rawError.take(220))
+        Dialog(onDismissRequest = { viewModel.dismissConnectionIssue() }) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = stringResource(issue.titleResId),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = buildString {
+                            append(stringResource(issue.messageResId))
+                            if (issue.rawError.isNotBlank()) {
+                                append("\n\n")
+                                append(stringResource(R.string.connection_issue_raw_error_prefix))
+                                append(issue.rawError.take(220))
+                            }
+                        },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
+                            Text(
+                                stringResource(
+                                    if (issue.fixAction == ConnectionFixAction.REFRESH_SUBSCRIPTIONS) {
+                                        R.string.connection_issue_dismiss_for_now
+                                    } else {
+                                        R.string.cancel
+                                    }
+                                )
+                            )
+                        }
+                        val action = issue.fixAction
+                        if (action != null) {
+                            TextButton(onClick = { viewModel.applyConnectionFix(action) }) {
+                                Text(stringResource(action.labelResId))
+                            }
+                        } else {
+                            TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
+                                Text(stringResource(R.string.confirm))
+                            }
                         }
                     }
-                )
-            },
-            confirmButton = {
-                val action = issue.fixAction
-                if (action != null) {
-                    TextButton(
-                        onClick = { viewModel.applyConnectionFix(action) }
-                    ) {
-                        Text(stringResource(action.labelResId))
-                    }
-                } else {
-                    TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
-                        Text(stringResource(R.string.confirm))
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
-                    Text(
-                        stringResource(
-                            if (issue.fixAction == ConnectionFixAction.REFRESH_SUBSCRIPTIONS) {
-                                R.string.connection_issue_dismiss_for_now
-                            } else {
-                                R.string.cancel
-                            }
-                        )
-                    )
                 }
             }
-        )
+        }
     }
 }
 

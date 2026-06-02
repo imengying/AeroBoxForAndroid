@@ -1,10 +1,14 @@
 package com.aerobox.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -12,6 +16,7 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -19,11 +24,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.aerobox.R
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.ImportGroupTarget
@@ -59,12 +66,6 @@ data class GroupPickerState(
             }
         }
     }
-
-    val isValid: Boolean
-        get() = when (option) {
-            is GroupPickerOption.New -> newGroupName.isNotBlank()
-            else -> true
-        }
 }
 
 @Composable
@@ -232,17 +233,28 @@ fun GroupPickerDialog(
     )
 
     ProvideAppLocale {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text(resolvedChooseGroupText) },
-            text = {
-                Column {
+        Dialog(onDismissRequest = onDismiss) {
+            Surface(
+                modifier = Modifier.width(320.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = resolvedChooseGroupText,
+                        style = MaterialTheme.typography.titleMedium
+                    )
                     Text(
                         text = resolvedImportNodeCountText,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(Modifier.height(12.dp))
                     GroupPickerSection(
                         holder = holder,
                         localGroups = localGroups,
@@ -252,28 +264,30 @@ fun GroupPickerDialog(
                         newGroupNameHint = resolvedNewGroupNameHint,
                         nodeCountSuffix = nodeCountSuffix
                     )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onConfirm(
-                            holder.state.toTarget(
-                                fallbackName = suggestedName,
-                                defaultName = resolvedDefaultLocalGroupName
-                            )
-                        )
-                    },
-                    enabled = holder.state.isValid
-                ) {
-                    Text(resolvedConfirmText)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(resolvedCancelText)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(resolvedCancelText)
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(
+                            onClick = {
+                                onConfirm(
+                                    holder.state.toTarget(
+                                        fallbackName = suggestedName,
+                                        defaultName = resolvedDefaultLocalGroupName
+                                    )
+                                )
+                            }
+                        ) {
+                            Text(resolvedConfirmText)
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 }

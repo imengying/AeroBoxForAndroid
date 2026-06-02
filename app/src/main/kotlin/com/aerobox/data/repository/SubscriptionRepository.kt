@@ -346,15 +346,7 @@ class SubscriptionRepository(context: Context) {
     }
 
     suspend fun createLocalGroup(name: String): Long {
-        val trimmed = name.trim().ifBlank { appContext.getString(R.string.local_group_label) }
-        val subscription = Subscription(
-            name = trimmed,
-            url = "",
-            autoUpdate = false,
-            updateInterval = DEFAULT_UPDATE_INTERVAL_MS,
-            createdAt = System.currentTimeMillis()
-        )
-        return subscriptionDao.insert(subscription)
+        return subscriptionDao.insert(buildLocalGroup(name))
     }
 
     suspend fun refreshAllSubscriptions(subscriptions: List<Subscription>): List<Result<SubscriptionUpdateResult>> {
@@ -463,31 +455,32 @@ class SubscriptionRepository(context: Context) {
     ): Result<Long> {
         if (nodeIds.isEmpty()) return Result.success(0L)
         return runCatching {
-            val targetId = when (target) {
-                is ImportGroupTarget.Ungrouped -> 0L
-                is ImportGroupTarget.Existing -> {
-                    val existing = subscriptionDao.getById(target.subscriptionId)
-                        ?: throw IllegalStateException(appContext.getString(R.string.error_target_group_not_found))
-                    if (!existing.isLocalGroup()) {
-                        throw IllegalStateException(LOCAL_GROUP_TARGET_INVALID_ERROR)
-                    }
-                    existing.id
-                }
-                is ImportGroupTarget.New -> createLocalGroup(target.name)
-            }
-
-            val affectedSourceIds = nodeIds
-                .mapNotNull { proxyNodeDao.getNodeById(it)?.subscriptionId }
-                .toSet()
-
             database.withTransaction {
+                val affectedSourceIds = nodeIds
+                    .mapNotNull { proxyNodeDao.getNodeById(it)?.subscriptionId }
+                    .toSet()
+                if (affectedSourceIds.isEmpty()) return@withTransaction 0L
+
+                val targetId = when (target) {
+                    is ImportGroupTarget.Ungrouped -> 0L
+                    is ImportGroupTarget.Existing -> {
+                        val existing = subscriptionDao.getById(target.subscriptionId)
+                            ?: throw IllegalStateException(appContext.getString(R.string.error_target_group_not_found))
+                        if (!existing.isLocalGroup()) {
+                            throw IllegalStateException(LOCAL_GROUP_TARGET_INVALID_ERROR)
+                        }
+                        existing.id
+                    }
+                    is ImportGroupTarget.New -> subscriptionDao.insert(buildLocalGroup(target.name))
+                }
+
                 proxyNodeDao.moveNodesToSubscription(nodeIds, targetId)
                 recomputeLocalGroupCount(targetId)
                 affectedSourceIds.forEach { sourceId ->
                     if (sourceId != targetId) recomputeLocalGroupCount(sourceId)
                 }
+                targetId
             }
-            targetId
         }
     }
 
@@ -544,23 +537,49 @@ class SubscriptionRepository(context: Context) {
     ): SubscriptionImportResult {
         val trimmedName = name.trim().ifBlank { prepared.resolvedName?.trim().orEmpty() }
             .ifBlank { appContext.getString(R.string.local_group_label) }
-        val subscriptionId = createLocalGroup(trimmedName)
-        val nodes = prepareNodesForLocalGroup(
-            prepared = prepared,
-            subscriptionId = subscriptionId,
-            existingFingerprints = emptySet()
-        )
-        if (nodes.isEmpty()) {
-            // Dedup yielded nothing — roll back the just-created group so we
-            // don't leave an empty ghost. (Only safe here because we created
-            // the group in this call; other paths must never delete.)
-            subscriptionDao.deleteById(subscriptionId)
+        if (prepared.nodes.isEmpty()) {
+            return persistLocalImportNodes(
+                subscriptionId = 0L,
+                subscriptionName = trimmedName,
+                nodes = emptyList(),
+                prepared = prepared
+            )
         }
-        return persistLocalImportNodes(
-            subscriptionId = subscriptionId.takeIf { nodes.isNotEmpty() } ?: 0L,
-            subscriptionName = trimmedName,
-            nodes = nodes,
-            prepared = prepared
+
+        val (subscriptionId, nodes) = database.withTransaction {
+            val insertedId = subscriptionDao.insert(buildLocalGroup(trimmedName))
+            val preparedNodes = prepareNodesForLocalGroup(
+                prepared = prepared,
+                subscriptionId = insertedId,
+                existingFingerprints = emptySet()
+            )
+            proxyNodeDao.insertAll(preparedNodes)
+            recomputeLocalGroupCount(insertedId)
+            insertedId to preparedNodes
+        }
+
+        logImportDiagnostics(
+            action = "import",
+            subscriptionName = trimmedName.ifBlank { "inline-import" },
+            diagnostics = prepared.diagnostics
+        )
+        return SubscriptionImportResult(
+            subscriptionId = subscriptionId,
+            nodeCount = nodes.size,
+            metadataFromHeader = prepared.metadataFromHeader,
+            diagnostics = prepared.diagnostics,
+            insecureNodeCount = nodes.count { it.allowInsecure }
+        )
+    }
+
+    private fun buildLocalGroup(name: String): Subscription {
+        val trimmed = name.trim().ifBlank { appContext.getString(R.string.local_group_label) }
+        return Subscription(
+            name = trimmed,
+            url = "",
+            autoUpdate = false,
+            updateInterval = DEFAULT_UPDATE_INTERVAL_MS,
+            createdAt = System.currentTimeMillis()
         )
     }
 
