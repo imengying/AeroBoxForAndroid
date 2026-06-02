@@ -193,21 +193,21 @@ private fun NotificationSwitchDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .padding(start = 14.dp, top = 10.dp, end = 14.dp, bottom = 6.dp)
             ) {
                 Text(
                     text = stringResource(R.string.switch_node_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
 
                 var selectedGroupIndex by remember { mutableStateOf(0) }
 
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(bottom = 6.dp)
                 ) {
                     items(count = groupedNodes.size) { index ->
                         val (subId, _) = groupedNodes[index]
@@ -230,8 +230,8 @@ private fun NotificationSwitchDialog(
 
                 LazyColumn(
                     modifier = Modifier.heightIn(max = 340.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 4.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(vertical = 2.dp)
                 ) {
                     if (groupedNodes.isNotEmpty() && selectedGroupIndex < groupedNodes.size) {
                         val (_, nodes) = groupedNodes[selectedGroupIndex]
@@ -246,10 +246,10 @@ private fun NotificationSwitchDialog(
                                 enabled = pendingNodeId == null,
                                 modifier = Modifier
                                     .fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp)
+                                shape = RoundedCornerShape(14.dp)
                             ) {
                                 Column(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
                                 ) {
                                     Text(
                                         text = node.name,
@@ -276,7 +276,10 @@ private fun NotificationSwitchDialog(
 
                 TextButton(
                     onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.End)
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .heightIn(min = 36.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                 ) {
                     Text(stringResource(R.string.cancel))
                 }

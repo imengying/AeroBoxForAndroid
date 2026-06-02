@@ -50,6 +50,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,6 +78,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
@@ -942,11 +944,24 @@ private fun SubscriptionEditorDialog(
     val urlValid = isLocalGroup || url.isNotBlank()
 
     ProvideAppLocale {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text(title) },
-            text = {
-                Column {
+        Dialog(onDismissRequest = onDismiss) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Spacer(Modifier.height(16.dp))
+
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
@@ -1006,34 +1021,40 @@ private fun SubscriptionEditorDialog(
                             )
                         }
                     }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val minutes = if (autoUpdate && !isLocalGroup) {
-                            (intervalMinutes ?: DEFAULT_INTERVAL_MINUTES).coerceAtLeast(MIN_INTERVAL_MINUTES)
-                        } else {
-                            DEFAULT_INTERVAL_MINUTES
+
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) {
+                            Text(cancelText)
                         }
-                        onConfirm(
-                            name.trim(),
-                            if (isLocalGroup) "" else url.trim(),
-                            if (isLocalGroup) false else autoUpdate,
-                            minutes * 60_000L
-                        )
-                    },
-                    enabled = name.isNotBlank() && urlValid && intervalValid
-                ) {
-                    Text(confirmText)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text(cancelText)
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(
+                            onClick = {
+                                val minutes = if (autoUpdate && !isLocalGroup) {
+                                    (intervalMinutes ?: DEFAULT_INTERVAL_MINUTES)
+                                        .coerceAtLeast(MIN_INTERVAL_MINUTES)
+                                } else {
+                                    DEFAULT_INTERVAL_MINUTES
+                                }
+                                onConfirm(
+                                    name.trim(),
+                                    if (isLocalGroup) "" else url.trim(),
+                                    if (isLocalGroup) false else autoUpdate,
+                                    minutes * 60_000L
+                                )
+                            },
+                            enabled = name.isNotBlank() && urlValid && intervalValid
+                        ) {
+                            Text(confirmText)
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 }
 

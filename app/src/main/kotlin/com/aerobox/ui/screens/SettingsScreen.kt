@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -22,7 +24,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -41,6 +45,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
@@ -460,21 +465,44 @@ private fun AppUpdateDialog(
     onDismiss: () -> Unit,
     onOpenRelease: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(titleText) },
-        text = { Text(messageText) },
-        confirmButton = {
-            TextButton(onClick = onOpenRelease) {
-                Text(openText)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(cancelText)
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
+            ) {
+                Text(
+                    text = titleText,
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = messageText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(cancelText)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = onOpenRelease) {
+                        Text(openText)
+                    }
+                }
             }
         }
-    )
+    }
 }
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
@@ -543,11 +571,23 @@ private fun DnsSettingsDialog(
     var remote by remember { mutableStateOf(remoteDns) }
     var direct by remember { mutableStateOf(directDns) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(titleText) },
-        text = {
-            Column {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
+            ) {
+                Text(
+                    text = titleText,
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = remote,
                     onValueChange = { remote = it },
@@ -565,19 +605,28 @@ private fun DnsSettingsDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(remote.trim(), direct.trim()) },
-                enabled = remote.isNotBlank() && direct.isNotBlank()
-            ) { Text(confirmText) }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = onReset) { Text(resetText) }
-                TextButton(onClick = onDismiss) { Text(cancelText) }
+
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onReset) {
+                        Text(resetText)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onDismiss) {
+                        Text(cancelText)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        onClick = { onConfirm(remote.trim(), direct.trim()) },
+                        enabled = remote.isNotBlank() && direct.isNotBlank()
+                    ) {
+                        Text(confirmText)
+                    }
+                }
             }
         }
-    )
+    }
 }
