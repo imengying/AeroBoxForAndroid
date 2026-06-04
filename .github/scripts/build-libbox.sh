@@ -8,6 +8,13 @@ set -euo pipefail
 : "${LIBBOX_BUILD_TAGS:?LIBBOX_BUILD_TAGS is required}"
 : "${SING_BOX_VERSION:?SING_BOX_VERSION is required}"
 
+for disabled_tag in tailscale wireguard ssh; do
+  if [[ ",${LIBBOX_BUILD_TAGS}," == *"${disabled_tag}"* ]]; then
+    echo "::error::${disabled_tag} must not be present in LIBBOX_BUILD_TAGS"
+    exit 1
+  fi
+done
+
 # Install gomobile / gobind (same version as SFA official)
 go install github.com/sagernet/gomobile/cmd/gomobile@"${GOMOBILE_VERSION}"
 go install github.com/sagernet/gomobile/cmd/gobind@"${GOMOBILE_VERSION}"

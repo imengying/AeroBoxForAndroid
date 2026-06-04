@@ -57,7 +57,7 @@ internal object JsonNodeParser {
             val udpOverTcp = UriNodeParser.parseUdpOverTcp(obj.opt("udp_over_tcp"))
             val typeRaw = obj.optString("type", obj.optString("protocol", "")).lowercase()
             val type = when {
-                typeRaw.contains("shadow") -> {
+                typeRaw == "ss" || typeRaw == "shadowsocks" -> {
                     val method = obj.optString("method")
                     if (method.startsWith("2022-")) ProxyType.SHADOWSOCKS_2022 else ProxyType.SHADOWSOCKS
                 }
@@ -73,6 +73,12 @@ internal object JsonNodeParser {
                     diagnostics = diagnostics.withIgnored("unsupported_json_type")
                     continue
                 }
+            }
+            if ((type == ProxyType.SHADOWSOCKS || type == ProxyType.SHADOWSOCKS_2022) &&
+                obj.optString("plugin", "").equals("shadow-tls", ignoreCase = true)
+            ) {
+                diagnostics = diagnostics.withIgnored("unsupported_json_type")
+                continue
             }
 
             val server = obj.optString("server", obj.optString("address", ""))

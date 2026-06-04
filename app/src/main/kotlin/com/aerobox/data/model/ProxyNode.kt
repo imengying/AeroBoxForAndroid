@@ -113,9 +113,8 @@ data class ProxyNode(
     val naiveEchConfig: String? = null,
     val naiveEchConfigPath: String? = null,
     val naiveEchQueryServerName: String? = null,
-    // ShadowTLS handshake layer. When a Shadowsocks node carries
-    // plugin=shadow-tls, OutboundConfigBuilder emits a paired shadowtls
-    // outbound and routes the SS outbound to it via detour.
+    // Legacy Room v1 columns kept for schema compatibility. ShadowTLS is not
+    // part of the supported proxy protocol set and is no longer parsed.
     val shadowTlsVersion: Int? = null,
     val shadowTlsPassword: String? = null,
     val shadowTlsServerName: String? = null,

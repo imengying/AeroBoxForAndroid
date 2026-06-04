@@ -32,16 +32,14 @@ internal object OutboundConfigBuilder {
         when (node.type) {
             ProxyType.SHADOWSOCKS,
             ProxyType.SHADOWSOCKS_2022 -> {
+                if (isUnsupportedShadowTlsNode(node)) {
+                    throw LocalizedException.of(R.string.error_unsupported_proxy_protocol, "ShadowTLS")
+                }
                 outbound.put("type", "shadowsocks")
                 outbound.put("method", node.method ?: "aes-128-gcm")
                 node.password?.takeIf { it.isNotBlank() }?.let { outbound.put("password", it) }
-                if (!hasShadowTlsCompanion(node)) {
-                    // sing-box doesn't accept plugin=shadow-tls on the SS outbound;
-                    // the handshake is emitted as a separate `shadowtls` outbound
-                    // (see buildShadowTlsCompanion) and chained via `detour`.
-                    node.plugin?.takeIf { it.isNotBlank() }?.let { outbound.put("plugin", it) }
-                    node.pluginOpts?.takeIf { it.isNotBlank() }?.let { outbound.put("plugin_opts", it) }
-                }
+                node.plugin?.takeIf { it.isNotBlank() }?.let { outbound.put("plugin", it) }
+                node.pluginOpts?.takeIf { it.isNotBlank() }?.let { outbound.put("plugin_opts", it) }
                 enabledNetwork?.let { outbound.put("network", it) }
                 buildUdpOverTcp(node.udpOverTcpEnabled, node.udpOverTcpVersion)?.let {
                     outbound.put("udp_over_tcp", it)
@@ -193,72 +191,14 @@ internal object OutboundConfigBuilder {
         }
     }
 
-    /**
-     * Whether the given node should be paired with a sibling `shadowtls`
-     * outbound. True when the user imported a Shadowsocks node that originally
-     * carried a `shadow-tls` plugin in its Clash / SS-URI form.
-     */
-    internal fun hasShadowTlsCompanion(node: ProxyNode): Boolean {
+    private fun isUnsupportedShadowTlsNode(node: ProxyNode): Boolean {
         if (node.type != ProxyType.SHADOWSOCKS && node.type != ProxyType.SHADOWSOCKS_2022) {
             return false
         }
-        return !node.shadowTlsPassword.isNullOrBlank() ||
+        return node.plugin.equals("shadow-tls", ignoreCase = true) ||
+            !node.shadowTlsPassword.isNullOrBlank() ||
             !node.shadowTlsServerName.isNullOrBlank() ||
             (node.shadowTlsVersion != null && node.shadowTlsVersion > 0)
-    }
-
-    /**
-     * Build the companion `shadowtls` outbound that performs the TLS-style
-     * handshake on behalf of the paired Shadowsocks outbound. Returns null
-     * when the node does not use ShadowTLS.
-     *
-     * The caller is responsible for adding `"detour": companion.tag` to the
-     * primary SS outbound — see [ConfigGenerator.generateSingBoxConfig].
-     */
-    internal fun buildShadowTlsCompanion(node: ProxyNode, primaryTag: String): JSONObject? {
-        if (!hasShadowTlsCompanion(node)) return null
-        val cleanServer = ConfigGenerator.normalizeOutboundServer(node.server)
-        if (cleanServer.isBlank()) return null
-
-        val tag = "$primaryTag-shadowtls"
-        val outbound = JSONObject()
-            .put("type", "shadowtls")
-            .put("tag", tag)
-            .put("server", cleanServer)
-            .put("server_port", node.port)
-        // sing-box supports ShadowTLS v1/v2/v3; default to v3 (most common).
-        outbound.put(
-            "version",
-            node.shadowTlsVersion?.takeIf { it in 1..3 } ?: 3
-        )
-        node.shadowTlsPassword
-            ?.takeIf { it.isNotBlank() }
-            ?.let { outbound.put("password", it) }
-
-        val tls = JSONObject().put("enabled", true)
-        val sni = node.shadowTlsServerName?.takeIf { it.isNotBlank() }
-            ?: node.sni?.takeIf { it.isNotBlank() }
-        sni?.let { tls.put("server_name", it) }
-
-        val alpnSource = node.shadowTlsAlpn?.takeIf { it.isNotBlank() }
-            ?: node.alpn?.takeIf { it.isNotBlank() }
-        if (alpnSource != null) {
-            val alpnArray = JSONArray()
-            alpnSource.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                .forEach { alpnArray.put(it) }
-            if (alpnArray.length() > 0) tls.put("alpn", alpnArray)
-        }
-        if (node.allowInsecure) tls.put("insecure", true)
-        if (!node.fingerprint.isNullOrBlank()) {
-            tls.put(
-                "utls",
-                JSONObject()
-                    .put("enabled", true)
-                    .put("fingerprint", node.fingerprint)
-            )
-        }
-        outbound.put("tls", tls)
-        return outbound
     }
 
     private fun applyDialFields(outbound: JSONObject, node: ProxyNode) {

@@ -92,6 +92,9 @@ object ClashParser {
             "http", "https" -> ProxyType.HTTP
             else -> return ProxyParseResult.Ignored("unsupported_clash_type")
         }
+        if ((type == ProxyType.SHADOWSOCKS || type == ProxyType.SHADOWSOCKS_2022) && isShadowTlsSsPlugin(map)) {
+            return ProxyParseResult.Ignored("unsupported_clash_type")
+        }
         val hysteriaServerPorts = firstNonBlank(
             joinedValue(map, "server-ports"),
             joinedValue(map, "server_ports"),
@@ -372,35 +375,6 @@ object ClashParser {
                 stringValue(echOptions, "query_server_name"),
                 stringValue(map, "ech-query-server-name"),
                 stringValue(map, "ech_query_server_name")
-            ),
-            // Shadowsocks plugin "shadow-tls" → flatten plugin-opts into the
-            // dedicated shadowTls* columns so OutboundConfigBuilder can emit
-            // a paired sing-box `shadowtls` outbound. We still keep the
-            // original plugin/pluginOpts strings on the node for display,
-            // but the SS outbound itself will skip them when these are set.
-            shadowTlsVersion = if (isShadowTlsSsPlugin(map)) {
-                intValue(map, "plugin-opts", "version") ?: intValue(map, "plugin_opts", "version")
-            } else null,
-            shadowTlsPassword = if (isShadowTlsSsPlugin(map)) {
-                firstNonBlank(
-                    stringValue(map, "plugin-opts", "password"),
-                    stringValue(map, "plugin_opts", "password")
-                )
-            } else null,
-            shadowTlsServerName = if (isShadowTlsSsPlugin(map)) {
-                firstNonBlank(
-                    stringValue(map, "plugin-opts", "host"),
-                    stringValue(map, "plugin_opts", "host"),
-                    stringValue(map, "plugin-opts", "server-name"),
-                    stringValue(map, "plugin_opts", "server_name")
-                )
-            } else null,
-            shadowTlsAlpn = if (isShadowTlsSsPlugin(map)) {
-                firstNonBlank(
-                    joinedValue(map, "plugin-opts", "alpn"),
-                    joinedValue(map, "plugin_opts", "alpn")
-                )
-            } else null
             )
         )
     }

@@ -159,6 +159,7 @@
     <!-- Backend error messages -->
     <string name="error_node_server_empty">Адрес сервера узла пуст</string>
     <string name="error_reality_requires_sni">Узлам Reality требуется явный SNI, если сервер задан IP-адресом</string>
+    <string name="error_unsupported_proxy_protocol">%1$s не является поддерживаемым прокси-протоколом</string>
     <string name="error_no_new_nodes_imported">Новые узлы не импортированы; идентичные конфигурации, возможно, уже существуют</string>
     <string name="imported_node_default_name_format">Импортированный узел %1$d</string>
     <string name="error_dns_address_invalid_format">Адрес «%1$s» некорректен</string>

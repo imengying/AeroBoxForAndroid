@@ -159,6 +159,7 @@
     <!-- Backend error messages -->
     <string name="error_node_server_empty">節點伺服器位址為空</string>
     <string name="error_reality_requires_sni">Reality 節點使用 IP 位址時必須明確填寫 SNI</string>
+    <string name="error_unsupported_proxy_protocol">%1$s 不是支援的代理協定</string>
     <string name="error_no_new_nodes_imported">未匯入新節點，可能已存在相同設定</string>
     <string name="imported_node_default_name_format">匯入節點 %1$d</string>
     <string name="error_dns_address_invalid_format">%1$s 位址無效</string>

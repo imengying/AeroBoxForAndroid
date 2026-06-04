@@ -159,6 +159,7 @@
     <!-- Backend error messages -->
     <string name="error_node_server_empty">آدرس سرور گره خالی است</string>
     <string name="error_reality_requires_sni">برای گره‌های Reality زمانی که سرور با آدرس IP مشخص شده، باید SNI به‌صورت صریح وارد شود</string>
+    <string name="error_unsupported_proxy_protocol">%1$s یک پروتکل پراکسی پشتیبانی‌شده نیست</string>
     <string name="error_no_new_nodes_imported">گره جدیدی وارد نشد؛ ممکن است پیکربندی‌های یکسان از قبل وجود داشته باشند</string>
     <string name="imported_node_default_name_format">گره واردشده %1$d</string>
     <string name="error_dns_address_invalid_format">آدرس «%1$s» نامعتبر است</string>

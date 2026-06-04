@@ -38,7 +38,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
         with:
-          gradle-version: "9.4.1"
+          gradle-version: "9.5.1"
 
       - name: Set up Android SDK
         run: bash .github/scripts/setup-android-sdk.sh
