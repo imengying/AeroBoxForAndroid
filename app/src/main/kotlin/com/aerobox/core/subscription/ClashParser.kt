@@ -377,6 +377,7 @@ object ClashParser {
                 stringValue(map, "ech_query_server_name")
             )
         )
+        )
     }
 
     private fun isShadowTlsSsPlugin(map: Map<*, *>): Boolean {
