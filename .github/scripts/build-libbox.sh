@@ -31,6 +31,7 @@ fi
 # effects. Keep these patches explicit and fail loudly if upstream refactors the
 # target blocks.
 python3 "${GITHUB_WORKSPACE}/.github/scripts/patch-sing-box-box-go.py"
+python3 "${GITHUB_WORKSPACE}/.github/scripts/patch-sing-box-libbox-slim.py"
 
 cp "${GITHUB_WORKSPACE}/.github/libbox/urltest_export.go" experimental/libbox/urltest_export.go
 gofmt -w experimental/libbox/urltest_export.go

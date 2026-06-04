@@ -458,12 +458,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         // Not applicable to VPN mode
     }
 
-    override fun triggerNativeCrash() {
-        Log.w(TAG, "Ignoring libbox native crash request")
-    }
-
-    override fun connectSSHAgent(): Int = -1
-
     override fun writeDebugMessage(message: String) {
         val (level, body) = parseCoreLogLevel(message)
         RuntimeLogBuffer.append(level, body)

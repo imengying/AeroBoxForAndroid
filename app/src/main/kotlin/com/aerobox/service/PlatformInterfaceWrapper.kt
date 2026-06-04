@@ -7,10 +7,7 @@ import io.nekohasekai.libbox.InterfaceUpdateListener
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.LocalDNSTransport
 import io.nekohasekai.libbox.NetworkInterfaceIterator
-import io.nekohasekai.libbox.NeighborUpdateListener
 import io.nekohasekai.libbox.PlatformInterface
-import io.nekohasekai.libbox.PlatformUser
-import io.nekohasekai.libbox.ShellSession
 import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
@@ -129,33 +126,6 @@ interface PlatformInterfaceWrapper : PlatformInterface {
     override fun readWIFIState(): WIFIState? = null
 
     override fun localDNSTransport(): LocalDNSTransport? = LocalResolverTransport
-
-    override fun usePlatformShell(): Boolean = false
-
-    override fun checkPlatformShell() {}
-
-    override fun lookupUser(username: String): PlatformUser = error("platform shell is not supported")
-
-    override fun openShellSession(
-        user: PlatformUser,
-        command: String,
-        environ: StringIterator,
-        term: String,
-        rows: Int,
-        cols: Int
-    ): ShellSession = error("platform shell is not supported")
-
-    override fun lookupSFTPServer(): String = ""
-
-    override fun readSystemSSHHostKey(): String = ""
-
-    override fun tailscaleHostname(): String = ""
-
-    override fun startNeighborMonitor(listener: NeighborUpdateListener) {}
-
-    override fun closeNeighborMonitor(listener: NeighborUpdateListener) {}
-
-    override fun registerMyInterface(name: String) {}
 
     override fun systemCertificates(): StringIterator {
         // Wrap the whole walk: KeyStore.load / aliases / getCertificate may
