@@ -405,12 +405,9 @@ def patch_setup() -> None:
         "import (\n"
         "\t\"os\"\n"
         "\t\"runtime/debug\"\n"
-        "\t\"time\"\n"
         "\n"
         "\tC \"github.com/sagernet/sing-box/constant\"\n"
         "\t\"github.com/sagernet/sing-box/experimental/locale\"\n"
-        "\t\"github.com/sagernet/sing-box/log\"\n"
-        "\t\"github.com/sagernet/sing/common/byteformats\"\n"
         ")\n"
     )
     text = text.replace(old_import, new_import, 1)
