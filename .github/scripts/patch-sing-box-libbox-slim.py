@@ -472,12 +472,12 @@ def patch_daemon() -> None:
             "github.com/sagernet/sing-box/common/networkquality",
             "github.com/sagernet/sing-box/common/stun",
             "github.com/sagernet/sing-box/service/oomkiller",
-            "github.com/sagernet/sing/service",
             "google.golang.org/grpc/codes",
             "google.golang.org/grpc/status",
         ],
     )
     text = read("daemon/started_service.go")
+    text = text.replace('\tC "github.com/sagernet/sing-box/constant"\n', "", 1)
     for start_marker, end_marker, replacement in [
         (
             "\nfunc (s *StartedService) TriggerDebugCrash(ctx context.Context, request *DebugCrashRequest) (*emptypb.Empty, error) {",
@@ -515,6 +515,10 @@ def patch_daemon() -> None:
             "\n"
             "func (s *StartedService) TailscaleLogout(ctx context.Context, request *TailscaleLogoutRequest) (*emptypb.Empty, error) {\n"
             "\treturn &emptypb.Empty{}, nil\n"
+            "}\n"
+            "\n"
+            "\nfunc (s *StartedService) StartTailscaleSSHSession(server grpc.BidiStreamingServer[TailscaleSSHClientMessage, TailscaleSSHServerMessage]) error {\n"
+            "\treturn nil\n"
             "}\n",
         ),
     ]:
