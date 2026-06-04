@@ -458,6 +458,12 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         // Not applicable to VPN mode
     }
 
+    override fun triggerNativeCrash() {
+        Log.w(TAG, "Ignoring libbox native crash request")
+    }
+
+    override fun connectSSHAgent(): Int = -1
+
     override fun writeDebugMessage(message: String) {
         val (level, body) = parseCoreLogLevel(message)
         RuntimeLogBuffer.append(level, body)
@@ -516,7 +522,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             val inet6Routes = drainRouteAddresses(options.inet6RouteAddress)
             val inet4ExcludedRoutes = drainRouteAddresses(options.inet4RouteExcludeAddress)
             val inet6ExcludedRoutes = drainRouteAddresses(options.inet6RouteExcludeAddress)
-            val vpnDns = options.dnsServerAddress.value.trim().takeIf { it.isNotEmpty() }
+            val vpnDns = readStringIteratorValue(options.dnsServerAddress)
 
             vpnDns?.let { builder.addDnsServer(it) }
             // Add an IPv6 DNS server so Android advertises IPv6 capability
@@ -665,6 +671,20 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     private fun readStringMember(target: Any, memberName: String): String? {
         return resolveNoArgMember(target, memberName)?.toString()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun readStringIteratorValue(target: Any?): String? {
+        if (target == null) return null
+        if (target is String) return target.trim().takeIf { it.isNotEmpty() }
+
+        readStringMember(target, "value")?.let { return it.trim().takeIf { value -> value.isNotEmpty() } }
+
+        val values = mutableListOf<String>()
+        while (iteratorHasNext(target)) {
+            val value = iteratorNext(target)?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: continue
+            values += value
+        }
+        return values.firstOrNull()
     }
 
     private fun readIntMember(target: Any, memberName: String): Int? {
