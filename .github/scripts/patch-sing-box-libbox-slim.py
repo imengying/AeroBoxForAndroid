@@ -342,7 +342,9 @@ def patch_command_client() -> None:
     text = read("experimental/libbox/command_client.go")
     start = text.index("\nfunc (c *CommandClient) TriggerGoCrash() error {")
     end = text.index("\nfunc (c *CommandClient) GetDeprecatedNotes()", start)
-    write("experimental/libbox/command_client.go", text[:start] + text[end:])
+    text = text[:start] + text[end:]
+    start = text.index("\nfunc (c *CommandClient) StartNetworkQualityTest(")
+    write("experimental/libbox/command_client.go", text[:start])
 
 
 def patch_command_server() -> None:
@@ -537,6 +539,7 @@ def main() -> None:
         "experimental/libbox/command_types_tailscale_ping.go",
         "experimental/libbox/command_types_tailscale_ssh.go",
         "experimental/libbox/debug.go",
+        "experimental/libbox/log.go",
         "experimental/libbox/networkquality.go",
         "experimental/libbox/stun.go",
         "experimental/libbox/ssh_shell.go",
