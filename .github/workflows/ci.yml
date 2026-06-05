@@ -179,29 +179,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
       - name: Download beta APK artifacts
         uses: actions/download-artifact@v7
         with:
           name: aerobox-ci-beta-apks
           path: apk/
 
-      - name: Delete Pre-Release and move beta tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if gh release view beta >/dev/null 2>&1; then
-            gh release delete beta -y --cleanup-tag
-          fi
-          git tag -f beta "${GITHUB_SHA}"
-          git push origin -f refs/tags/beta
-
-      - name: Publish Beta Pre-Release
+      - name: Upload Beta Release Assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -213,7 +197,13 @@ jobs:
             exit 1
           fi
 
-          gh release create beta "${APKS[@]}" \
-            --title "beta" \
-            --notes "此版本为测试版，使用 v3-only 调试签名，并启用正式版同等压缩优化；可能存在不稳定情况，升级前请务必备份好数据。" \
-            --prerelease
+          NOTES="此版本为测试版，可能存在不稳定情况，升级前请务必备份好数据。"
+          if gh release view beta >/dev/null 2>&1; then
+            gh release upload beta "${APKS[@]}" --clobber
+          else
+            gh release create beta "${APKS[@]}" \
+              --target "${GITHUB_SHA}" \
+              --title "beta" \
+              --notes "${NOTES}" \
+              --prerelease
+          fi
