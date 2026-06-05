@@ -107,6 +107,8 @@ data class ProxyNode(
     val naiveProtocol: String? = null,
     val naiveExtraHeaders: String? = null,
     val naiveInsecureConcurrency: Int? = null,
+    // Shared TLS certificate / ECH fields. The naive* names are kept to avoid
+    // a Room schema migration.
     val naiveCertificate: String? = null,
     val naiveCertificatePath: String? = null,
     val naiveEchEnabled: Boolean? = null,

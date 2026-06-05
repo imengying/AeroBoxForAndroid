@@ -272,8 +272,8 @@ object ClashParser {
                 stringValue(wsOpts, "early-data-header-name"),
                 stringValue(wsOpts, "early_data_header_name")
             ),
-            alpn = if (type == ProxyType.NAIVE) null else joinedValue(map, "alpn"),
-            fingerprint = if (type == ProxyType.NAIVE) null else fingerprint,
+            alpn = joinedValue(map, "alpn"),
+            fingerprint = fingerprint,
             publicKey = if (type == ProxyType.NAIVE) null else publicKey,
             shortId = if (type == ProxyType.NAIVE) null else shortId,
             packetEncoding = firstNonBlank(
@@ -282,7 +282,7 @@ object ClashParser {
             ),
             username = stringValue(map, "username"),
             socksVersion = stringValue(map, "version"),
-            allowInsecure = if (type == ProxyType.NAIVE) false else insecure,
+            allowInsecure = insecure,
             plugin = stringValue(map, "plugin"),
             pluginOpts = firstNonBlank(
                 pluginOptionsValue(value(map, "plugin-opts")),

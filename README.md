@@ -30,7 +30,7 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 - Trojan
 - Hysteria 2
 - TUIC
-- SOCKS
+- SOCKS5
 - HTTP Proxy
 - Naive
 

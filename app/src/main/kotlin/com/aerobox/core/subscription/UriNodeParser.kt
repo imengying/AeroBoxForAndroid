@@ -315,7 +315,9 @@ internal object UriNodeParser {
                 params["allowInsecure"],
                 params["insecure"]
             )
-        ).withUriSharedOptions(params)
+        )
+            .withUriTlsOptions(params)
+            .withUriSharedOptions(params)
     }
 
     internal fun parseTuicUri(uri: String): ProxyNode? {
@@ -415,7 +417,9 @@ internal object UriNodeParser {
                 params["ech-query-server-name"],
                 params["ech_query_server_name"]
             )
-        ).withUriSharedOptions(params)
+        )
+            .withUriTlsOptions(params)
+            .withUriSharedOptions(params)
     }
 
     internal fun parseSocksUri(uri: String): ProxyNode? {
@@ -498,6 +502,46 @@ internal object UriNodeParser {
             udpOverTcpVersion = udpOverTcp.second ?: udpOverTcpVersion,
             muxEnabled = uriBooleanParam(params, "mux", "smux", "multiplex", "mux_enabled", "smux_enabled")
                 ?: muxEnabled
+        )
+    }
+
+    internal fun ProxyNode.withUriTlsOptions(params: Map<String, String>): ProxyNode {
+        return copy(
+            alpn = uriStringParam(params, "alpn") ?: alpn,
+            fingerprint = uriStringParam(
+                params,
+                "fp",
+                "fingerprint",
+                "client-fingerprint",
+                "client_fingerprint"
+            ) ?: fingerprint,
+            allowInsecure = uriBooleanParam(
+                params,
+                "allowInsecure",
+                "allow_insecure",
+                "allow-insecure",
+                "insecure",
+                "skip-cert-verify",
+                "skip_cert_verify"
+            ) ?: allowInsecure,
+            naiveCertificate = uriStringParam(params, "cert", "certificate") ?: naiveCertificate,
+            naiveCertificatePath = uriStringParam(
+                params,
+                "certificate-path",
+                "certificate_path",
+                "cert-path",
+                "cert_path"
+            ) ?: naiveCertificatePath,
+            naiveEchEnabled = uriBooleanParam(params, "ech", "ech-enabled", "ech_enabled")
+                ?: naiveEchEnabled,
+            naiveEchConfig = uriStringParam(params, "ech-config", "ech_config") ?: naiveEchConfig,
+            naiveEchConfigPath = uriStringParam(params, "ech-config-path", "ech_config_path")
+                ?: naiveEchConfigPath,
+            naiveEchQueryServerName = uriStringParam(
+                params,
+                "ech-query-server-name",
+                "ech_query_server_name"
+            ) ?: naiveEchQueryServerName
         )
     }
 

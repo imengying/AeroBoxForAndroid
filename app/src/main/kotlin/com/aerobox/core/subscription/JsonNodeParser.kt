@@ -207,23 +207,15 @@ internal object JsonNodeParser {
                 ),
                 wsMaxEarlyData = transport?.optInt("max_early_data", -1)?.takeIf { it >= 0 },
                 wsEarlyDataHeaderName = transport?.optString("early_data_header_name", "")?.ifBlank { null },
-                alpn = if (type == ProxyType.NAIVE) {
-                    null
-                } else {
-                    UriNodeParser.firstNonBlank(
-                        obj.optString("alpn", "").ifBlank { null },
-                        tlsObject?.optJSONArray("alpn")?.toCommaSeparatedString(),
-                        tlsObject?.optString("alpn", "")?.ifBlank { null }
-                    )
-                },
-                fingerprint = if (type == ProxyType.NAIVE) {
-                    null
-                } else {
-                    UriNodeParser.firstNonBlank(
-                        obj.optString("fingerprint", obj.optString("fp", "")).ifBlank { null },
-                        utlsObject?.optString("fingerprint", "")?.ifBlank { null }
-                    )
-                },
+                alpn = UriNodeParser.firstNonBlank(
+                    obj.optString("alpn", "").ifBlank { null },
+                    tlsObject?.optJSONArray("alpn")?.toCommaSeparatedString(),
+                    tlsObject?.optString("alpn", "")?.ifBlank { null }
+                ),
+                fingerprint = UriNodeParser.firstNonBlank(
+                    obj.optString("fingerprint", obj.optString("fp", "")).ifBlank { null },
+                    utlsObject?.optString("fingerprint", "")?.ifBlank { null }
+                ),
                 publicKey = if (type == ProxyType.NAIVE) {
                     null
                 } else {
@@ -253,14 +245,10 @@ internal object JsonNodeParser {
                         else -> null
                     }
                 ),
-                allowInsecure = if (type == ProxyType.NAIVE) {
-                    false
-                } else {
-                    obj.optBoolean("allowInsecure", false)
-                        || obj.optBoolean("allow_insecure", false)
-                        || tlsObject?.optBoolean("insecure", false) == true
-                        || UriNodeParser.parseBooleanField(obj.optString("allowInsecure"))
-                },
+                allowInsecure = obj.optBoolean("allowInsecure", false)
+                    || obj.optBoolean("allow_insecure", false)
+                    || tlsObject?.optBoolean("insecure", false) == true
+                    || UriNodeParser.parseBooleanField(obj.optString("allowInsecure")),
                 plugin = obj.optString("plugin", "").ifBlank { null },
                 pluginOpts = UriNodeParser.firstNonBlank(
                     obj.optString("plugin_opts", "").ifBlank { null },

@@ -268,9 +268,9 @@ internal object OutboundConfigBuilder {
 
     private fun buildNaiveTlsObject(node: ProxyNode): JSONObject {
         val tls = JSONObject()
+            .put("enabled", true)
         node.sni?.takeIf { it.isNotBlank() }?.let { tls.put("server_name", it) }
-        node.naiveCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("certificate", it) }
-        node.naiveCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("certificate_path", it) }
+        applyCommonTlsFields(tls, node)
         buildEchObject(node)?.let { tls.put("ech", it) }
         return tls
     }
@@ -333,20 +333,9 @@ internal object OutboundConfigBuilder {
         val effectiveTls = node.tls || (includeReality && !node.publicKey.isNullOrBlank())
         val tls = JSONObject()
             .put("enabled", effectiveTls)
-        if (node.allowInsecure) {
-            tls.put("insecure", true)
-        }
         val sniToUse = node.sni?.takeIf { it.isNotBlank() } ?: if (includeReality) node.server else null
         sniToUse?.let { tls.put("server_name", it) }
-
-        val alpn = node.alpn
-        if (!alpn.isNullOrBlank()) {
-            val alpnArray = JSONArray()
-            alpn.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { alpnArray.put(it) }
-            if (alpnArray.length() > 0) {
-                tls.put("alpn", alpnArray)
-            }
-        }
+        applyCommonTlsFields(tls, node)
 
         if (includeReality && !node.publicKey.isNullOrBlank()) {
             val realityObj = JSONObject()
@@ -358,6 +347,27 @@ internal object OutboundConfigBuilder {
             tls.put("reality", realityObj)
         }
 
+        // ECH applies to any TLS-bearing outbound, not just NaiveProxy.
+        buildEchObject(node)?.let { tls.put("ech", it) }
+
+        return tls
+    }
+
+    private fun applyCommonTlsFields(tls: JSONObject, node: ProxyNode) {
+        if (node.allowInsecure) {
+            tls.put("insecure", true)
+        }
+        node.naiveCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("certificate", it) }
+        node.naiveCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("certificate_path", it) }
+        val alpn = node.alpn
+        if (!alpn.isNullOrBlank()) {
+            val alpnArray = JSONArray()
+            alpn.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { alpnArray.put(it) }
+            if (alpnArray.length() > 0) {
+                tls.put("alpn", alpnArray)
+            }
+        }
+
         if (!node.fingerprint.isNullOrBlank()) {
             tls.put(
                 "utls",
@@ -366,11 +376,6 @@ internal object OutboundConfigBuilder {
                     .put("fingerprint", node.fingerprint)
             )
         }
-
-        // ECH applies to any TLS-bearing outbound, not just NaiveProxy.
-        buildEchObject(node)?.let { tls.put("ech", it) }
-
-        return tls
     }
 
     // ── Transport ───────────────────────────────────────────────────
