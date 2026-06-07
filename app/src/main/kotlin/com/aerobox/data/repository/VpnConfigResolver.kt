@@ -28,9 +28,6 @@ class VpnConfigResolver(private val context: Context) {
         val selectedId = PreferenceManager.lastSelectedNodeIdFlow(context).first()
         val allNodes = nodeDao.getAllNodes().first()
         allNodes.firstOrNull { it.id == selectedId }?.let { return it }
-        if (selectedId > 0L) {
-            return null
-        }
         val fallbackNode = allNodes.firstOrNull() ?: return null
         if (fallbackNode.id > 0L) {
             PreferenceManager.setLastSelectedNodeId(context, fallbackNode.id)

@@ -274,6 +274,13 @@ class SubscriptionRepository(context: Context) {
     }
 
     suspend fun deleteSubscription(subscription: Subscription) {
+        val selectedNodeId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
+        val selectedNode = selectedNodeId
+            .takeIf { it > 0L }
+            ?.let { proxyNodeDao.getNodeById(it) }
+        val shouldMoveSelection = !subscription.isLocalGroup() && selectedNode?.subscriptionId == subscription.id
+        var replacementSelectedNodeId: Long? = null
+
         database.withTransaction {
             if (subscription.isLocalGroup()) {
                 // Preserve user-imported nodes by moving them back to the default bucket.
@@ -285,6 +292,12 @@ class SubscriptionRepository(context: Context) {
                 proxyNodeDao.deleteBySubscription(subscription.id)
             }
             subscriptionDao.deleteById(subscription.id)
+            if (shouldMoveSelection) {
+                replacementSelectedNodeId = proxyNodeDao.getFirstNode()?.id ?: 0L
+            }
+        }
+        if (shouldMoveSelection) {
+            PreferenceManager.setLastSelectedNodeId(appContext, replacementSelectedNodeId ?: 0L)
         }
         SubscriptionUpdateScheduler.reconfigure(appContext)
     }

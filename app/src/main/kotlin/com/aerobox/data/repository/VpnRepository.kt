@@ -101,6 +101,14 @@ class VpnRepository(private val context: Context) {
                 val triggerSubscriptionId = triggerNode.subscriptionId.takeIf { it > 0L } ?: return@launch
                 if (triggerSubscriptionId !in updatedSubscriptionIds) return@launch
                 if (!VpnStateManager.serviceActive.value) return@launch
+                val activeNode = VpnStateManager.vpnState.value.currentNode
+                if (activeNode?.id != triggerNode.id) {
+                    RuntimeLogBuffer.append(
+                        "info",
+                        "Due subscription refreshed in background, active node changed; skipping reload"
+                    )
+                    return@launch
+                }
 
                 RuntimeLogBuffer.append(
                     "info",

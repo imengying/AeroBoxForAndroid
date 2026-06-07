@@ -186,10 +186,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 nodeDao.getAllNodes(),
                 PreferenceManager.lastSelectedNodeIdFlow(appContext)
             ) { nodes, selectedId ->
-                nodes.firstOrNull { it.id == selectedId }
-                    ?: if (selectedId > 0L) null else nodes.firstOrNull()
-            }.collect { node ->
+                (nodes.firstOrNull { it.id == selectedId } ?: nodes.firstOrNull()) to selectedId
+            }.collect { (node, selectedId) ->
                 _selectedNode.value = node
+                if (node != null && node.id != selectedId) {
+                    PreferenceManager.setLastSelectedNodeId(appContext, node.id)
+                } else if (node == null && selectedId > 0L) {
+                    PreferenceManager.setLastSelectedNodeId(appContext, 0L)
+                }
             }
         }
     }

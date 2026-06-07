@@ -19,6 +19,7 @@ import com.aerobox.data.repository.SubscriptionUpdateResult
 import com.aerobox.data.repository.SubscriptionUpdateSummary
 import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,7 +29,10 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
 
 // Content that was successfully parsed but is waiting for the user to choose a
 // target local group. The UI observes this and shows GroupPickerDialog.
@@ -52,6 +56,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     private companion object {
         const val DEFAULT_CONFIG_ERROR = "Configuration error"
         const val DEFAULT_UNKNOWN_ERROR = "Unknown error"
+        const val MAX_LOCAL_IMPORT_BYTES = 8L * 1024L * 1024L
     }
 
     private val appContext = application.applicationContext
@@ -283,7 +288,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             return
         }
 
-        if (repository.isValidRemoteSubscriptionUrl(trimmedSource)) {
+        if (shouldDeferToSubscriptionEntry(trimmedSource)) {
             _pendingSubscriptionLink.value = PendingSubscriptionLink(
                 url = trimmedSource,
                 suggestedName = nameHint.trim(),
@@ -304,7 +309,16 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     )
                 }
                 .onFailure { error ->
-                    _uiMessage.tryEmit(appString(R.string.import_failed, toFriendlyError(error)))
+                    if (repository.isValidRemoteSubscriptionUrl(trimmedSource)) {
+                        _pendingSubscriptionLink.value = PendingSubscriptionLink(
+                            url = trimmedSource,
+                            suggestedName = nameHint.trim(),
+                            autoUpdate = autoUpdate,
+                            updateInterval = updateInterval
+                        )
+                    } else {
+                        _uiMessage.tryEmit(appString(R.string.import_failed, toFriendlyError(error)))
+                    }
                 }
             _isLoading.value = false
         }
@@ -321,7 +335,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             _uiMessage.tryEmit(appString(R.string.node_empty_content))
             return
         }
-        if (repository.isValidRemoteSubscriptionUrl(trimmedSource)) {
+        if (shouldDeferToSubscriptionEntry(trimmedSource)) {
             _uiMessage.tryEmit(appString(R.string.node_content_use_subscription_entry))
             return
         }
@@ -335,7 +349,11 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                     _uiMessage.tryEmit(formatImportResultMessage(importResult))
                 }
                 .onFailure { error ->
-                    _uiMessage.tryEmit(appString(R.string.import_failed, toFriendlyError(error)))
+                    if (repository.isValidRemoteSubscriptionUrl(trimmedSource)) {
+                        _uiMessage.tryEmit(appString(R.string.node_content_use_subscription_entry))
+                    } else {
+                        _uiMessage.tryEmit(appString(R.string.import_failed, toFriendlyError(error)))
+                    }
                 }
             _isLoading.value = false
         }
@@ -356,11 +374,15 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                         if (sizeIdx >= 0) sizeBytes = cursor.getLong(sizeIdx)
                     }
                 }
-                if (sizeBytes != null && sizeBytes > 8L * 1024L * 1024L) {
+                if (sizeBytes != null && sizeBytes > MAX_LOCAL_IMPORT_BYTES) {
                     throw IllegalStateException(appString(R.string.local_file_too_large))
                 }
-                val content = resolver.openInputStream(uri)?.use { input -> input.readBytes() }
-                    ?.toString(Charsets.UTF_8)
+                val localFileTooLargeMessage = appString(R.string.local_file_too_large)
+                val content = withContext(Dispatchers.IO) {
+                    resolver.openInputStream(uri)?.use { input ->
+                        readLocalImportText(input, localFileTooLargeMessage)
+                    }
+                }
                     ?.removePrefix("\uFEFF")
                     ?.trim()
                     ?: throw IllegalStateException(appString(R.string.cannot_read_local_file))
@@ -381,6 +403,23 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 }
             _isLoading.value = false
         }
+    }
+
+    private fun readLocalImportText(input: InputStream, tooLargeMessage: String): String {
+        val limit = MAX_LOCAL_IMPORT_BYTES
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0L
+        while (true) {
+            val read = input.read(buffer)
+            if (read == -1) break
+            total += read
+            if (total > limit) {
+                throw IllegalStateException(tooLargeMessage)
+            }
+            output.write(buffer, 0, read)
+        }
+        return output.toString(Charsets.UTF_8.name())
     }
 
     fun confirmPendingImport(target: ImportGroupTarget) {
@@ -432,6 +471,41 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
 
     private fun isValidSubscriptionUrl(url: String): Boolean {
         return repository.isValidRemoteSubscriptionUrl(url)
+    }
+
+    private fun shouldDeferToSubscriptionEntry(source: String): Boolean {
+        return repository.isValidRemoteSubscriptionUrl(source) && !looksLikeHttpProxyNode(source)
+    }
+
+    private fun looksLikeHttpProxyNode(source: String): Boolean {
+        val parsed = runCatching { Uri.parse(source) }.getOrNull() ?: return false
+        val scheme = parsed.scheme?.lowercase()
+        if (scheme != "http" && scheme != "https") return false
+        if (parsed.encodedAuthority.orEmpty().contains('@')) return true
+        val path = parsed.encodedPath.orEmpty()
+        val hasNoPath = path.isBlank() || path == "/"
+        if (hasNoPath && !parsed.fragment.isNullOrBlank()) return true
+        val proxyQueryKeys = setOf(
+            "allowInsecure",
+            "allow_insecure",
+            "insecure",
+            "skip-cert-verify",
+            "uot",
+            "udp_over_tcp",
+            "udp-over-tcp",
+            "tcp_fast_open",
+            "tcp-fast-open",
+            "tfo",
+            "bind_interface",
+            "bind-interface",
+            "connect_timeout",
+            "connect-timeout"
+        )
+        return runCatching {
+            parsed.queryParameterNames.any { key ->
+                proxyQueryKeys.any { it.equals(key, ignoreCase = true) }
+            }
+        }.getOrDefault(false)
     }
 
     private fun formatImportResultMessage(result: SubscriptionImportResult): String {
