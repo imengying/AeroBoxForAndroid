@@ -54,12 +54,16 @@ interface PlatformInterfaceWrapper : PlatformInterface {
             if (uid == Process.INVALID_UID) {
                 return emptyConnectionOwner()
             }
-            val packages = AeroBoxApplication.appInstance.packageManager.getPackagesForUid(uid)
-            val packageName = packages?.firstOrNull() ?: ""
+            val packageNames = AeroBoxApplication.appInstance.packageManager
+                .getPackagesForUid(uid)
+                ?.filter { it.isNotBlank() }
+                ?.distinct()
+                .orEmpty()
+            val packageName = packageNames.firstOrNull() ?: ""
             val owner = ConnectionOwner()
             owner.userId = uid
             owner.userName = packageName
-            owner.setAndroidPackageNameCompat(packageName)
+            owner.setAndroidPackageNames(StringArray(packageNames.iterator()))
             return owner
         }.getOrElse {
             emptyConnectionOwner()
@@ -165,40 +169,24 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         override fun next(): LibboxNetworkInterface = iterator.next()
     }
 
-    class StringArray(private val iterator: Iterator<String>) : StringIterator {
-        override fun len(): Int = 0 // not used by core
-        override fun hasNext(): Boolean = iterator.hasNext()
-        override fun next(): String = iterator.next()
+    class StringArray(iterator: Iterator<String>) : StringIterator {
+        private val values = iterator.asSequence().toList()
+        private var index = 0
+
+        override fun len(): Int = values.size
+        override fun hasNext(): Boolean = index < values.size
+        override fun next(): String {
+            if (!hasNext()) return ""
+            return values[index++]
+        }
     }
 
     private fun emptyConnectionOwner(): ConnectionOwner {
         return ConnectionOwner().apply {
             userId = Process.INVALID_UID
             userName = ""
-            setAndroidPackageNameCompat("")
+            setAndroidPackageNames(StringArray(emptyList<String>().iterator()))
         }
-    }
-}
-
-private fun ConnectionOwner.setAndroidPackageNameCompat(value: String) {
-    val setterNames = listOf("setAndroidPackageName", "setPackageName")
-    for (setterName in setterNames) {
-        val setter = javaClass.methods.firstOrNull { method ->
-            method.name == setterName &&
-                method.parameterCount == 1 &&
-                method.parameterTypes.firstOrNull() == String::class.java
-        }
-        if (setter != null) {
-            runCatching { setter.invoke(this, value) }
-            return
-        }
-    }
-
-    val fieldNames = listOf("androidPackageName", "packageName")
-    for (fieldName in fieldNames) {
-        val field = runCatching { javaClass.getField(fieldName) }.getOrNull() ?: continue
-        runCatching { field.set(this, value) }
-        return
     }
 }
 
