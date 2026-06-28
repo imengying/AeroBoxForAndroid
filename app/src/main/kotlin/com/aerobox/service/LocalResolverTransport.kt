@@ -2,8 +2,10 @@ package com.aerobox.service
 
 import android.net.DnsResolver
 import android.os.CancellationSignal
+import android.os.Looper
 import android.system.ErrnoException
 import android.util.Log
+import com.aerobox.AeroBoxApplication
 import io.nekohasekai.libbox.ExchangeContext
 import io.nekohasekai.libbox.LocalDNSTransport
 import kotlinx.coroutines.Dispatchers
@@ -13,6 +15,9 @@ import java.net.InetAddress
 object LocalResolverTransport : LocalDNSTransport {
     private const val TAG = "LocalResolverTransport"
     private const val UNKNOWN_ERRNO = 114514
+    private val dnsResolver by lazy {
+        DnsResolver(AeroBoxApplication.appInstance, Looper.getMainLooper())
+    }
 
     override fun raw(): Boolean = true
 
@@ -36,7 +41,7 @@ object LocalResolverTransport : LocalDNSTransport {
             }
         }
 
-        DnsResolver.getInstance().rawQuery(
+        dnsResolver.rawQuery(
             DefaultNetworkMonitor.defaultNetwork,
             message,
             DnsResolver.FLAG_NO_RETRY,
@@ -93,7 +98,7 @@ object LocalResolverTransport : LocalDNSTransport {
         if (type != null) {
             // 5-arg overload: query(Network?, String, int, int, Executor, CancellationSignal, Callback)
             // Resolves only A or AAAA records based on the explicit type.
-            DnsResolver.getInstance().query(
+            dnsResolver.query(
                 DefaultNetworkMonitor.defaultNetwork,
                 domain,
                 type,
@@ -105,7 +110,7 @@ object LocalResolverTransport : LocalDNSTransport {
         } else {
             // 4-arg overload: query(Network?, String, int, Executor, CancellationSignal, Callback)
             // No type parameter — lets the system resolve both A and AAAA.
-            DnsResolver.getInstance().query(
+            dnsResolver.query(
                 DefaultNetworkMonitor.defaultNetwork,
                 domain,
                 DnsResolver.FLAG_NO_RETRY,
