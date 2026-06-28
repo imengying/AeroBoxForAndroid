@@ -23,31 +23,31 @@ jobs:
     timeout-minutes: 90
     env:
       ANDROID_NDK_VERSION: 29.0.14206865
-      GOMOBILE_VERSION: v0.1.12
+      GOMOBILE_VERSION: v0.1.13
       LIBBOX_BUILD_TAGS: with_gvisor,with_quic,with_utls,with_v2ray_api,with_naive_outbound
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7.0.0
         with:
           fetch-depth: 1
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v5.4.0
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v6.5.0
         with:
-          go-version: "~1.25"
+          go-version: "1.26.4"
           cache: false
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6.2.0
         with:
-          gradle-version: "9.5.1"
+          gradle-version: "9.6.1"
 
       - name: Set up Android SDK
         run: bash .github/scripts/setup-android-sdk.sh
@@ -80,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           SRC_DIR="${GITHUB_WORKSPACE}/app/build/outputs/apk/beta"
-          APKSIGNER="${ANDROID_SDK_ROOT}/build-tools/36.0.0/apksigner"
+          APKSIGNER="${ANDROID_SDK_ROOT}/build-tools/37.0.0/apksigner"
           KEYSTORE_PATH="${RUNNER_TEMP}/beta-debug.jks"
 
           if [ ! -x "${APKSIGNER}" ]; then
@@ -166,7 +166,7 @@ jobs:
 
       - name: Upload installable beta APKs
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: aerobox-ci-beta-apks
           path: app/build/outputs/apk/beta/dist/*.apk
@@ -180,7 +180,7 @@ jobs:
       contents: write
     steps:
       - name: Download beta APK artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8.0.1
         with:
           name: aerobox-ci-beta-apks
           path: apk/

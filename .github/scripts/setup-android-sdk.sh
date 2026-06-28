@@ -13,7 +13,7 @@ if [ ! -x "${SDKMANAGER_BIN}" ]; then
   TMP_DIR="$(mktemp -d)"
   mkdir -p "${SDK_ROOT}/cmdline-tools"
   curl -fLSs \
-    "https://dl.google.com/android/repository/commandlinetools-linux-12266719_latest.zip" \
+    "https://dl.google.com/android/repository/commandlinetools-linux-15641748_latest.zip" \
     -o "${TMP_DIR}/commandlinetools.zip"
   unzip -q "${TMP_DIR}/commandlinetools.zip" -d "${TMP_DIR}"
   rm -rf "${SDK_ROOT}/cmdline-tools/latest"

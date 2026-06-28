@@ -6,8 +6,8 @@ plugins {
 
 android {
     namespace = "com.aerobox"
-    compileSdk = 36
-    compileSdkMinor = 1
+    compileSdk = 37
+    compileSdkMinor = 0
 
     val ciVersionName = (project.findProperty("AEROBOX_VERSION_NAME") as? String)?.trim()
     val ciVersionCode = (project.findProperty("AEROBOX_VERSION_CODE") as? String)
@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "com.aerobox"
         minSdk = 31
-        targetSdk = 36
+        targetSdk = 37
         versionCode = ciVersionCode ?: 1
         versionName = ciVersionName ?: "1.0.0"
 
@@ -95,19 +95,19 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.18.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.activity:activity-compose:1.13.0")
 
-    implementation(platform("androidx.compose:compose-bom:2026.05.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
     // material-icons-extended remains removed to avoid pulling the full icon set
 
     implementation("androidx.navigation:navigation-compose:2.9.8")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 
     implementation("androidx.room:room-runtime:2.8.4")
@@ -116,7 +116,7 @@ dependencies {
 
     implementation("androidx.datastore:datastore-preferences:1.2.1")
 
-    implementation("com.squareup.okhttp3:okhttp:5.3.2")
+    implementation("com.squareup.okhttp3:okhttp:5.4.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("org.yaml:snakeyaml:2.6")
