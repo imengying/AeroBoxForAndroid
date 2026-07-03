@@ -2,7 +2,6 @@ package com.aerobox.core.subscription
 
 import android.util.Log
 import com.aerobox.data.model.ProxyNode
-import com.aerobox.data.model.SubscriptionType
 import com.aerobox.data.model.connectionFingerprint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,7 +16,6 @@ data class ParsedSubscription(
     val nodes: List<ProxyNode>,
     val trafficBytes: Long = 0,
     val expireTimestamp: Long = 0,
-    val sourceType: SubscriptionType = SubscriptionType.BASE64,
     val diagnostics: ParseDiagnostics = ParseDiagnostics()
 )
 
@@ -242,11 +240,6 @@ object SubscriptionParser {
                 base64Decoded.contains("://") -> base64Decoded
                 else -> normalized
             }
-            val sourceType = when {
-                targetContent.startsWith("{") || targetContent.startsWith("[") -> SubscriptionType.JSON
-                else -> SubscriptionType.BASE64
-            }
-
             val batch = when {
                 targetContent.startsWith("{") || targetContent.startsWith("[") -> parseJsonContent(targetContent)
                 targetContent.contains("://") -> parseUriList(targetContent)
@@ -256,18 +249,17 @@ object SubscriptionParser {
                 )
             }
 
-            sanitizeParsedNodes(batch.nodes, sourceType, batch.diagnostics)
+            sanitizeParsedNodes(batch.nodes, batch.diagnostics)
         }.getOrDefault(ParsedSubscription(emptyList()))
     }
 
     private fun parseClashSubscription(content: String): ParsedSubscription {
         val result = ClashParser.parseClashYamlDetailed(content)
-        return sanitizeParsedNodes(result.nodes, SubscriptionType.YAML, result.diagnostics)
+        return sanitizeParsedNodes(result.nodes, result.diagnostics)
     }
 
     private fun sanitizeParsedNodes(
         nodes: List<ProxyNode>,
-        sourceType: SubscriptionType,
         diagnostics: ParseDiagnostics = ParseDiagnostics()
     ): ParsedSubscription {
         val (infoNodes, validNodes) = nodes.partition(::isInformationalNode)
@@ -287,7 +279,6 @@ object SubscriptionParser {
             nodes = dedupedNodes,
             trafficBytes = infoNodes.mapNotNull { extractTrafficBytes(it.name) }.firstOrNull() ?: 0L,
             expireTimestamp = infoNodes.mapNotNull { extractExpireTimestamp(it.name) }.firstOrNull() ?: 0L,
-            sourceType = sourceType,
             diagnostics = finalDiagnostics
         )
     }

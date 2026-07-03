@@ -1,5 +1,6 @@
 package com.aerobox.utils
 
+import android.app.LocaleManager
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
@@ -7,7 +8,6 @@ import android.os.LocaleList
 
 object AppLocaleManager {
     const val SYSTEM_LANGUAGE_TAG = ""
-    private const val LOCALE_SERVICE_NAME = "locale"
 
     val supportedLanguages = listOf(
         SupportedLanguage(SYSTEM_LANGUAGE_TAG, com.aerobox.R.string.settings_language_system),
@@ -32,11 +32,9 @@ object AppLocaleManager {
         } else {
             LocaleList.forLanguageTags(normalized)
         }
-        val localeManager = context.getSystemService(LOCALE_SERVICE_NAME) ?: return false
+        val localeManager = context.getSystemService(LocaleManager::class.java) ?: return false
         return runCatching {
-            localeManager.javaClass
-                .getMethod("setApplicationLocales", LocaleList::class.java)
-                .invoke(localeManager, locales)
+            localeManager.applicationLocales = locales
             true
         }.getOrDefault(false)
     }
@@ -54,11 +52,8 @@ object AppLocaleManager {
     fun currentLanguageTag(context: Context, storedLanguageTag: String): String {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val systemTags = runCatching {
-                val localeManager = context.getSystemService(LOCALE_SERVICE_NAME) ?: return@runCatching ""
-                val locales = localeManager.javaClass
-                    .getMethod("getApplicationLocales")
-                    .invoke(localeManager) as? LocaleList
-                locales?.toLanguageTags().orEmpty()
+                val localeManager = context.getSystemService(LocaleManager::class.java) ?: return@runCatching ""
+                localeManager.applicationLocales.toLanguageTags()
             }.getOrDefault("")
             if (systemTags.isNotBlank()) {
                 return normalize(systemTags.substringBefore(','))

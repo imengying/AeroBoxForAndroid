@@ -1,11 +1,9 @@
 package com.aerobox.core.logging
 
-import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.io.File
 import java.net.URI
 
 data class RuntimeLogEntry(
@@ -16,7 +14,6 @@ data class RuntimeLogEntry(
 
 object RuntimeLogBuffer {
     private const val MAX_LINES = 500
-    private const val LOG_FILE_NAME = "runtime-events.log"
     private val uuidRegex = Regex(
         """\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"""
     )
@@ -36,10 +33,6 @@ object RuntimeLogBuffer {
     private val _lines = MutableStateFlow<List<RuntimeLogEntry>>(emptyList())
     val lines: StateFlow<List<RuntimeLogEntry>> = _lines.asStateFlow()
 
-    fun initialize(context: Context) {
-        clearLegacyLogFile(context)
-    }
-
     fun append(level: String, message: String) {
         val normalizedMessage = sanitize(message.trim())
         if (normalizedMessage.isEmpty()) return
@@ -58,19 +51,6 @@ object RuntimeLogBuffer {
         _lines.value = emptyList()
     }
 
-    private fun clearLegacyLogFile(context: Context) {
-        val candidates = buildList {
-            context.getExternalFilesDir("debug")?.let { add(File(it, LOG_FILE_NAME)) }
-            context.filesDir?.let { add(File(File(it, "debug"), LOG_FILE_NAME)) }
-        }
-        candidates.forEach { file ->
-            runCatching {
-                if (file.exists()) {
-                    file.delete()
-                }
-            }
-        }
-    }
     private fun sanitize(message: String): String {
         if (message.isBlank()) return message
         return message

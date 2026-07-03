@@ -154,6 +154,14 @@ internal object UriNodeParser {
             port = port,
             uuid = json.optString("id").ifBlank { null },
             alterId = json.optString("aid").toIntOrNull() ?: 0,
+            globalPadding = parseBooleanOrNull(
+                json.optString("global_padding"),
+                json.optString("globalPadding")
+            ),
+            authenticatedLength = parseBooleanOrNull(
+                json.optString("authenticated_length"),
+                json.optString("authenticatedLength")
+            ),
             security = json.optString("scy", json.optString("security", "auto")),
             transportType = transportType,
             tls = json.optString("tls").equals("tls", true),
@@ -226,6 +234,7 @@ internal object UriNodeParser {
             )
         )
             .withUriTransportOptions(params)
+            .withUriTlsOptions(params)
             .withUriSharedOptions(params)
     }
 
@@ -265,17 +274,13 @@ internal object UriNodeParser {
             fingerprint = firstNonBlank(params["fp"], params["fingerprint"]),
             publicKey = if (isReality) firstNonBlank(params["pbk"], params["public-key"]) else null,
             shortId = if (isReality) firstNonBlank(params["sid"], params["short-id"]) else null,
-            packetEncoding = firstNonBlank(
-                params["packetEncoding"],
-                params["packet-encoding"],
-                params["packet_encoding"]
-            ),
             allowInsecure = parseBooleanField(
                 params["allowInsecure"],
                 params["insecure"]
             )
         )
             .withUriTransportOptions(params)
+            .withUriTlsOptions(params)
             .withUriSharedOptions(params)
     }
 
@@ -311,6 +316,7 @@ internal object UriNodeParser {
             hopInterval = firstNonBlank(params["hop_interval"], params["hop-interval"]),
             upMbps = parseIntField(params["up_mbps"], params["upmbps"]),
             downMbps = parseIntField(params["down_mbps"], params["downmbps"]),
+            brutalDebug = parseBooleanOrNull(params["brutal_debug"], params["brutal-debug"]),
             allowInsecure = parseBooleanField(
                 params["allowInsecure"],
                 params["insecure"]
@@ -350,11 +356,19 @@ internal object UriNodeParser {
                 params["udp-relay-mode"]
             ),
             udpOverStream = parseBooleanOrNull(params["udp_over_stream"], params["udp-over-stream"]),
+            zeroRttHandshake = parseBooleanOrNull(
+                params["zero_rtt_handshake"],
+                params["zero-rtt-handshake"],
+                params["0rtt"]
+            ),
+            heartbeat = firstNonBlank(params["heartbeat"], params["tuic-heartbeat"], params["tuic_heartbeat"]),
             allowInsecure = parseBooleanField(
                 params["allowInsecure"],
                 params["insecure"]
             )
-        ).withUriSharedOptions(params)
+        )
+            .withUriTlsOptions(params)
+            .withUriSharedOptions(params)
     }
 
     internal fun parseNaiveUri(uri: String): ProxyNode? {
@@ -395,25 +409,33 @@ internal object UriNodeParser {
                 params["insecure-concurrency"],
                 params["insecure_concurrency"]
             ),
-            naiveCertificate = firstNonBlank(params["cert"], params["certificate"]),
-            naiveCertificatePath = firstNonBlank(
+            naiveStreamReceiveWindow = firstNonBlank(
+                params["stream-receive-window"],
+                params["stream_receive_window"]
+            ),
+            naiveQuicSessionReceiveWindow = firstNonBlank(
+                params["quic-session-receive-window"],
+                params["quic_session_receive_window"]
+            ),
+            tlsCertificate = firstNonBlank(params["cert"], params["certificate"]),
+            tlsCertificatePath = firstNonBlank(
                 params["certificate-path"],
                 params["certificate_path"]
             ),
-            naiveEchEnabled = parseBooleanOrNull(
+            echEnabled = parseBooleanOrNull(
                 params["ech"],
                 params["ech-enabled"],
                 params["ech_enabled"]
             ),
-            naiveEchConfig = firstNonBlank(
+            echConfig = firstNonBlank(
                 params["ech-config"],
                 params["ech_config"]
             ),
-            naiveEchConfigPath = firstNonBlank(
+            echConfigPath = firstNonBlank(
                 params["ech-config-path"],
                 params["ech_config_path"]
             ),
-            naiveEchQueryServerName = firstNonBlank(
+            echQueryServerName = firstNonBlank(
                 params["ech-query-server-name"],
                 params["ech_query_server_name"]
             )
@@ -464,7 +486,9 @@ internal object UriNodeParser {
             password = password,
             tls = useTls,
             transportPath = path.takeIf { it.isNotBlank() && it != "/" }
-        ).withUriSharedOptions(params)
+        )
+            .withUriTlsOptions(params)
+            .withUriSharedOptions(params)
     }
 
     internal fun ProxyNode.withUriTransportOptions(params: Map<String, String>): ProxyNode {
@@ -480,7 +504,22 @@ internal object UriNodeParser {
                 "eh",
                 "early_data_header_name",
                 "ws_early_data_header_name"
-            ) ?: wsEarlyDataHeaderName
+            ) ?: wsEarlyDataHeaderName,
+            transportMethod = uriStringParam(params, "method", "transport_method", "transport-method")
+                ?: transportMethod,
+            transportHeaders = uriStringParam(params, "headers", "transport_headers", "transport-headers")
+                ?: transportHeaders,
+            transportIdleTimeout = uriStringParam(params, "idle_timeout", "idle-timeout")
+                ?: transportIdleTimeout,
+            transportPingTimeout = uriStringParam(params, "ping_timeout", "ping-timeout")
+                ?: transportPingTimeout,
+            grpcPermitWithoutStream = uriBooleanParam(
+                params,
+                "grpc_permit_without_stream",
+                "grpc-permit-without-stream",
+                "permit_without_stream",
+                "permit-without-stream"
+            ) ?: grpcPermitWithoutStream
         )
     }
 
@@ -497,7 +536,24 @@ internal object UriNodeParser {
                 ?: bindInterface,
             connectTimeout = uriStringParam(params, "connect_timeout", "connect-timeout") ?: connectTimeout,
             tcpFastOpen = uriBooleanParam(params, "tcp_fast_open", "tcp-fast-open", "tfo") ?: tcpFastOpen,
+            tcpMultiPath = uriBooleanParam(params, "tcp_multi_path", "tcp-multi-path", "tmp") ?: tcpMultiPath,
             udpFragment = uriBooleanParam(params, "udp_fragment", "udp-fragment") ?: udpFragment,
+            networkStrategy = uriStringParam(params, "network_strategy", "network-strategy") ?: networkStrategy,
+            networkType = uriStringParam(params, "network_type", "network-type") ?: networkType,
+            fallbackNetworkType = uriStringParam(params, "fallback_network_type", "fallback-network-type")
+                ?: fallbackNetworkType,
+            fallbackDelay = uriStringParam(params, "fallback_delay", "fallback-delay") ?: fallbackDelay,
+            disableTcpKeepAlive = uriBooleanParam(
+                params,
+                "disable_tcp_keep_alive",
+                "disable-tcp-keep-alive"
+            ) ?: disableTcpKeepAlive,
+            tcpKeepAlive = uriStringParam(params, "tcp_keep_alive", "tcp-keep-alive") ?: tcpKeepAlive,
+            tcpKeepAliveInterval = uriStringParam(
+                params,
+                "tcp_keep_alive_interval",
+                "tcp-keep-alive-interval"
+            ) ?: tcpKeepAliveInterval,
             udpOverTcpEnabled = udpOverTcp.first ?: udpOverTcpEnabled,
             udpOverTcpVersion = udpOverTcp.second ?: udpOverTcpVersion,
             muxEnabled = uriBooleanParam(params, "mux", "smux", "multiplex", "mux_enabled", "smux_enabled")
@@ -524,24 +580,56 @@ internal object UriNodeParser {
                 "skip-cert-verify",
                 "skip_cert_verify"
             ) ?: allowInsecure,
-            naiveCertificate = uriStringParam(params, "cert", "certificate") ?: naiveCertificate,
-            naiveCertificatePath = uriStringParam(
+            tlsDisableSni = uriBooleanParam(params, "disable_sni", "disable-sni") ?: tlsDisableSni,
+            tlsMinVersion = uriStringParam(params, "tls_min_version", "tls-min-version", "min_version", "min-version")
+                ?: tlsMinVersion,
+            tlsMaxVersion = uriStringParam(params, "tls_max_version", "tls-max-version", "max_version", "max-version")
+                ?: tlsMaxVersion,
+            tlsCipherSuites = uriStringParam(params, "cipher_suites", "cipher-suites") ?: tlsCipherSuites,
+            tlsCurvePreferences = uriStringParam(params, "curve_preferences", "curve-preferences")
+                ?: tlsCurvePreferences,
+            tlsCertificatePublicKeySha256 = uriStringParam(
+                params,
+                "certificate_public_key_sha256",
+                "certificate-public-key-sha256"
+            ) ?: tlsCertificatePublicKeySha256,
+            tlsCertificate = uriStringParam(params, "cert", "certificate") ?: tlsCertificate,
+            tlsCertificatePath = uriStringParam(
                 params,
                 "certificate-path",
                 "certificate_path",
                 "cert-path",
                 "cert_path"
-            ) ?: naiveCertificatePath,
-            naiveEchEnabled = uriBooleanParam(params, "ech", "ech-enabled", "ech_enabled")
-                ?: naiveEchEnabled,
-            naiveEchConfig = uriStringParam(params, "ech-config", "ech_config") ?: naiveEchConfig,
-            naiveEchConfigPath = uriStringParam(params, "ech-config-path", "ech_config_path")
-                ?: naiveEchConfigPath,
-            naiveEchQueryServerName = uriStringParam(
+            ) ?: tlsCertificatePath,
+            tlsClientCertificate = uriStringParam(params, "client_certificate", "client-certificate")
+                ?: tlsClientCertificate,
+            tlsClientCertificatePath = uriStringParam(
+                params,
+                "client_certificate_path",
+                "client-certificate-path"
+            ) ?: tlsClientCertificatePath,
+            tlsClientKey = uriStringParam(params, "client_key", "client-key") ?: tlsClientKey,
+            tlsClientKeyPath = uriStringParam(params, "client_key_path", "client-key-path")
+                ?: tlsClientKeyPath,
+            tlsFragment = uriBooleanParam(params, "fragment", "tls_fragment", "tls-fragment") ?: tlsFragment,
+            tlsFragmentFallbackDelay = uriStringParam(
+                params,
+                "fragment_fallback_delay",
+                "fragment-fallback-delay"
+            ) ?: tlsFragmentFallbackDelay,
+            tlsRecordFragment = uriBooleanParam(params, "record_fragment", "record-fragment") ?: tlsRecordFragment,
+            tlsKernelTx = uriBooleanParam(params, "kernel_tx", "kernel-tx") ?: tlsKernelTx,
+            tlsKernelRx = uriBooleanParam(params, "kernel_rx", "kernel-rx") ?: tlsKernelRx,
+            echEnabled = uriBooleanParam(params, "ech", "ech-enabled", "ech_enabled")
+                ?: echEnabled,
+            echConfig = uriStringParam(params, "ech-config", "ech_config") ?: echConfig,
+            echConfigPath = uriStringParam(params, "ech-config-path", "ech_config_path")
+                ?: echConfigPath,
+            echQueryServerName = uriStringParam(
                 params,
                 "ech-query-server-name",
                 "ech_query_server_name"
-            ) ?: naiveEchQueryServerName
+            ) ?: echQueryServerName
         )
     }
 

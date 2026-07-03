@@ -11,7 +11,6 @@ import com.aerobox.core.subscription.ParseDiagnostics
 import com.aerobox.core.subscription.SubscriptionParser
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
-import com.aerobox.data.model.SubscriptionType
 import com.aerobox.data.model.connectionFingerprint
 import com.aerobox.data.model.isLocalGroup
 import com.aerobox.data.model.matchScore
@@ -55,7 +54,6 @@ data class SubscriptionImportResult(
 data class PreparedLocalImport(
     val nodes: List<ProxyNode>,
     val resolvedName: String?,
-    val sourceType: SubscriptionType,
     val trafficBytes: Long,
     val expireTimestamp: Long,
     val metadataFromHeader: Boolean,
@@ -124,7 +122,6 @@ class SubscriptionRepository(context: Context) {
         val trafficBytes: Long,
         val expireTimestamp: Long,
         val metadataFromHeader: Boolean,
-        val sourceType: SubscriptionType,
         val diagnostics: ParseDiagnostics,
         val resolvedName: String? = null,
         val resolvedUrl: String? = null,
@@ -433,7 +430,6 @@ class SubscriptionRepository(context: Context) {
         return PreparedLocalImport(
             nodes = prepared.nodes,
             resolvedName = prepared.resolvedName,
-            sourceType = prepared.sourceType,
             trafficBytes = prepared.trafficBytes,
             expireTimestamp = prepared.expireTimestamp,
             metadataFromHeader = prepared.metadataFromHeader,
@@ -687,7 +683,6 @@ class SubscriptionRepository(context: Context) {
             trafficBytes = remainingBytes ?: parsed.trafficBytes,
             expireTimestamp = expireTimestamp ?: parsed.expireTimestamp,
             metadataFromHeader = remainingBytes != null || expireTimestamp != null,
-            sourceType = parsed.sourceType,
             diagnostics = parsed.diagnostics,
             resolvedName = metadata.profileTitle,
             resolvedUrl = metadata.canonicalUrl,
@@ -714,7 +709,6 @@ class SubscriptionRepository(context: Context) {
             trafficBytes = userInfo?.remainingBytes() ?: parsed.trafficBytes,
             expireTimestamp = userInfo?.expireTimestamp ?: parsed.expireTimestamp,
             metadataFromHeader = userInfo != null,
-            sourceType = parsed.sourceType,
             diagnostics = parsed.diagnostics,
             resolvedName = metadata.profileTitle ?: nameHint.takeIf { it.isNotBlank() }
         )

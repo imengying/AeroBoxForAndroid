@@ -44,7 +44,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.data.model.ProxyNode
-import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.ProvideAppLocale

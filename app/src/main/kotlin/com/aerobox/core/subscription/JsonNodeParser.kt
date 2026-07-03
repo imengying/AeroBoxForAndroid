@@ -149,7 +149,12 @@ internal object JsonNodeParser {
                 bindInterface = UriNodeParser.jsonScalarString(obj.opt("bind_interface")),
                 connectTimeout = UriNodeParser.jsonScalarString(obj.opt("connect_timeout")),
                 tcpFastOpen = UriNodeParser.optBooleanField(obj, "tcp_fast_open", "tcpFastOpen"),
+                tcpMultiPath = UriNodeParser.optBooleanField(obj, "tcp_multi_path", "tcpMultiPath"),
                 udpFragment = UriNodeParser.optBooleanField(obj, "udp_fragment", "udpFragment"),
+                networkStrategy = UriNodeParser.jsonScalarString(obj.opt("network_strategy")),
+                networkType = UriNodeParser.jsonListOrScalarString(obj.opt("network_type")),
+                fallbackNetworkType = UriNodeParser.jsonListOrScalarString(obj.opt("fallback_network_type")),
+                fallbackDelay = UriNodeParser.jsonScalarString(obj.opt("fallback_delay")),
                 disableTcpKeepAlive = UriNodeParser.optBooleanField(
                     obj,
                     "disable_tcp_keep_alive",
@@ -165,6 +170,12 @@ internal object JsonNodeParser {
                     obj.optString("alterId", "").ifBlank { null },
                     obj.optString("aid", "").ifBlank { null }
                 ) ?: 0,
+                globalPadding = UriNodeParser.optBooleanField(obj, "global_padding", "globalPadding"),
+                authenticatedLength = UriNodeParser.optBooleanField(
+                    obj,
+                    "authenticated_length",
+                    "authenticatedLength"
+                ),
                 password = obj.optString("password", "").ifBlank { null },
                 method = obj.optString("method", "").ifBlank { null },
                 flow = obj.optString("flow", "").ifBlank { null },
@@ -192,6 +203,26 @@ internal object JsonNodeParser {
                     obj.optString("path", "").ifBlank { null },
                     transport?.optString("path", "")?.ifBlank { null }
                 ),
+                transportMethod = transport?.optString("method", "")?.ifBlank { null },
+                transportHeaders = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonObjectString(transport?.optJSONObject("headers")),
+                    UriNodeParser.jsonScalarString(transport?.opt("headers")),
+                    UriNodeParser.jsonObjectString(headersObject),
+                    UriNodeParser.jsonScalarString(obj.opt("headers"))
+                ),
+                transportIdleTimeout = UriNodeParser.firstNonBlank(
+                    transport?.optString("idle_timeout", "")?.ifBlank { null },
+                    transport?.optString("idle-timeout", "")?.ifBlank { null }
+                ),
+                transportPingTimeout = UriNodeParser.firstNonBlank(
+                    transport?.optString("ping_timeout", "")?.ifBlank { null },
+                    transport?.optString("ping-timeout", "")?.ifBlank { null }
+                ),
+                grpcPermitWithoutStream = UriNodeParser.optBooleanField(
+                    transport,
+                    "permit_without_stream",
+                    "permit-without-stream"
+                ),
                 transportServiceName = UriNodeParser.firstNonBlank(
                     obj.optString("service_name", obj.optString("serviceName", "")).ifBlank { null },
                     transport?.optString("service_name", "")?.ifBlank { null },
@@ -211,6 +242,28 @@ internal object JsonNodeParser {
                     obj.optString("alpn", "").ifBlank { null },
                     tlsObject?.optJSONArray("alpn")?.toCommaSeparatedString(),
                     tlsObject?.optString("alpn", "")?.ifBlank { null }
+                ),
+                tlsDisableSni = UriNodeParser.optBooleanField(tlsObject, "disable_sni", "disable-sni")
+                    ?: UriNodeParser.optBooleanField(obj, "disable_sni", "disable-sni"),
+                tlsMinVersion = UriNodeParser.firstNonBlank(
+                    tlsObject?.optString("min_version", "")?.ifBlank { null },
+                    tlsObject?.optString("min-version", "")?.ifBlank { null },
+                    obj.optString("tls_min_version", "").ifBlank { null }
+                ),
+                tlsMaxVersion = UriNodeParser.firstNonBlank(
+                    tlsObject?.optString("max_version", "")?.ifBlank { null },
+                    tlsObject?.optString("max-version", "")?.ifBlank { null },
+                    obj.optString("tls_max_version", "").ifBlank { null }
+                ),
+                tlsCipherSuites = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("cipher_suites")),
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("cipher-suites")),
+                    UriNodeParser.jsonListOrScalarString(obj.opt("tls_cipher_suites"))
+                ),
+                tlsCurvePreferences = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("curve_preferences")),
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("curve-preferences")),
+                    UriNodeParser.jsonListOrScalarString(obj.opt("tls_curve_preferences"))
                 ),
                 fingerprint = UriNodeParser.firstNonBlank(
                     obj.optString("fingerprint", obj.optString("fp", "")).ifBlank { null },
@@ -232,11 +285,14 @@ internal object JsonNodeParser {
                         realityObject?.optString("short_id", "")?.ifBlank { null }
                     )
                 },
-                packetEncoding = UriNodeParser.firstNonBlank(
-                    obj.optString("packet_encoding", obj.optString("packetEncoding", "")).ifBlank { null },
-                    transport?.optString("packet_encoding", "")?.ifBlank { null },
-                    transport?.optString("packetEncoding", "")?.ifBlank { null }
-                ),
+                packetEncoding = if (type == ProxyType.VMESS || type == ProxyType.VLESS) {
+                    UriNodeParser.firstNonBlank(
+                        obj.optString("packet_encoding", obj.optString("packetEncoding", "")).ifBlank { null },
+                        obj.optString("packet-encoding", "").ifBlank { null }
+                    )
+                } else {
+                    null
+                },
                 username = obj.optString("username", "").ifBlank { null },
                 socksVersion = UriNodeParser.firstNonBlank(
                     obj.optString("version", "").ifBlank { null },
@@ -274,6 +330,7 @@ internal object JsonNodeParser {
                 ),
                 upMbps = obj.optInt("up_mbps", -1).takeIf { it > 0 },
                 downMbps = obj.optInt("down_mbps", -1).takeIf { it > 0 },
+                brutalDebug = UriNodeParser.optBooleanField(obj, "brutal_debug", "brutal-debug"),
                 muxEnabled = UriNodeParser.optBooleanField(multiplex, "enabled"),
                 muxProtocol = multiplex?.optString("protocol", "")?.ifBlank { null },
                 muxMaxConnections = multiplex?.optInt("max_connections", -1)?.takeIf { it > 0 },
@@ -299,6 +356,15 @@ internal object JsonNodeParser {
                     obj.optString("udp-relay-mode", "").ifBlank { null }
                 ),
                 udpOverStream = UriNodeParser.optBooleanField(obj, "udp_over_stream", "udp-over-stream"),
+                zeroRttHandshake = UriNodeParser.optBooleanField(
+                    obj,
+                    "zero_rtt_handshake",
+                    "zero-rtt-handshake"
+                ),
+                heartbeat = UriNodeParser.firstNonBlank(
+                    obj.optString("heartbeat", "").ifBlank { null },
+                    obj.optString("tuic_heartbeat", "").ifBlank { null }
+                ),
                 naiveProtocol = naiveProtocol,
                 naiveExtraHeaders = UriNodeParser.firstNonBlank(
                     UriNodeParser.jsonObjectString(obj.optJSONObject("extra_headers")),
@@ -308,32 +374,69 @@ internal object JsonNodeParser {
                 ),
                 naiveInsecureConcurrency = obj.optInt("insecure_concurrency", -1).takeIf { it > 0 }
                     ?: obj.optInt("insecure-concurrency", -1).takeIf { it > 0 },
-                naiveCertificate = UriNodeParser.firstNonBlank(
-                    UriNodeParser.jsonScalarString(tlsObject?.opt("certificate")),
-                    UriNodeParser.jsonScalarString(obj.opt("certificate")),
-                    UriNodeParser.jsonScalarString(obj.opt("cert"))
+                naiveStreamReceiveWindow = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonScalarString(obj.opt("stream_receive_window")),
+                    UriNodeParser.jsonScalarString(obj.opt("stream-receive-window"))
                 ),
-                naiveCertificatePath = UriNodeParser.firstNonBlank(
+                naiveQuicSessionReceiveWindow = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonScalarString(obj.opt("quic_session_receive_window")),
+                    UriNodeParser.jsonScalarString(obj.opt("quic-session-receive-window"))
+                ),
+                tlsCertificate = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("certificate")),
+                    UriNodeParser.jsonListOrScalarString(obj.opt("certificate")),
+                    UriNodeParser.jsonListOrScalarString(obj.opt("cert"))
+                ),
+                tlsCertificatePath = UriNodeParser.firstNonBlank(
                     UriNodeParser.jsonScalarString(tlsObject?.opt("certificate_path")),
                     UriNodeParser.jsonScalarString(tlsObject?.opt("certificate-path")),
                     UriNodeParser.jsonScalarString(obj.opt("certificate_path")),
                     UriNodeParser.jsonScalarString(obj.opt("certificate-path"))
                 ),
-                naiveEchEnabled = UriNodeParser.optBooleanField(echObject, "enabled")
+                tlsCertificatePublicKeySha256 = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("certificate_public_key_sha256")),
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("certificate-public-key-sha256")),
+                    UriNodeParser.jsonListOrScalarString(obj.opt("certificate_public_key_sha256"))
+                ),
+                tlsClientCertificate = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("client_certificate")),
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("client-certificate"))
+                ),
+                tlsClientCertificatePath = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonScalarString(tlsObject?.opt("client_certificate_path")),
+                    UriNodeParser.jsonScalarString(tlsObject?.opt("client-certificate-path"))
+                ),
+                tlsClientKey = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("client_key")),
+                    UriNodeParser.jsonListOrScalarString(tlsObject?.opt("client-key"))
+                ),
+                tlsClientKeyPath = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonScalarString(tlsObject?.opt("client_key_path")),
+                    UriNodeParser.jsonScalarString(tlsObject?.opt("client-key-path"))
+                ),
+                tlsFragment = UriNodeParser.optBooleanField(tlsObject, "fragment"),
+                tlsFragmentFallbackDelay = UriNodeParser.firstNonBlank(
+                    UriNodeParser.jsonScalarString(tlsObject?.opt("fragment_fallback_delay")),
+                    UriNodeParser.jsonScalarString(tlsObject?.opt("fragment-fallback-delay"))
+                ),
+                tlsRecordFragment = UriNodeParser.optBooleanField(tlsObject, "record_fragment", "record-fragment"),
+                tlsKernelTx = UriNodeParser.optBooleanField(tlsObject, "kernel_tx", "kernel-tx"),
+                tlsKernelRx = UriNodeParser.optBooleanField(tlsObject, "kernel_rx", "kernel-rx"),
+                echEnabled = UriNodeParser.optBooleanField(echObject, "enabled")
                     ?: UriNodeParser.parseBooleanOrNull(UriNodeParser.jsonScalarString(obj.opt("ech")))
                     ?: UriNodeParser.optBooleanField(obj, "ech_enabled", "ech-enabled"),
-                naiveEchConfig = UriNodeParser.firstNonBlank(
+                echConfig = UriNodeParser.firstNonBlank(
                     UriNodeParser.jsonListOrScalarString(echObject?.opt("config")),
                     UriNodeParser.jsonListOrScalarString(obj.opt("ech_config")),
                     UriNodeParser.jsonListOrScalarString(obj.opt("ech-config"))
                 ),
-                naiveEchConfigPath = UriNodeParser.firstNonBlank(
+                echConfigPath = UriNodeParser.firstNonBlank(
                     UriNodeParser.jsonScalarString(echObject?.opt("config_path")),
                     UriNodeParser.jsonScalarString(echObject?.opt("config-path")),
                     UriNodeParser.jsonScalarString(obj.opt("ech_config_path")),
                     UriNodeParser.jsonScalarString(obj.opt("ech-config-path"))
                 ),
-                naiveEchQueryServerName = UriNodeParser.firstNonBlank(
+                echQueryServerName = UriNodeParser.firstNonBlank(
                     UriNodeParser.jsonScalarString(echObject?.opt("query_server_name")),
                     UriNodeParser.jsonScalarString(echObject?.opt("query-server-name")),
                     UriNodeParser.jsonScalarString(obj.opt("ech_query_server_name")),

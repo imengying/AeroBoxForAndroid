@@ -51,6 +51,8 @@ internal object OutboundConfigBuilder {
                 node.uuid?.takeIf { it.isNotBlank() }?.let { outbound.put("uuid", it) }
                 outbound.put("security", node.security ?: "auto")
                 outbound.put("alter_id", node.alterId)
+                node.globalPadding?.let { outbound.put("global_padding", it) }
+                node.authenticatedLength?.let { outbound.put("authenticated_length", it) }
                 node.packetEncoding?.takeIf { it.isNotBlank() }?.let { outbound.put("packet_encoding", it) }
                 outbound.put("tls", buildTlsObject(node))
                 enabledNetwork?.let { outbound.put("network", it) }
@@ -68,7 +70,6 @@ internal object OutboundConfigBuilder {
             ProxyType.TROJAN -> {
                 outbound.put("type", "trojan")
                 node.password?.takeIf { it.isNotBlank() }?.let { outbound.put("password", it) }
-                node.packetEncoding?.takeIf { it.isNotBlank() }?.let { outbound.put("packet_encoding", it) }
                 outbound.put("tls", buildTlsObject(node, includeReality = true))
                 enabledNetwork?.let { outbound.put("network", it) }
             }
@@ -98,6 +99,7 @@ internal object OutboundConfigBuilder {
                     ?.let { outbound.put("hop_interval", it) }
                 node.upMbps?.takeIf { it > 0 }?.let { outbound.put("up_mbps", it) }
                 node.downMbps?.takeIf { it > 0 }?.let { outbound.put("down_mbps", it) }
+                node.brutalDebug?.let { outbound.put("brutal_debug", it) }
             }
 
             ProxyType.TUIC -> {
@@ -107,6 +109,8 @@ internal object OutboundConfigBuilder {
                 node.congestionControl?.takeIf { it.isNotBlank() }?.let { outbound.put("congestion_control", it) }
                 node.udpRelayMode?.takeIf { it.isNotBlank() }?.let { outbound.put("udp_relay_mode", it) }
                 node.udpOverStream?.let { outbound.put("udp_over_stream", it) }
+                node.zeroRttHandshake?.let { outbound.put("zero_rtt_handshake", it) }
+                node.heartbeat?.takeIf { it.isNotBlank() }?.let { outbound.put("heartbeat", it) }
                 outbound.put("tls", buildTlsObject(node))
                 enabledNetwork?.let { outbound.put("network", it) }
             }
@@ -124,6 +128,12 @@ internal object OutboundConfigBuilder {
                 }
                 node.naiveInsecureConcurrency?.takeIf { it > 0 }?.let {
                     outbound.put("insecure_concurrency", it)
+                }
+                node.naiveStreamReceiveWindow?.takeIf { it.isNotBlank() }?.let {
+                    outbound.put("stream_receive_window", it)
+                }
+                node.naiveQuicSessionReceiveWindow?.takeIf { it.isNotBlank() }?.let {
+                    outbound.put("quic_session_receive_window", it)
                 }
                 buildNaiveExtraHeaders(node.naiveExtraHeaders)?.let { outbound.put("extra_headers", it) }
                 buildUdpOverTcp(node.udpOverTcpEnabled, node.udpOverTcpVersion)?.let {
@@ -150,7 +160,7 @@ internal object OutboundConfigBuilder {
                     outbound.put("tls", buildTlsObject(node))
                 }
                 normalizedTransportPath(node.transportPath)?.let { outbound.put("path", it) }
-                mergeHeaderJson(node.transportHost)?.let { headers ->
+                buildHeaderObject(node.transportHeaders, node.transportHost)?.let { headers ->
                     outbound.put("headers", headers)
                 }
             }
@@ -195,17 +205,19 @@ internal object OutboundConfigBuilder {
         if (node.type != ProxyType.SHADOWSOCKS && node.type != ProxyType.SHADOWSOCKS_2022) {
             return false
         }
-        return node.plugin.equals("shadow-tls", ignoreCase = true) ||
-            !node.shadowTlsPassword.isNullOrBlank() ||
-            !node.shadowTlsServerName.isNullOrBlank() ||
-            (node.shadowTlsVersion != null && node.shadowTlsVersion > 0)
+        return node.plugin.equals("shadow-tls", ignoreCase = true)
     }
 
     private fun applyDialFields(outbound: JSONObject, node: ProxyNode) {
         node.bindInterface?.takeIf { it.isNotBlank() }?.let { outbound.put("bind_interface", it) }
         node.connectTimeout?.takeIf { it.isNotBlank() }?.let { outbound.put("connect_timeout", it) }
         node.tcpFastOpen?.let { outbound.put("tcp_fast_open", it) }
+        node.tcpMultiPath?.let { outbound.put("tcp_multi_path", it) }
         node.udpFragment?.let { outbound.put("udp_fragment", it) }
+        node.networkStrategy?.takeIf { it.isNotBlank() }?.let { outbound.put("network_strategy", it) }
+        putStringOrArray(outbound, "network_type", node.networkType)
+        putStringOrArray(outbound, "fallback_network_type", node.fallbackNetworkType)
+        node.fallbackDelay?.takeIf { it.isNotBlank() }?.let { outbound.put("fallback_delay", it) }
         // sing-box 1.13 dial-level TCP keep-alive triplet. All optional;
         // omitting a key falls back to sing-box's defaults (5m initial /
         // 75s interval, keep-alive on).
@@ -278,21 +290,20 @@ internal object OutboundConfigBuilder {
     /**
      * Build the `tls.ech` sub-object for any TLS-bearing outbound.
      *
-     * The backing fields keep their historical `naive*` prefix to avoid a
-     * Room schema migration, but ECH (Encrypted Client Hello) is a generic
-     * TLS feature in sing-box and applies equally to VMess/VLESS/Trojan/
-     * Hysteria2/TUIC/HTTP/Naive when their server advertises an ECHConfig.
+     * ECH (Encrypted Client Hello) is a generic TLS feature in sing-box and
+     * applies equally to VMess/VLESS/Trojan/Hysteria2/TUIC/HTTP/Naive when
+     * their server advertises an ECHConfig.
      */
     private fun buildEchObject(node: ProxyNode): JSONObject? {
-        val config = node.naiveEchConfig?.trim()?.takeIf { it.isNotEmpty() }
-        val configPath = node.naiveEchConfigPath?.trim()?.takeIf { it.isNotEmpty() }
-        val queryServerName = node.naiveEchQueryServerName?.trim()?.takeIf { it.isNotEmpty() }
-        if (node.naiveEchEnabled == null && config == null && configPath == null && queryServerName == null) {
+        val config = node.echConfig?.trim()?.takeIf { it.isNotEmpty() }
+        val configPath = node.echConfigPath?.trim()?.takeIf { it.isNotEmpty() }
+        val queryServerName = node.echQueryServerName?.trim()?.takeIf { it.isNotEmpty() }
+        if (node.echEnabled == null && config == null && configPath == null && queryServerName == null) {
             return null
         }
 
         val ech = JSONObject()
-            .put("enabled", node.naiveEchEnabled ?: true)
+            .put("enabled", node.echEnabled ?: true)
         config?.let { ech.put("config", it) }
         configPath?.let { ech.put("config_path", it) }
         queryServerName?.let { ech.put("query_server_name", it) }
@@ -300,6 +311,20 @@ internal object OutboundConfigBuilder {
     }
 
     private fun buildNaiveExtraHeaders(raw: String?): JSONObject? {
+        return buildHeaderObject(raw)
+    }
+
+    private fun buildHeaderObject(raw: String?, host: String? = null): JSONObject? {
+        val headers = parseHeaderObject(raw) ?: JSONObject()
+        host?.trim()?.takeIf { it.isNotEmpty() }?.let { hostValue ->
+            if (!headers.has("Host") && !headers.has("host")) {
+                headers.put("Host", hostValue)
+            }
+        }
+        return headers.takeIf { it.length() > 0 }
+    }
+
+    private fun parseHeaderObject(raw: String?): JSONObject? {
         val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         if (value.startsWith("{")) {
             return runCatching { JSONObject(value) }
@@ -354,11 +379,26 @@ internal object OutboundConfigBuilder {
     }
 
     private fun applyCommonTlsFields(tls: JSONObject, node: ProxyNode) {
+        node.tlsDisableSni?.let { tls.put("disable_sni", it) }
         if (node.allowInsecure) {
             tls.put("insecure", true)
         }
-        node.naiveCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("certificate", it) }
-        node.naiveCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("certificate_path", it) }
+        node.tlsMinVersion?.takeIf { it.isNotBlank() }?.let { tls.put("min_version", it) }
+        node.tlsMaxVersion?.takeIf { it.isNotBlank() }?.let { tls.put("max_version", it) }
+        putStringOrArray(tls, "cipher_suites", node.tlsCipherSuites)
+        putStringOrArray(tls, "curve_preferences", node.tlsCurvePreferences)
+        node.tlsCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("certificate", it) }
+        node.tlsCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("certificate_path", it) }
+        putStringOrArray(tls, "certificate_public_key_sha256", node.tlsCertificatePublicKeySha256)
+        node.tlsClientCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("client_certificate", it) }
+        node.tlsClientCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("client_certificate_path", it) }
+        node.tlsClientKey?.takeIf { it.isNotBlank() }?.let { tls.put("client_key", it) }
+        node.tlsClientKeyPath?.takeIf { it.isNotBlank() }?.let { tls.put("client_key_path", it) }
+        node.tlsFragment?.let { tls.put("fragment", it) }
+        node.tlsFragmentFallbackDelay?.takeIf { it.isNotBlank() }?.let { tls.put("fragment_fallback_delay", it) }
+        node.tlsRecordFragment?.let { tls.put("record_fragment", it) }
+        node.tlsKernelTx?.let { tls.put("kernel_tx", it) }
+        node.tlsKernelRx?.let { tls.put("kernel_rx", it) }
         val alpn = node.alpn
         if (!alpn.isNullOrBlank()) {
             val alpnArray = JSONArray()
@@ -386,7 +426,7 @@ internal object OutboundConfigBuilder {
             "ws", "websocket" -> {
                 transport.put("type", "ws")
                 normalizedTransportPath(node.transportPath)?.let { transport.put("path", it) }
-                mergeHeaderJson(firstTransportHost(node))?.let {
+                buildHeaderObject(node.transportHeaders, firstTransportHost(node))?.let {
                     transport.put("headers", it)
                 }
                 node.wsMaxEarlyData?.let { transport.put("max_early_data", it) }
@@ -399,10 +439,14 @@ internal object OutboundConfigBuilder {
                 node.transportServiceName?.takeIf { it.isNotBlank() }?.let {
                     transport.put("service_name", it)
                 }
+                node.transportIdleTimeout?.takeIf { it.isNotBlank() }?.let { transport.put("idle_timeout", it) }
+                node.transportPingTimeout?.takeIf { it.isNotBlank() }?.let { transport.put("ping_timeout", it) }
+                node.grpcPermitWithoutStream?.let { transport.put("permit_without_stream", it) }
             }
             "h2", "http" -> {
                 transport.put("type", "http")
                 normalizedTransportPath(node.transportPath)?.let { transport.put("path", it) }
+                node.transportMethod?.takeIf { it.isNotBlank() }?.let { transport.put("method", it) }
                 firstTransportHost(node)?.let { hostValue ->
                     val hostArray = JSONArray()
                     hostValue.split(",")
@@ -413,11 +457,15 @@ internal object OutboundConfigBuilder {
                         transport.put("host", hostArray)
                     }
                 }
+                buildHeaderObject(node.transportHeaders)?.let { transport.put("headers", it) }
+                node.transportIdleTimeout?.takeIf { it.isNotBlank() }?.let { transport.put("idle_timeout", it) }
+                node.transportPingTimeout?.takeIf { it.isNotBlank() }?.let { transport.put("ping_timeout", it) }
             }
             "httpupgrade", "http-upgrade" -> {
                 transport.put("type", "httpupgrade")
                 normalizedTransportPath(node.transportPath)?.let { transport.put("path", it) }
                 firstTransportHost(node)?.let { transport.put("host", it) }
+                buildHeaderObject(node.transportHeaders)?.let { transport.put("headers", it) }
             }
             "quic" -> {
                 transport.put("type", "quic")
@@ -462,12 +510,6 @@ internal object OutboundConfigBuilder {
         return if (Regex("""^\d+$""").matches(trimmed)) "${trimmed}s" else trimmed
     }
 
-    private fun mergeHeaderJson(host: String?): JSONObject? {
-        val headers = JSONObject()
-        host?.takeIf { it.isNotBlank() }?.let { headers.put("Host", it) }
-        return headers.takeIf { it.length() > 0 }
-    }
-
     private fun firstTransportHost(node: ProxyNode): String? {
         return node.transportHost?.takeIf { it.isNotBlank() }
             ?: node.sni?.takeIf { it.isNotBlank() }
@@ -476,5 +518,24 @@ internal object OutboundConfigBuilder {
     private fun normalizedTransportPath(path: String?): String? {
         val value = path?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         return if (value.startsWith("/")) value else "/$value"
+    }
+
+    private fun putStringOrArray(target: JSONObject, key: String, raw: String?) {
+        val values = splitList(raw)
+        when (values.size) {
+            0 -> return
+            1 -> target.put(key, values.first())
+            else -> target.put(key, JSONArray().apply { values.forEach(::put) })
+        }
+    }
+
+    private fun splitList(raw: String?): List<String> {
+        return raw
+            ?.replace("\r\n", "\n")
+            ?.replace('\r', '\n')
+            ?.split('\n', ',')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
     }
 }

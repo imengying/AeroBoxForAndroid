@@ -2,6 +2,7 @@ package com.aerobox.core.subscription
 
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
+import org.json.JSONArray
 import org.json.JSONObject
 import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
@@ -220,6 +221,14 @@ object ClashParser {
             stringValue(map, "reality-opts", "shortid")
         )
 
+        val transportHeaders = firstNonBlank(
+            headersValue(value(map, "ws-opts", "headers")),
+            headersValue(value(map, "h2-opts", "headers")),
+            headersValue(value(map, "http-opts", "headers")),
+            headersValue(value(map, "http-upgrade-opts", "headers")),
+            headersValue(value(map, "headers"))
+        )
+
         return ProxyParseResult.Success(
             ProxyNode(
             name = name,
@@ -234,8 +243,29 @@ object ClashParser {
                 stringValue(map, "connect-timeout"),
                 stringValue(map, "connect_timeout")
             ),
-            tcpFastOpen = booleanValue(map, "tfo"),
+            tcpFastOpen = booleanValue(map, "tfo")
+                ?: booleanValue(map, "tcp-fast-open")
+                ?: booleanValue(map, "tcp_fast_open"),
+            tcpMultiPath = booleanValue(map, "tcp-multi-path")
+                ?: booleanValue(map, "tcp_multi_path")
+                ?: booleanValue(map, "mptcp"),
             udpFragment = booleanValue(map, "udp-fragment") ?: booleanValue(map, "udp_fragment"),
+            networkStrategy = firstNonBlank(
+                stringValue(map, "network-strategy"),
+                stringValue(map, "network_strategy")
+            ),
+            networkType = firstNonBlank(
+                joinedValue(map, "network-type"),
+                joinedValue(map, "network_type")
+            ),
+            fallbackNetworkType = firstNonBlank(
+                joinedValue(map, "fallback-network-type"),
+                joinedValue(map, "fallback_network_type")
+            ),
+            fallbackDelay = firstNonBlank(
+                stringValue(map, "fallback-delay"),
+                stringValue(map, "fallback_delay")
+            ),
             disableTcpKeepAlive = booleanValue(map, "disable-tcp-keep-alive")
                 ?: booleanValue(map, "disable_tcp_keep_alive"),
             tcpKeepAlive = firstNonBlank(
@@ -248,6 +278,10 @@ object ClashParser {
             ),
             uuid = firstNonBlank(stringValue(map, "uuid"), stringValue(map, "id")),
             alterId = intValue(map, "alterId") ?: intValue(map, "alter_id") ?: intValue(map, "aid") ?: 0,
+            globalPadding = booleanValue(map, "global-padding")
+                ?: booleanValue(map, "global_padding"),
+            authenticatedLength = booleanValue(map, "authenticated-length")
+                ?: booleanValue(map, "authenticated_length"),
             password = firstNonBlank(
                 stringValue(map, "password"),
                 stringValue(map, "passwd"),
@@ -266,20 +300,77 @@ object ClashParser {
             ),
             transportHost = transportHost,
             transportPath = if (transportType == "grpc") null else transportPath,
+            transportMethod = firstNonBlank(
+                stringValue(map, "http-opts", "method"),
+                stringValue(map, "transport-method"),
+                stringValue(map, "transport_method")
+            ),
+            transportHeaders = transportHeaders,
+            transportIdleTimeout = firstNonBlank(
+                stringValue(map, "grpc-opts", "idle-timeout"),
+                stringValue(map, "grpc-opts", "idle_timeout"),
+                stringValue(map, "http-opts", "idle-timeout"),
+                stringValue(map, "http-opts", "idle_timeout")
+            ),
+            transportPingTimeout = firstNonBlank(
+                stringValue(map, "grpc-opts", "ping-timeout"),
+                stringValue(map, "grpc-opts", "ping_timeout"),
+                stringValue(map, "http-opts", "ping-timeout"),
+                stringValue(map, "http-opts", "ping_timeout")
+            ),
+            grpcPermitWithoutStream = booleanValue(map, "grpc-opts", "permit-without-stream")
+                ?: booleanValue(map, "grpc-opts", "permit_without_stream")
+                ?: booleanValue(map, "grpc-permit-without-stream")
+                ?: booleanValue(map, "grpc_permit_without_stream"),
             transportServiceName = transportServiceName,
             wsMaxEarlyData = intValue(wsOpts, "max-early-data") ?: intValue(wsOpts, "max_early_data"),
             wsEarlyDataHeaderName = firstNonBlank(
                 stringValue(wsOpts, "early-data-header-name"),
                 stringValue(wsOpts, "early_data_header_name")
             ),
-            alpn = joinedValue(map, "alpn"),
+            alpn = firstNonBlank(
+                joinedValue(map, "alpn"),
+                joinedValue(map, "tls", "alpn")
+            ),
+            tlsDisableSni = booleanValue(map, "tls", "disable-sni")
+                ?: booleanValue(map, "tls", "disable_sni")
+                ?: booleanValue(map, "disable-sni")
+                ?: booleanValue(map, "disable_sni"),
+            tlsMinVersion = firstNonBlank(
+                stringValue(map, "tls", "min-version"),
+                stringValue(map, "tls", "min_version"),
+                stringValue(map, "tls-min-version"),
+                stringValue(map, "tls_min_version"),
+                stringValue(map, "min-version"),
+                stringValue(map, "min_version")
+            ),
+            tlsMaxVersion = firstNonBlank(
+                stringValue(map, "tls", "max-version"),
+                stringValue(map, "tls", "max_version"),
+                stringValue(map, "tls-max-version"),
+                stringValue(map, "tls_max_version"),
+                stringValue(map, "max-version"),
+                stringValue(map, "max_version")
+            ),
+            tlsCipherSuites = firstNonBlank(
+                joinedValue(map, "tls", "cipher-suites"),
+                joinedValue(map, "tls", "cipher_suites"),
+                joinedValue(map, "cipher-suites"),
+                joinedValue(map, "cipher_suites")
+            ),
+            tlsCurvePreferences = firstNonBlank(
+                joinedValue(map, "tls", "curve-preferences"),
+                joinedValue(map, "tls", "curve_preferences"),
+                joinedValue(map, "curve-preferences"),
+                joinedValue(map, "curve_preferences")
+            ),
             fingerprint = fingerprint,
             publicKey = if (type == ProxyType.NAIVE) null else publicKey,
             shortId = if (type == ProxyType.NAIVE) null else shortId,
             packetEncoding = firstNonBlank(
                 stringValue(map, "packet-encoding"),
                 stringValue(map, "packet_encoding")
-            ),
+            ).takeIf { type == ProxyType.VMESS || type == ProxyType.VLESS },
             username = stringValue(map, "username"),
             socksVersion = stringValue(map, "version"),
             allowInsecure = insecure,
@@ -302,6 +393,7 @@ object ClashParser {
             ),
             upMbps = intValue(map, "up-mbps") ?: intValue(map, "up_mbps"),
             downMbps = intValue(map, "down-mbps") ?: intValue(map, "down_mbps"),
+            brutalDebug = booleanValue(map, "brutal-debug") ?: booleanValue(map, "brutal_debug"),
             muxEnabled = booleanValue(smux, "enabled"),
             muxProtocol = firstNonBlank(
                 stringValue(smux, "protocol"),
@@ -336,6 +428,13 @@ object ClashParser {
                 stringValue(map, "udp_relay_mode")
             ),
             udpOverStream = booleanValue(map, "udp-over-stream") ?: booleanValue(map, "udp_over_stream"),
+            zeroRttHandshake = booleanValue(map, "zero-rtt-handshake")
+                ?: booleanValue(map, "zero_rtt_handshake"),
+            heartbeat = firstNonBlank(
+                stringValue(map, "heartbeat"),
+                stringValue(map, "tuic-heartbeat"),
+                stringValue(map, "tuic_heartbeat")
+            ),
             naiveProtocol = naiveProtocol,
             naiveExtraHeaders = naiveExtraHeadersValue(
                 firstNonNullValue(
@@ -345,32 +444,96 @@ object ClashParser {
             ),
             naiveInsecureConcurrency = intValue(map, "insecure-concurrency")
                 ?: intValue(map, "insecure_concurrency"),
-            naiveCertificate = firstNonBlank(
-                stringValue(map, "cert"),
-                stringValue(map, "certificate"),
-                stringValue(map, "tls", "certificate")
+            naiveStreamReceiveWindow = firstNonBlank(
+                stringValue(map, "stream-receive-window"),
+                stringValue(map, "stream_receive_window")
             ),
-            naiveCertificatePath = firstNonBlank(
+            naiveQuicSessionReceiveWindow = firstNonBlank(
+                stringValue(map, "quic-session-receive-window"),
+                stringValue(map, "quic_session_receive_window")
+            ),
+            tlsCertificate = firstNonBlank(
+                multiLineValue(map, "cert"),
+                multiLineValue(map, "certificate"),
+                multiLineValue(map, "tls", "cert"),
+                multiLineValue(map, "tls", "certificate")
+            ),
+            tlsCertificatePath = firstNonBlank(
                 stringValue(map, "certificate-path"),
                 stringValue(map, "certificate_path"),
+                stringValue(map, "cert-path"),
+                stringValue(map, "cert_path"),
+                stringValue(map, "tls", "certificate-path"),
                 stringValue(map, "tls", "certificate_path")
             ),
-            naiveEchEnabled = booleanValue(echOptions, "enabled")
+            tlsCertificatePublicKeySha256 = firstNonBlank(
+                joinedValue(map, "certificate-public-key-sha256"),
+                joinedValue(map, "certificate_public_key_sha256"),
+                joinedValue(map, "tls", "certificate-public-key-sha256"),
+                joinedValue(map, "tls", "certificate_public_key_sha256")
+            ),
+            tlsClientCertificate = firstNonBlank(
+                multiLineValue(map, "client-certificate"),
+                multiLineValue(map, "client_certificate"),
+                multiLineValue(map, "tls", "client-certificate"),
+                multiLineValue(map, "tls", "client_certificate")
+            ),
+            tlsClientCertificatePath = firstNonBlank(
+                stringValue(map, "client-certificate-path"),
+                stringValue(map, "client_certificate_path"),
+                stringValue(map, "tls", "client-certificate-path"),
+                stringValue(map, "tls", "client_certificate_path")
+            ),
+            tlsClientKey = firstNonBlank(
+                multiLineValue(map, "client-key"),
+                multiLineValue(map, "client_key"),
+                multiLineValue(map, "tls", "client-key"),
+                multiLineValue(map, "tls", "client_key")
+            ),
+            tlsClientKeyPath = firstNonBlank(
+                stringValue(map, "client-key-path"),
+                stringValue(map, "client_key_path"),
+                stringValue(map, "tls", "client-key-path"),
+                stringValue(map, "tls", "client_key_path")
+            ),
+            tlsFragment = booleanValue(map, "tls", "fragment")
+                ?: booleanValue(map, "tls-fragment")
+                ?: booleanValue(map, "tls_fragment")
+                ?: booleanValue(map, "fragment"),
+            tlsFragmentFallbackDelay = firstNonBlank(
+                stringValue(map, "tls", "fragment-fallback-delay"),
+                stringValue(map, "tls", "fragment_fallback_delay"),
+                stringValue(map, "fragment-fallback-delay"),
+                stringValue(map, "fragment_fallback_delay")
+            ),
+            tlsRecordFragment = booleanValue(map, "tls", "record-fragment")
+                ?: booleanValue(map, "tls", "record_fragment")
+                ?: booleanValue(map, "record-fragment")
+                ?: booleanValue(map, "record_fragment"),
+            tlsKernelTx = booleanValue(map, "tls", "kernel-tx")
+                ?: booleanValue(map, "tls", "kernel_tx")
+                ?: booleanValue(map, "kernel-tx")
+                ?: booleanValue(map, "kernel_tx"),
+            tlsKernelRx = booleanValue(map, "tls", "kernel-rx")
+                ?: booleanValue(map, "tls", "kernel_rx")
+                ?: booleanValue(map, "kernel-rx")
+                ?: booleanValue(map, "kernel_rx"),
+            echEnabled = booleanValue(echOptions, "enabled")
                 ?: booleanValue(map, "ech")
                 ?: booleanValue(map, "ech-enabled")
                 ?: booleanValue(map, "ech_enabled"),
-            naiveEchConfig = firstNonBlank(
+            echConfig = firstNonBlank(
                 multiLineValue(echOptions, "config"),
                 multiLineValue(map, "ech-config"),
                 multiLineValue(map, "ech_config")
             ),
-            naiveEchConfigPath = firstNonBlank(
+            echConfigPath = firstNonBlank(
                 stringValue(echOptions, "config-path"),
                 stringValue(echOptions, "config_path"),
                 stringValue(map, "ech-config-path"),
                 stringValue(map, "ech_config_path")
             ),
-            naiveEchQueryServerName = firstNonBlank(
+            echQueryServerName = firstNonBlank(
                 stringValue(echOptions, "query-server-name"),
                 stringValue(echOptions, "query_server_name"),
                 stringValue(map, "ech-query-server-name"),
@@ -489,6 +652,34 @@ object ClashParser {
                     val headerKey = key?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@forEach
                     val headerValue = raw?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@forEach
                     headers.put(headerKey, headerValue)
+                }
+                headers.takeIf { it.length() > 0 }?.toString()
+            }
+            else -> value.toString().trim().takeIf { it.isNotEmpty() }
+        }
+    }
+
+    private fun headersValue(value: Any?): String? {
+        return when (value) {
+            null -> null
+            is String -> value.trim().takeIf { it.isNotEmpty() }
+            is Map<*, *> -> {
+                val headers = JSONObject()
+                value.forEach { (key, raw) ->
+                    val headerKey = key?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@forEach
+                    when (raw) {
+                        is List<*> -> {
+                            val values = JSONArray()
+                            raw.mapNotNull(::scalarString)
+                                .map { it.trim() }
+                                .filter { it.isNotEmpty() }
+                                .forEach { values.put(it) }
+                            if (values.length() > 0) headers.put(headerKey, values)
+                        }
+                        else -> scalarString(raw)?.let { headerValue ->
+                            headers.put(headerKey, headerValue)
+                        }
+                    }
                 }
                 headers.takeIf { it.length() > 0 }?.toString()
             }

@@ -11,8 +11,7 @@ import androidx.annotation.StringRes
  * Throw sites in the core and data layers should never embed a hard-coded
  * locale-bound message; they should pick a `R.string.error_*` resource and
  * pass it (with arguments) through this class. ViewModels can call
- * [resolveMessage] (or the [localizedMessageOrFallback] extension) to render
- * the message in the active locale.
+ * [resolveMessage] to render the message in the active locale.
  */
 class LocalizedException(
     @param:StringRes val messageResId: Int,
@@ -37,19 +36,5 @@ class LocalizedException(
         fun of(@StringRes resId: Int, vararg args: Any?): LocalizedException {
             return LocalizedException(resId, args.toList())
         }
-    }
-}
-
-/**
- * Best-effort translator: if `this` is a [LocalizedException], render it
- * against [context]; otherwise fall back to the throwable's own message,
- * and finally to [fallback] when even that is blank.
- *
- * Useful inside ViewModels that already have a Throwable in hand.
- */
-fun Throwable.localizedMessageOrFallback(context: Context, fallback: String): String {
-    return when (this) {
-        is LocalizedException -> resolveMessage(context)
-        else -> message?.takeIf { it.isNotBlank() } ?: fallback
     }
 }
