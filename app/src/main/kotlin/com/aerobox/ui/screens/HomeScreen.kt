@@ -212,12 +212,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             subscriptions = subscriptions,
             selectedNodeId = selectedNode?.id ?: -1,
             nodeSortOrder = nodeSortOrder,
-            titleText = stringResource(R.string.node_list_title),
-            emptyHintText = stringResource(R.string.node_list_empty_hint),
-            speedTestText = stringResource(R.string.node_list_speed_test),
-            latencyTestingText = stringResource(R.string.latency_testing),
-            latencyFailedText = stringResource(R.string.latency_failed),
-            ungroupedText = stringResource(R.string.group_ungrouped),
             onNodeSelected = { node ->
                 viewModel.selectNode(node)
                 showNodeList = false

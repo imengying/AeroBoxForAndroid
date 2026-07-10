@@ -129,12 +129,9 @@ class AeroBoxTileService : TileService() {
                     VpnConnectionResult.NoNodeAvailable -> {
                         pendingAction = null
                         Log.w(TAG, "No node selected, cannot start VPN from tile")
-                        requestTileRefresh(applicationContext)
                     }
 
-                    is VpnConnectionResult.Success -> {
-                        requestTileRefresh(applicationContext)
-                    }
+                    is VpnConnectionResult.Success -> Unit
 
                     is VpnConnectionResult.InvalidConfig -> {
                         pendingAction = null
@@ -145,7 +142,6 @@ class AeroBoxTileService : TileService() {
                                 "Config error"
                             )
                         )
-                        requestTileRefresh(applicationContext)
                     }
 
                     is VpnConnectionResult.Failure -> {
@@ -158,9 +154,9 @@ class AeroBoxTileService : TileService() {
                             ),
                             result.throwable
                         )
-                        requestTileRefresh(applicationContext)
                     }
                 }
+                requestTileRefresh(applicationContext)
             }
         }
     }

@@ -176,9 +176,6 @@ fun SettingsScreen(
         }
         item {
             var expanded by remember { mutableStateOf(false) }
-            val themeSystemText = stringResource(R.string.settings_theme_system)
-            val themeDarkText = stringResource(R.string.settings_theme_dark)
-            val themeLightText = stringResource(R.string.settings_theme_light)
             SettingItem(
                 onClick = { expanded = true },
                 icon = { Icon(AppIcons.DarkMode, contentDescription = null) },
@@ -199,7 +196,7 @@ fun SettingsScreen(
                                 modifier = Modifier.height(40.dp),
                                 text = {
                                     Text(
-                                        text = themeSystemText,
+                                        text = stringResource(R.string.settings_theme_system),
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center,
                                         style = MaterialTheme.typography.labelLarge
@@ -212,7 +209,7 @@ fun SettingsScreen(
                                 modifier = Modifier.height(40.dp),
                                 text = {
                                     Text(
-                                        text = themeDarkText,
+                                        text = stringResource(R.string.settings_theme_dark),
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center,
                                         style = MaterialTheme.typography.labelLarge
@@ -225,7 +222,7 @@ fun SettingsScreen(
                                 modifier = Modifier.height(40.dp),
                                 text = {
                                     Text(
-                                        text = themeLightText,
+                                        text = stringResource(R.string.settings_theme_light),
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = TextAlign.Center,
                                         style = MaterialTheme.typography.labelLarge
@@ -385,14 +382,8 @@ fun SettingsScreen(
 
     availableAppUpdate?.let { update ->
         AppUpdateDialog(
-            titleText = stringResource(R.string.app_update_available_title),
-            messageText = stringResource(
-                R.string.app_update_available_message,
-                update.currentVersion,
-                update.latestVersion
-            ),
-            openText = stringResource(R.string.app_update_open_release),
-            cancelText = stringResource(R.string.cancel),
+            currentVersion = update.currentVersion,
+            latestVersion = update.latestVersion,
             onDismiss = viewModel::dismissAppUpdateDialog,
             onOpenRelease = {
                 viewModel.dismissAppUpdateDialog()
@@ -408,14 +399,6 @@ fun SettingsScreen(
         DnsSettingsDialog(
             remoteDns = remoteDns,
             directDns = directDns,
-            titleText = stringResource(R.string.dns_dialog_title),
-            remoteLabelText = stringResource(R.string.dns_label_remote),
-            remoteExampleText = stringResource(R.string.dns_dialog_remote_example),
-            directLabelText = stringResource(R.string.dns_label_direct),
-            directExampleText = stringResource(R.string.dns_dialog_direct_example),
-            confirmText = stringResource(R.string.confirm),
-            cancelText = stringResource(R.string.cancel),
-            resetText = stringResource(R.string.dns_dialog_reset),
             onDismiss = { showDnsDialog = false },
             onReset = {
                 scope.launch {
@@ -435,12 +418,6 @@ fun SettingsScreen(
     if (showLanguageDialog) {
         LanguageSettingsDialog(
             selectedLanguageTag = effectiveLanguageTag,
-            titleText = stringResource(R.string.settings_language),
-            confirmText = stringResource(R.string.confirm),
-            cancelText = stringResource(R.string.cancel),
-            languageOptions = AppLocaleManager.supportedLanguages.map { language ->
-                language.tag to stringResource(language.labelResId)
-            },
             onDismiss = { showLanguageDialog = false },
             onConfirm = { selectedTag ->
                 scope.launch {
@@ -458,17 +435,12 @@ fun SettingsScreen(
             }
         )
     }
-
-
-
 }
 
 @Composable
 private fun AppUpdateDialog(
-    titleText: String,
-    messageText: String,
-    openText: String,
-    cancelText: String,
+    currentVersion: String,
+    latestVersion: String,
     onDismiss: () -> Unit,
     onOpenRelease: () -> Unit
 ) {
@@ -485,12 +457,16 @@ private fun AppUpdateDialog(
                     .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
             ) {
                 Text(
-                    text = titleText,
+                    text = stringResource(R.string.app_update_available_title),
                     style = MaterialTheme.typography.headlineSmall
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = messageText,
+                    text = stringResource(
+                        R.string.app_update_available_message,
+                        currentVersion,
+                        latestVersion
+                    ),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(Modifier.height(16.dp))
@@ -500,11 +476,11 @@ private fun AppUpdateDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text(cancelText)
+                        Text(stringResource(R.string.cancel))
                     }
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = onOpenRelease) {
-                        Text(openText)
+                        Text(stringResource(R.string.app_update_open_release))
                     }
                 }
             }
@@ -516,15 +492,14 @@ private fun AppUpdateDialog(
 @Composable
 private fun LanguageSettingsDialog(
     selectedLanguageTag: String,
-    titleText: String,
-    confirmText: String,
-    cancelText: String,
-    languageOptions: List<Pair<String, String>>,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
     var selected by remember(selectedLanguageTag) {
         mutableStateOf(AppLocaleManager.normalize(selectedLanguageTag))
+    }
+    val languageOptions = AppLocaleManager.supportedLanguages.map { language ->
+        language.tag to stringResource(language.labelResId)
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -540,7 +515,7 @@ private fun LanguageSettingsDialog(
                     .padding(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 8.dp)
             ) {
                 Text(
-                    text = titleText,
+                    text = stringResource(R.string.settings_language),
                     style = MaterialTheme.typography.titleMedium
                 )
                 Spacer(Modifier.height(10.dp))
@@ -569,11 +544,11 @@ private fun LanguageSettingsDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text(cancelText)
+                        Text(stringResource(R.string.cancel))
                     }
                     Spacer(Modifier.width(4.dp))
                     TextButton(onClick = { onConfirm(selected) }) {
-                        Text(confirmText)
+                        Text(stringResource(R.string.confirm))
                     }
                 }
             }
@@ -585,14 +560,6 @@ private fun LanguageSettingsDialog(
 private fun DnsSettingsDialog(
     remoteDns: String,
     directDns: String,
-    titleText: String,
-    remoteLabelText: String,
-    remoteExampleText: String,
-    directLabelText: String,
-    directExampleText: String,
-    confirmText: String,
-    cancelText: String,
-    resetText: String,
     onDismiss: () -> Unit,
     onReset: () -> Unit,
     onConfirm: (remote: String, direct: String) -> Unit
@@ -613,15 +580,15 @@ private fun DnsSettingsDialog(
                     .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
             ) {
                 Text(
-                    text = titleText,
+                    text = stringResource(R.string.dns_dialog_title),
                     style = MaterialTheme.typography.headlineSmall
                 )
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = remote,
                     onValueChange = { remote = it },
-                    label = { Text(remoteLabelText) },
-                    supportingText = { Text(remoteExampleText) },
+                    label = { Text(stringResource(R.string.dns_label_remote)) },
+                    supportingText = { Text(stringResource(R.string.dns_dialog_remote_example)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -629,8 +596,8 @@ private fun DnsSettingsDialog(
                 OutlinedTextField(
                     value = direct,
                     onValueChange = { direct = it },
-                    label = { Text(directLabelText) },
-                    supportingText = { Text(directExampleText) },
+                    label = { Text(stringResource(R.string.dns_label_direct)) },
+                    supportingText = { Text(stringResource(R.string.dns_dialog_direct_example)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -641,18 +608,18 @@ private fun DnsSettingsDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = onReset) {
-                        Text(resetText)
+                        Text(stringResource(R.string.dns_dialog_reset))
                     }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onDismiss) {
-                        Text(cancelText)
+                        Text(stringResource(R.string.cancel))
                     }
                     Spacer(Modifier.width(8.dp))
                     TextButton(
                         onClick = { onConfirm(remote.trim(), direct.trim()) },
                         enabled = remote.isNotBlank() && direct.isNotBlank()
                     ) {
-                        Text(confirmText)
+                        Text(stringResource(R.string.confirm))
                     }
                 }
             }

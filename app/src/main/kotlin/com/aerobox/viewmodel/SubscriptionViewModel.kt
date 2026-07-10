@@ -215,9 +215,8 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 _uiMessage.tryEmit(
                     buildString {
                         append(
-                            appQuantityString(
+                            appCountString(
                                 R.plurals.subscription_update_complete_all_format,
-                                successCount,
                                 successCount,
                                 addedCount,
                                 updatedCount,
@@ -226,9 +225,8 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                         )
                         if (metadataCount > 0) {
                             append(
-                                appQuantityString(
+                                appCountString(
                                     R.plurals.subscription_update_metadata_suffix,
-                                    metadataCount,
                                     metadataCount
                                 )
                             )
@@ -236,9 +234,8 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                         if (insecureCount > 0) {
                             append('\n')
                             append(
-                                appQuantityString(
+                                appCountString(
                                     R.plurals.warning_insecure_nodes_format,
-                                    insecureCount,
                                     insecureCount
                                 )
                             )
@@ -263,9 +260,8 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                         )
                         if (metadataCount > 0) {
                             append(
-                                appQuantityString(
+                                appCountString(
                                     R.plurals.subscription_update_metadata_suffix,
-                                    metadataCount,
                                     metadataCount
                                 )
                             )
@@ -273,9 +269,8 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                         if (insecureCount > 0) {
                             append('\n')
                             append(
-                                appQuantityString(
+                                appCountString(
                                     R.plurals.warning_insecure_nodes_format,
-                                    insecureCount,
                                     insecureCount
                                 )
                             )
@@ -528,15 +523,13 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         val error = result.error
         if (error == null && result.nodeCount > 0) {
             val successPrefix = if (result.subscriptionId == 0L) {
-                appQuantityString(
+                appCountString(
                     R.plurals.import_success_ungrouped_format,
-                    result.nodeCount,
                     result.nodeCount
                 )
             } else {
-                appQuantityString(
+                appCountString(
                     R.plurals.import_success_with_count_format,
-                    result.nodeCount,
                     result.nodeCount
                 )
             }
@@ -548,9 +541,8 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 if (result.insecureNodeCount > 0) {
                     append('\n')
                     append(
-                        appQuantityString(
+                        appCountString(
                             R.plurals.warning_insecure_nodes_format,
-                            result.insecureNodeCount,
                             result.insecureNodeCount
                         )
                     )
@@ -681,9 +673,8 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             if (result.insecureNodeCount > 0) {
                 append('\n')
                 append(
-                    appQuantityString(
+                    appCountString(
                         R.plurals.warning_insecure_nodes_format,
-                        result.insecureNodeCount,
                         result.insecureNodeCount
                     )
                 )
@@ -715,9 +706,10 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private fun appQuantityString(resId: Int, quantity: Int, vararg formatArgs: Any): String {
+    private fun appCountString(resId: Int, quantity: Int, vararg formatArgs: Any): String {
         return localizedStringContext().resources.getQuantityString(
             resId,
+            quantity,
             quantity,
             *formatArgs
         )

@@ -101,28 +101,24 @@ data class GroupPickerStateHolder(
 fun GroupPickerSection(
     holder: GroupPickerStateHolder,
     localGroups: List<Subscription>,
-    modifier: Modifier = Modifier,
-    chooseGroupText: String? = null,
-    ungroupedText: String? = null,
-    newGroupText: String? = null,
-    newGroupNameHint: String? = null
+    modifier: Modifier = Modifier
 ) {
-    val resolvedChooseGroupText = chooseGroupText ?: stringResource(R.string.import_choose_group)
-    val resolvedUngroupedText = ungroupedText ?: stringResource(R.string.group_ungrouped)
-    val resolvedNewGroupText = newGroupText ?: stringResource(R.string.group_new)
-    val resolvedNewGroupNameHint = newGroupNameHint ?: stringResource(R.string.group_new_name_hint)
+    val chooseGroupText = stringResource(R.string.import_choose_group)
+    val ungroupedText = stringResource(R.string.group_ungrouped)
+    val newGroupText = stringResource(R.string.group_new)
+    val newGroupNameHint = stringResource(R.string.group_new_name_hint)
 
     val displayText = when (val opt = holder.state.option) {
-        is GroupPickerOption.Ungrouped -> resolvedUngroupedText
+        is GroupPickerOption.Ungrouped -> ungroupedText
         is GroupPickerOption.Existing -> opt.subscription.name
-        is GroupPickerOption.New -> resolvedNewGroupText
+        is GroupPickerOption.New -> newGroupText
     }
 
     var expanded by remember { mutableStateOf(false) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = resolvedChooseGroupText,
+            text = chooseGroupText,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold
         )
@@ -147,47 +143,45 @@ fun GroupPickerSection(
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
             ) {
-                ProvideAppLocale {
-                    DropdownMenuItem(
-                        text = { Text(resolvedUngroupedText) },
-                        onClick = {
-                            holder.onOptionChange(GroupPickerOption.Ungrouped)
-                            expanded = false
-                        }
-                    )
-                    localGroups.forEach { group ->
-                        DropdownMenuItem(
-                            text = {
-                                val suffix = pluralStringResource(
-                                    R.plurals.group_node_count_suffix,
-                                    group.nodeCount,
-                                    group.nodeCount
-                                )
-                                Text(
-                                    text = "${group.name}（$suffix）",
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            onClick = {
-                                holder.onOptionChange(GroupPickerOption.Existing(group))
-                                expanded = false
-                            }
-                        )
+                DropdownMenuItem(
+                    text = { Text(ungroupedText) },
+                    onClick = {
+                        holder.onOptionChange(GroupPickerOption.Ungrouped)
+                        expanded = false
                     }
+                )
+                localGroups.forEach { group ->
                     DropdownMenuItem(
                         text = {
+                            val suffix = pluralStringResource(
+                                R.plurals.group_node_count_suffix,
+                                group.nodeCount,
+                                group.nodeCount
+                            )
                             Text(
-                                text = resolvedNewGroupText,
-                                color = MaterialTheme.colorScheme.primary
+                                text = "${group.name}（$suffix）",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         },
                         onClick = {
-                            holder.onOptionChange(GroupPickerOption.New)
+                            holder.onOptionChange(GroupPickerOption.Existing(group))
                             expanded = false
                         }
                     )
                 }
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = newGroupText,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    },
+                    onClick = {
+                        holder.onOptionChange(GroupPickerOption.New)
+                        expanded = false
+                    }
+                )
             }
         }
 
@@ -196,7 +190,7 @@ fun GroupPickerSection(
             OutlinedTextField(
                 value = holder.state.newGroupName,
                 onValueChange = holder.onNewNameChange,
-                label = { Text(resolvedNewGroupNameHint) },
+                label = { Text(newGroupNameHint) },
                 singleLine = true,
                 isError = holder.state.newGroupName.isBlank(),
                 modifier = Modifier.fillMaxWidth()
@@ -210,86 +204,64 @@ fun GroupPickerDialog(
     nodeCount: Int,
     suggestedName: String,
     localGroups: List<Subscription>,
-    chooseGroupText: String? = null,
-    importNodeCountText: String? = null,
-    confirmText: String? = null,
-    cancelText: String? = null,
-    defaultLocalGroupName: String? = null,
-    ungroupedText: String? = null,
-    newGroupText: String? = null,
-    newGroupNameHint: String? = null,
     onConfirm: (ImportGroupTarget) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val resolvedChooseGroupText = chooseGroupText ?: stringResource(R.string.import_choose_group)
-    val resolvedImportNodeCountText = importNodeCountText ?: pluralStringResource(
+    val importNodeCountText = pluralStringResource(
         R.plurals.import_node_count,
         nodeCount,
         nodeCount
     )
-    val resolvedConfirmText = confirmText ?: stringResource(R.string.confirm)
-    val resolvedCancelText = cancelText ?: stringResource(R.string.cancel)
-    val resolvedDefaultLocalGroupName = defaultLocalGroupName ?: stringResource(R.string.local_group_label)
-    val resolvedUngroupedText = ungroupedText ?: stringResource(R.string.group_ungrouped)
-    val resolvedNewGroupText = newGroupText ?: stringResource(R.string.group_new)
-    val resolvedNewGroupNameHint = newGroupNameHint ?: stringResource(R.string.group_new_name_hint)
+    val confirmText = stringResource(R.string.confirm)
+    val cancelText = stringResource(R.string.cancel)
+    val defaultLocalGroupName = stringResource(R.string.local_group_label)
     val holder = rememberGroupPickerState(
         suggestedName = suggestedName,
         localGroups = localGroups
     )
 
-    ProvideAppLocale {
-        Dialog(onDismissRequest = onDismiss) {
-            Surface(
-                modifier = Modifier.width(320.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.width(320.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Text(
+                    text = importNodeCountText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                GroupPickerSection(
+                    holder = holder,
+                    localGroups = localGroups
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = resolvedChooseGroupText,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = resolvedImportNodeCountText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    GroupPickerSection(
-                        holder = holder,
-                        localGroups = localGroups,
-                        chooseGroupText = resolvedChooseGroupText,
-                        ungroupedText = resolvedUngroupedText,
-                        newGroupText = resolvedNewGroupText,
-                        newGroupNameHint = resolvedNewGroupNameHint
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = onDismiss) {
-                            Text(resolvedCancelText)
-                        }
-                        Spacer(Modifier.width(4.dp))
-                        TextButton(
-                            onClick = {
-                                onConfirm(
-                                    holder.state.toTarget(
-                                        fallbackName = suggestedName,
-                                        defaultName = resolvedDefaultLocalGroupName
-                                    )
+                    TextButton(onClick = onDismiss) {
+                        Text(cancelText)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    TextButton(
+                        onClick = {
+                            onConfirm(
+                                holder.state.toTarget(
+                                    fallbackName = suggestedName,
+                                    defaultName = defaultLocalGroupName
                                 )
-                            }
-                        ) {
-                            Text(resolvedConfirmText)
+                            )
                         }
+                    ) {
+                        Text(confirmText)
                     }
                 }
             }

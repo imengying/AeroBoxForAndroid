@@ -93,7 +93,6 @@ import com.aerobox.imports.ExternalImportRequest
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.GroupPickerDialog
 import com.aerobox.ui.components.GroupPickerSection
-import com.aerobox.ui.components.ProvideAppLocale
 import com.aerobox.ui.components.rememberGroupPickerState
 import com.aerobox.ui.scanner.AeroBoxQrCaptureActivity
 import com.aerobox.utils.NetworkUtils
@@ -249,63 +248,56 @@ fun SubscriptionScreen(
                     showImportMenu = false
                     localFileLauncher.launch(arrayOf("*/*"))
                 }
-                val addViaSubscriptionLinkText = stringResource(R.string.add_via_subscription_link)
-                val addViaNodesText = stringResource(R.string.add_via_nodes)
-                val scanQrText = stringResource(R.string.scan_qr)
-                val addViaLocalFileText = stringResource(R.string.add_via_local_file)
-
                 DropdownMenu(
                     expanded = showImportMenu,
                     onDismissRequest = { showImportMenu = false }
                 ) {
-                    ProvideAppLocale {
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = addViaSubscriptionLinkText,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
-                                )
-                            },
-                            onClick = {
-                                showImportMenu = false
-                                showAddSubscriptionDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = addViaNodesText,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
-                                )
-                            },
-                            onClick = {
-                                showImportMenu = false
-                                showAddNodeDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = scanQrText,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
-                                )
-                            },
-                            onClick = openQrImport
-                        )
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = addViaLocalFileText,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
-                                )
-                            },
-                            onClick = openLocalImport
-                        )
-                    }
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.add_via_subscription_link),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
+                        onClick = {
+                            showImportMenu = false
+                            showAddSubscriptionDialog = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.add_via_nodes),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
+                        onClick = {
+                            showImportMenu = false
+                            showAddNodeDialog = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.scan_qr),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
+                        onClick = openQrImport
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.add_via_local_file),
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        },
+                        onClick = openLocalImport
+                    )
                 }
                 FloatingActionButton(onClick = { showImportMenu = !showImportMenu }) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.add_subscription))
@@ -439,14 +431,6 @@ fun SubscriptionScreen(
         SubscriptionEditorDialog(
             title = stringResource(R.string.add_subscription),
             confirmText = stringResource(R.string.add),
-            cancelText = stringResource(R.string.cancel),
-            groupNameLabel = stringResource(R.string.group_new_name_hint),
-            subscriptionNameLabel = stringResource(R.string.subscription_name),
-            subscriptionUrlLabel = stringResource(R.string.subscription_url),
-            autoUpdateText = stringResource(R.string.subscription_auto_update),
-            updateIntervalLabel = stringResource(R.string.subscription_update_interval_minutes),
-            updateIntervalHint = stringResource(R.string.subscription_update_interval_hint),
-            invalidIntervalText = stringResource(R.string.subscription_auto_update_invalid_interval),
             onDismiss = { showAddSubscriptionDialog = false },
             onConfirm = { name, url, autoUpdate, updateInterval ->
                 viewModel.addSubscription(
@@ -463,15 +447,6 @@ fun SubscriptionScreen(
     if (showAddNodeDialog) {
         NodeImportDialog(
             localGroups = localGroups,
-            title = stringResource(R.string.add_via_nodes),
-            nodeContentLabel = stringResource(R.string.node_content),
-            addText = stringResource(R.string.add),
-            cancelText = stringResource(R.string.cancel),
-            defaultLocalGroupName = stringResource(R.string.local_group_label),
-            chooseGroupText = stringResource(R.string.import_choose_group),
-            ungroupedText = stringResource(R.string.group_ungrouped),
-            newGroupText = stringResource(R.string.group_new),
-            newGroupNameHint = stringResource(R.string.group_new_name_hint),
             onDismiss = { showAddNodeDialog = false },
             onConfirm = { content, target ->
                 viewModel.importNodeContent(source = content, target = target)
@@ -485,18 +460,6 @@ fun SubscriptionScreen(
             nodeCount = pending.nodeCount,
             suggestedName = pending.suggestedName,
             localGroups = localGroups,
-            chooseGroupText = stringResource(R.string.import_choose_group),
-            importNodeCountText = pluralStringResource(
-                R.plurals.import_node_count,
-                pending.nodeCount,
-                pending.nodeCount
-            ),
-            confirmText = stringResource(R.string.confirm),
-            cancelText = stringResource(R.string.cancel),
-            defaultLocalGroupName = stringResource(R.string.local_group_label),
-            ungroupedText = stringResource(R.string.group_ungrouped),
-            newGroupText = stringResource(R.string.group_new),
-            newGroupNameHint = stringResource(R.string.group_new_name_hint),
             onConfirm = { target -> viewModel.confirmPendingImport(target) },
             onDismiss = { viewModel.cancelPendingImport() }
         )
@@ -506,14 +469,6 @@ fun SubscriptionScreen(
         SubscriptionEditorDialog(
             title = stringResource(R.string.add_subscription),
             confirmText = stringResource(R.string.add),
-            cancelText = stringResource(R.string.cancel),
-            groupNameLabel = stringResource(R.string.group_new_name_hint),
-            subscriptionNameLabel = stringResource(R.string.subscription_name),
-            subscriptionUrlLabel = stringResource(R.string.subscription_url),
-            autoUpdateText = stringResource(R.string.subscription_auto_update),
-            updateIntervalLabel = stringResource(R.string.subscription_update_interval_minutes),
-            updateIntervalHint = stringResource(R.string.subscription_update_interval_hint),
-            invalidIntervalText = stringResource(R.string.subscription_auto_update_invalid_interval),
             initialName = link.suggestedName,
             initialUrl = link.url,
             initialAutoUpdate = link.autoUpdate,
@@ -536,14 +491,6 @@ fun SubscriptionScreen(
                 if (subscription.isLocalGroup()) R.string.edit_group else R.string.edit_subscription
             ),
             confirmText = stringResource(R.string.save),
-            cancelText = stringResource(R.string.cancel),
-            groupNameLabel = stringResource(R.string.group_new_name_hint),
-            subscriptionNameLabel = stringResource(R.string.subscription_name),
-            subscriptionUrlLabel = stringResource(R.string.subscription_url),
-            autoUpdateText = stringResource(R.string.subscription_auto_update),
-            updateIntervalLabel = stringResource(R.string.subscription_update_interval_minutes),
-            updateIntervalHint = stringResource(R.string.subscription_update_interval_hint),
-            invalidIntervalText = stringResource(R.string.subscription_auto_update_invalid_interval),
             isLocalGroup = subscription.isLocalGroup(),
             initialName = subscription.name,
             initialUrl = subscription.url,
@@ -575,43 +522,41 @@ fun SubscriptionScreen(
         )
         val deleteText = stringResource(R.string.delete)
         val cancelText = stringResource(R.string.cancel)
-        ProvideAppLocale {
-            Dialog(onDismissRequest = { deleteTarget = null }) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 6.dp
+        Dialog(onDismissRequest = { deleteTarget = null }) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    Text(
+                        text = deleteTitle,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = deleteMessage,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = deleteTitle,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            text = deleteMessage,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(onClick = { deleteTarget = null }) {
-                                Text(cancelText)
-                            }
-                            Spacer(Modifier.width(4.dp))
-                            TextButton(onClick = {
-                                viewModel.deleteSubscription(subscription)
-                                deleteTarget = null
-                            }) {
-                                Text(deleteText, color = MaterialTheme.colorScheme.error)
-                            }
+                        TextButton(onClick = { deleteTarget = null }) {
+                            Text(cancelText)
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(onClick = {
+                            viewModel.deleteSubscription(subscription)
+                            deleteTarget = null
+                        }) {
+                            Text(deleteText, color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -633,15 +578,6 @@ private fun buildQrScanOptions(prompt: String): ScanOptions {
 @Composable
 private fun NodeImportDialog(
     localGroups: List<Subscription>,
-    title: String,
-    nodeContentLabel: String,
-    addText: String,
-    cancelText: String,
-    defaultLocalGroupName: String,
-    chooseGroupText: String,
-    ungroupedText: String,
-    newGroupText: String,
-    newGroupNameHint: String,
     onDismiss: () -> Unit,
     onConfirm: (content: String, target: ImportGroupTarget) -> Unit
 ) {
@@ -650,69 +586,64 @@ private fun NodeImportDialog(
         suggestedName = "",
         localGroups = localGroups
     )
+    val defaultLocalGroupName = stringResource(R.string.local_group_label)
 
-    ProvideAppLocale {
-        Dialog(onDismissRequest = onDismiss) {
-            Surface(
-                modifier = Modifier.width(320.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.width(320.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                Text(
+                    text = stringResource(R.string.add_via_nodes),
+                    style = MaterialTheme.typography.titleMedium
+                )
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium
+                    OutlinedTextField(
+                        value = content,
+                        onValueChange = { content = it },
+                        label = { Text(stringResource(R.string.node_content)) },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 420.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = content,
-                            onValueChange = { content = it },
-                            label = { Text(nodeContentLabel) },
-                            minLines = 3,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        GroupPickerSection(
-                            holder = holder,
-                            localGroups = localGroups,
-                            chooseGroupText = chooseGroupText,
-                            ungroupedText = ungroupedText,
-                            newGroupText = newGroupText,
-                            newGroupNameHint = newGroupNameHint
-                        )
+                    GroupPickerSection(
+                        holder = holder,
+                        localGroups = localGroups
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel))
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
+                    Spacer(Modifier.width(4.dp))
+                    TextButton(
+                        onClick = {
+                            val target = holder.state.toTarget(
+                                fallbackName = "",
+                                defaultName = defaultLocalGroupName
+                            )
+                            onConfirm(content.trim(), target)
+                        },
+                        enabled = content.isNotBlank()
                     ) {
-                        TextButton(onClick = onDismiss) {
-                            Text(cancelText)
-                        }
-                        Spacer(Modifier.width(4.dp))
-                        TextButton(
-                            onClick = {
-                                val target = holder.state.toTarget(
-                                    fallbackName = "",
-                                    defaultName = defaultLocalGroupName
-                                )
-                                onConfirm(content.trim(), target)
-                            },
-                            enabled = content.isNotBlank()
-                        ) {
-                            Text(addText)
-                        }
+                        Text(stringResource(R.string.add))
                     }
                 }
             }
@@ -970,14 +901,6 @@ private fun relativeTimeText(timestampMs: Long): String {
 private fun SubscriptionEditorDialog(
     title: String,
     confirmText: String,
-    cancelText: String,
-    groupNameLabel: String,
-    subscriptionNameLabel: String,
-    subscriptionUrlLabel: String,
-    autoUpdateText: String,
-    updateIntervalLabel: String,
-    updateIntervalHint: String,
-    invalidIntervalText: String,
     isLocalGroup: Boolean = false,
     initialName: String = "",
     initialUrl: String = "",
@@ -997,115 +920,112 @@ private fun SubscriptionEditorDialog(
     val intervalValid = isLocalGroup || !autoUpdate ||
         (intervalMinutes != null && intervalMinutes >= MIN_INTERVAL_MINUTES)
     val urlValid = isLocalGroup || url.isNotBlank()
+    val nameLabel = stringResource(
+        if (isLocalGroup) R.string.group_new_name_hint else R.string.subscription_name
+    )
 
-    ProvideAppLocale {
-        Dialog(onDismissRequest = onDismiss) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp)
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(Modifier.height(14.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(14.dp))
 
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(nameLabel) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (!isLocalGroup) {
+                    Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = {
-                            Text(
-                                if (isLocalGroup) groupNameLabel else subscriptionNameLabel
-                            )
-                        },
+                        value = url,
+                        onValueChange = { url = it },
+                        label = { Text(stringResource(R.string.subscription_url)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    if (!isLocalGroup) {
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = url,
-                            onValueChange = { url = it },
-                            label = { Text(subscriptionUrlLabel) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = autoUpdateText,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Switch(
-                                checked = autoUpdate,
-                                onCheckedChange = { autoUpdate = it }
-                            )
-                        }
-                        if (autoUpdate) {
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = updateIntervalMinutes,
-                                onValueChange = { input ->
-                                    updateIntervalMinutes = input.filter { it.isDigit() }
-                                },
-                                label = { Text(updateIntervalLabel) },
-                                supportingText = {
-                                    Text(
-                                        text = if (intervalValid) {
-                                            updateIntervalHint
-                                        } else {
-                                            invalidIntervalText
-                                        }
-                                    )
-                                },
-                                isError = !intervalValid,
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
                     Spacer(Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = onDismiss) {
-                            Text(cancelText)
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        TextButton(
-                            onClick = {
-                                val minutes = if (autoUpdate && !isLocalGroup) {
-                                    (intervalMinutes ?: DEFAULT_INTERVAL_MINUTES)
-                                        .coerceAtLeast(MIN_INTERVAL_MINUTES)
-                                } else {
-                                    DEFAULT_INTERVAL_MINUTES
-                                }
-                                onConfirm(
-                                    name.trim(),
-                                    if (isLocalGroup) "" else url.trim(),
-                                    if (isLocalGroup) false else autoUpdate,
-                                    minutes * 60_000L
+                        Text(
+                            text = stringResource(R.string.subscription_auto_update),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Switch(
+                            checked = autoUpdate,
+                            onCheckedChange = { autoUpdate = it }
+                        )
+                    }
+                    if (autoUpdate) {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = updateIntervalMinutes,
+                            onValueChange = { input ->
+                                updateIntervalMinutes = input.filter { it.isDigit() }
+                            },
+                            label = { Text(stringResource(R.string.subscription_update_interval_minutes)) },
+                            supportingText = {
+                                Text(
+                                    text = if (intervalValid) {
+                                        stringResource(R.string.subscription_update_interval_hint)
+                                    } else {
+                                        stringResource(R.string.subscription_auto_update_invalid_interval)
+                                    }
                                 )
                             },
-                            enabled = name.isNotBlank() && urlValid && intervalValid
-                        ) {
-                            Text(confirmText)
-                        }
+                            isError = !intervalValid,
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        onClick = {
+                            val minutes = if (autoUpdate && !isLocalGroup) {
+                                (intervalMinutes ?: DEFAULT_INTERVAL_MINUTES)
+                                    .coerceAtLeast(MIN_INTERVAL_MINUTES)
+                            } else {
+                                DEFAULT_INTERVAL_MINUTES
+                            }
+                            onConfirm(
+                                name.trim(),
+                                if (isLocalGroup) "" else url.trim(),
+                                if (isLocalGroup) false else autoUpdate,
+                                minutes * 60_000L
+                            )
+                        },
+                        enabled = name.isNotBlank() && urlValid && intervalValid
+                    ) {
+                        Text(confirmText)
                     }
                 }
             }

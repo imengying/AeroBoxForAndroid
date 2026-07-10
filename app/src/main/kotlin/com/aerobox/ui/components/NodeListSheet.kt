@@ -57,24 +57,18 @@ fun NodeListSheet(
     subscriptions: List<Subscription> = emptyList(),
     selectedNodeId: Long,
     nodeSortOrder: Map<Long, List<Long>> = emptyMap(),
-    titleText: String? = null,
-    emptyHintText: String? = null,
-    speedTestText: String? = null,
-    latencyTestingText: String? = null,
-    latencyFailedText: String? = null,
-    ungroupedText: String? = null,
     onNodeSelected: (ProxyNode) -> Unit,
     onTestSubscription: (List<ProxyNode>) -> Unit,
     onTestNode: (ProxyNode) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val resolvedTitleText = titleText ?: stringResource(R.string.node_list_title)
-    val resolvedEmptyHintText = emptyHintText ?: stringResource(R.string.node_list_empty_hint)
-    val resolvedSpeedTestText = speedTestText ?: stringResource(R.string.node_list_speed_test)
-    val resolvedLatencyTestingText = latencyTestingText ?: stringResource(R.string.latency_testing)
-    val resolvedLatencyFailedText = latencyFailedText ?: stringResource(R.string.latency_failed)
-    val resolvedUngroupedText = ungroupedText ?: stringResource(R.string.group_ungrouped)
+    val titleText = stringResource(R.string.node_list_title)
+    val emptyHintText = stringResource(R.string.node_list_empty_hint)
+    val speedTestText = stringResource(R.string.node_list_speed_test)
+    val latencyTestingText = stringResource(R.string.latency_testing)
+    val latencyFailedText = stringResource(R.string.latency_failed)
+    val ungroupedText = stringResource(R.string.group_ungrouped)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -90,7 +84,7 @@ fun NodeListSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = resolvedTitleText,
+                        text = titleText,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -102,12 +96,12 @@ fun NodeListSheet(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = resolvedEmptyHintText,
+                        text = emptyHintText,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
-                val grouped = remember(nodes, subscriptions, resolvedUngroupedText) {
+                val grouped = remember(nodes, subscriptions, ungroupedText) {
                     val subscriptionOrder = subscriptions.withIndex().associate { it.value.id to it.index }
                     val subscriptionNames = subscriptions.associate { it.id to it.name }
                     nodes
@@ -120,7 +114,7 @@ fun NodeListSheet(
                             }.thenBy { (subId, _) ->
                                 if (subId == 0L || !subscriptionNames.containsKey(subId)) 1 else 0
                             }.thenBy { (subId, _) ->
-                                subscriptionNames[subId] ?: resolvedUngroupedText
+                                subscriptionNames[subId] ?: ungroupedText
                             }
                         )
                 }
@@ -163,7 +157,7 @@ fun NodeListSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = resolvedTitleText,
+                        text = titleText,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -174,7 +168,7 @@ fun NodeListSheet(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(resolvedSpeedTestText)
+                        Text(speedTestText)
                     }
                 }
 
@@ -188,7 +182,7 @@ fun NodeListSheet(
                             onClick = { selectedSubscriptionId = subId },
                             label = {
                                 Text(
-                                    text = subscriptionNames[subId] ?: resolvedUngroupedText,
+                                    text = subscriptionNames[subId] ?: ungroupedText,
                                     style = MaterialTheme.typography.labelMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -214,9 +208,9 @@ fun NodeListSheet(
                             isSelected = node.id == selectedNodeId,
                             onClick = { onNodeSelected(node) },
                             onTestLatency = { onTestNode(node) },
-                            speedTestText = resolvedSpeedTestText,
-                            latencyTestingText = resolvedLatencyTestingText,
-                            latencyFailedText = resolvedLatencyFailedText
+                            speedTestText = speedTestText,
+                            latencyTestingText = latencyTestingText,
+                            latencyFailedText = latencyFailedText
                         )
                     }
                 }

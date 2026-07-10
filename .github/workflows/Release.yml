@@ -73,7 +73,6 @@ jobs:
       - name: Derive version from tag
         run: |
           set -euo pipefail
-          echo "AEROBOX_TAG=${GITHUB_REF_NAME}" >> "${GITHUB_ENV}"
           VERSION_NAME="${GITHUB_REF_NAME#v}"
           if [ -z "${VERSION_NAME}" ] || [ "${VERSION_NAME}" = "${GITHUB_REF_NAME}" ]; then
             echo "::error::Invalid tag format: ${GITHUB_REF_NAME}. Expected v1.2.3"
@@ -118,6 +117,7 @@ jobs:
           gradle --stacktrace :app:assembleRelease "${EXTRA_ARGS[@]}"
 
       - name: Run Android lint
+        id: lint
         env:
           AEROBOX_VERSION_NAME: ${{ env.AEROBOX_VERSION_NAME }}
           AEROBOX_VERSION_CODE: ${{ env.AEROBOX_VERSION_CODE }}
@@ -136,13 +136,11 @@ jobs:
           fi
 
       - name: Upload Android lint report
-        if: always()
+        if: failure() && steps.lint.outcome == 'failure'
         uses: actions/upload-artifact@v7.0.1
         with:
           name: aerobox-release-lint-report
-          path: |
-            app/build/reports/lint-results-release.*
-            app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt
+          path: app/build/reports/lint-results-release.*
           if-no-files-found: warn
 
       - name: Sign release APKs (v3 only)
@@ -225,26 +223,12 @@ jobs:
             find "${GITHUB_WORKSPACE}/app/build/outputs" -maxdepth 5 -print | sort
           fi
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: aerobox-release-${{ env.AEROBOX_VERSION_NAME || github.ref_name || github.run_number }}
-          path: |
-            app/build/outputs/apk/release/dist/*.apk
-            app/build/outputs/mapping/release/mapping.txt
-          if-no-files-found: error
-
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_NAME: ${{ env.AEROBOX_TAG || github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-
-          gh --version
-
           shopt -s nullglob
           APKS=(app/build/outputs/apk/release/dist/*.apk)
           if [ "${#APKS[@]}" -eq 0 ]; then
@@ -253,10 +237,10 @@ jobs:
           fi
 
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release edit "${RELEASE_TAG}" --title "${RELEASE_NAME}"
+            gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}"
             gh release upload "${RELEASE_TAG}" "${APKS[@]}" --clobber
           else
             gh release create "${RELEASE_TAG}" "${APKS[@]}" \
-              --title "${RELEASE_NAME}" \
+              --title "${RELEASE_TAG}" \
               --notes ""
           fi
