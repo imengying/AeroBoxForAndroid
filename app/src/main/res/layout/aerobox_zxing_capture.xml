@@ -1,17 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.journeyapps.barcodescanner.DecoratedBarcodeView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/zxing_barcode_scanner"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
-
-    <com.journeyapps.barcodescanner.DecoratedBarcodeView
-        android:id="@+id/zxing_barcode_scanner"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:zxing_framing_rect_width="@dimen/qr_scanner_frame_size"
-        app:zxing_framing_rect_height="@dimen/qr_scanner_frame_size"
-        app:zxing_preview_scaling_strategy="centerCrop"
-        app:zxing_scanner_layout="@layout/aerobox_zxing_barcode_scanner"
-        app:zxing_use_texture_view="false" />
-
-</FrameLayout>
+    android:layout_height="match_parent"
+    app:zxing_framing_rect_width="@dimen/qr_scanner_frame_size"
+    app:zxing_framing_rect_height="@dimen/qr_scanner_frame_size"
+    app:zxing_preview_scaling_strategy="centerCrop"
+    app:zxing_scanner_layout="@layout/aerobox_zxing_barcode_scanner"
+    app:zxing_use_texture_view="false" />

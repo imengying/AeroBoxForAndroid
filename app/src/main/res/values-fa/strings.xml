@@ -62,12 +62,14 @@
     <string name="detecting_ip_later">به‌طور خودکار تشخیص داده می‌شود…</string>
     <string name="import_choose_group">انتخاب گروه</string>
     <plurals name="import_node_count">
+        <item quantity="one">‫%1$d‬ گره وارد می‌شود</item>
         <item quantity="other">‫%1$d‬ گره وارد می‌شود</item>
     </plurals>
     <string name="group_ungrouped">بدون گروه</string>
     <string name="group_new">گروه جدید</string>
     <string name="group_new_name_hint">نام گروه</string>
     <plurals name="group_node_count_suffix">
+        <item quantity="one">‫%1$d‬ گره</item>
         <item quantity="other">‫%1$d‬ گره</item>
     </plurals>
     <string name="local_group_label">گروه محلی</string>
@@ -97,9 +99,11 @@
     <string name="local_group_no_refresh">گروه‌های محلی نیاز به بازخوانی ندارند</string>
     <string name="no_refreshable_subscription">اشتراک قابل بازخوانی وجود ندارد</string>
     <plurals name="subscription_update_complete_all_format">
+        <item quantity="one">به‌روزرسانی اشتراک تکمیل شد: ‫%1$d‬ مورد (افزوده ‫%2$d‬ / تغییر ‫%3$d‬ / حذف ‫%4$d‬)</item>
         <item quantity="other">به‌روزرسانی اشتراک تکمیل شد: ‫%1$d‬ مورد (افزوده ‫%2$d‬ / تغییر ‫%3$d‬ / حذف ‫%4$d‬)</item>
     </plurals>
     <plurals name="subscription_update_metadata_suffix">
+        <item quantity="one">، اطلاعات ترافیک/انقضای ‫%1$d‬ مورد همگام شد</item>
         <item quantity="other">، اطلاعات ترافیک/انقضای ‫%1$d‬ مورد همگام شد</item>
     </plurals>
     <string name="subscription_update_partial_fail_format">به‌روزرسانی نسبی ناموفق (موفق ‫%1$d‬ / ناموفق ‫%2$d‬، افزوده ‫%3$d‬ / تغییر ‫%4$d‬ / حذف ‫%5$d‬)</string>
@@ -112,9 +116,11 @@
     <string name="cannot_read_local_file">خواندن فایل محلی امکان‌پذیر نیست</string>
     <string name="import_local_file_failed">ورود فایل محلی ناموفق بود: %1$s</string>
     <plurals name="import_success_ungrouped_format">
+        <item quantity="one">ورود موفق: ‫%1$d‬ گره به «بدون گروه» افزوده شد</item>
         <item quantity="other">ورود موفق: ‫%1$d‬ گره به «بدون گروه» افزوده شد</item>
     </plurals>
     <plurals name="import_success_with_count_format">
+        <item quantity="one">ورود موفق: ‫%1$d‬ گره</item>
         <item quantity="other">ورود موفق: ‫%1$d‬ گره</item>
     </plurals>
     <string name="import_success_metadata_suffix">، اطلاعات ترافیک/انقضای اشتراک خوانده شد</string>
@@ -127,6 +133,7 @@
     <string name="error_no_valid_nodes">گره معتبری استخراج نشد؛ قالب اشتراک را بررسی کنید</string>
     <string name="error_no_valid_nodes_hints_format">گره معتبری استخراج نشد. دلایل احتمالی: %1$s</string>
     <plurals name="warning_insecure_nodes_format">
+        <item quantity="one">هشدار: ‫%1$d‬ گره اعتبارسنجی گواهی TLS را غیرفعال کرده‌اند و در معرض حمله MITM قرار دارند</item>
         <item quantity="other">هشدار: ‫%1$d‬ گره اعتبارسنجی گواهی TLS را غیرفعال کرده‌اند و در معرض حمله MITM قرار دارند</item>
     </plurals>
 
