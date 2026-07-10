@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.aerobox.AeroBoxApplication
@@ -608,6 +609,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private fun toIpPrefixOrNull(address: String, prefix: Int): IpPrefix? {
         val normalized = address
             .trim()

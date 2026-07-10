@@ -123,9 +123,27 @@ jobs:
           AEROBOX_VERSION_CODE: ${{ env.AEROBOX_VERSION_CODE }}
         run: |
           set -euo pipefail
-          gradle --stacktrace :app:lintRelease \
+          REPORT="app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt"
+          if ! gradle --stacktrace :app:lintRelease \
             "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}" \
-            "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}"
+            "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}"; then
+            if [ -f "${REPORT}" ]; then
+              cat "${REPORT}"
+            else
+              echo "::warning::Android lint text report was not generated"
+            fi
+            exit 1
+          fi
+
+      - name: Upload Android lint report
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: aerobox-release-lint-report
+          path: |
+            app/build/reports/lint-results-release.*
+            app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt
+          if-no-files-found: warn
 
       - name: Sign release APKs (v3 only)
         env:
