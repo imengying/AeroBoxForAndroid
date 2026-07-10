@@ -227,11 +227,6 @@ class SubscriptionRepository(context: Context) {
                         id = insertedId,
                         updateTime = updatedAt,
                         nodeCount = nodes.size,
-                        // Note: Subscription.type is intentionally not written
-                        // here. The column is preserved in the schema for
-                        // forward compatibility but no consumer reads it, so
-                        // we leave it at its default value to avoid pretending
-                        // it carries meaning.
                         trafficBytes = prepared.trafficBytes,
                         expireTimestamp = prepared.expireTimestamp,
                         updateInterval = effectiveInterval
@@ -807,7 +802,6 @@ class SubscriptionRepository(context: Context) {
                     url = prepared.resolvedUrl ?: subscription.url,
                     updateTime = updatedAt,
                     nodeCount = stabilizedNodes.size,
-                    // type intentionally not written — see addSubscription
                     trafficBytes = prepared.trafficBytes,
                     expireTimestamp = prepared.expireTimestamp,
                     updateInterval = prepared.resolvedUpdateInterval

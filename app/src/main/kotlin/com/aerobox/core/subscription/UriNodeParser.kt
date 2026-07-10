@@ -524,7 +524,7 @@ internal object UriNodeParser {
     }
 
     internal fun ProxyNode.withUriSharedOptions(params: Map<String, String>): ProxyNode {
-        val udpOverTcp = parseUdpOverTcp(
+        val udpOverTcp = parseUdpOverTcpValue(
             firstNonBlank(
                 params["udp_over_tcp"],
                 params["udp-over-tcp"],
@@ -786,8 +786,6 @@ internal object UriNodeParser {
         }
         return parts.takeIf { it.isNotEmpty() }?.joinToString(";")
     }
-
-    internal fun parseUdpOverTcp(value: Any?): Pair<Boolean?, Int?> = parseUdpOverTcpValue(value)
 
     internal fun parseBooleanOrNull(vararg values: String?): Boolean? {
         return values.firstNotNullOfOrNull { value ->

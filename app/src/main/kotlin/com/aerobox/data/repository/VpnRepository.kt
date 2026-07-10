@@ -46,7 +46,7 @@ class VpnRepository(private val context: Context) {
 
     suspend fun connectNode(node: ProxyNode): VpnConnectionResult {
         val result = launchNodeAction(node) { config, resolvedNode ->
-            startVpn(config, resolvedNode.id)
+            startServiceWithAction(AeroBoxVpnService.ACTION_START, config, resolvedNode.id)
         }
         val triggerNode = (result as? VpnConnectionResult.Success)?.node ?: node
         refreshDueSubscriptionsInBackground(triggerNode)
@@ -66,13 +66,13 @@ class VpnRepository(private val context: Context) {
                 stopVpn()
                 waitForServiceStop()
                 return launchNodeAction(node) { config, resolvedNode ->
-                    startVpn(config, resolvedNode.id)
+                    startServiceWithAction(AeroBoxVpnService.ACTION_START, config, resolvedNode.id)
                 }
             }
         }
 
         return launchNodeAction(node) { config, resolvedNode ->
-            switchNode(config, resolvedNode.id)
+            startServiceWithAction(AeroBoxVpnService.ACTION_SWITCH, config, resolvedNode.id)
         }
     }
 
@@ -80,14 +80,6 @@ class VpnRepository(private val context: Context) {
         return launchNodeAction(node) { config, resolvedNode ->
             startServiceWithAction(AeroBoxVpnService.ACTION_RELOAD, config, resolvedNode.id)
         }
-    }
-
-    private fun startVpn(config: String, nodeId: Long? = null) {
-        startServiceWithAction(AeroBoxVpnService.ACTION_START, config, nodeId)
-    }
-
-    private fun switchNode(config: String, nodeId: Long? = null) {
-        startServiceWithAction(AeroBoxVpnService.ACTION_SWITCH, config, nodeId)
     }
 
     private fun refreshDueSubscriptionsInBackground(triggerNode: ProxyNode) {
@@ -172,15 +164,11 @@ class VpnRepository(private val context: Context) {
         }
     }
 
-    private fun startServiceWithAction(action: String, config: String? = null, nodeId: Long? = null) {
+    private fun startServiceWithAction(action: String, config: String, nodeId: Long) {
         val intent = Intent(context, AeroBoxVpnService::class.java).apply {
             this.action = action
-            config?.takeIf { it.isNotBlank() }?.let {
-                putExtra(AeroBoxVpnService.EXTRA_CONFIG, it)
-            }
-            if (nodeId != null && nodeId > 0L) {
-                putExtra(AeroBoxVpnService.EXTRA_NODE_ID, nodeId)
-            }
+            putExtra(AeroBoxVpnService.EXTRA_CONFIG, config)
+            putExtra(AeroBoxVpnService.EXTRA_NODE_ID, nodeId)
         }
         context.startForegroundService(intent)
     }

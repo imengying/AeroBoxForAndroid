@@ -2,122 +2,159 @@ package com.aerobox.service
 
 import android.net.DnsResolver
 import android.os.CancellationSignal
-import android.os.Looper
 import android.system.ErrnoException
 import android.util.Log
-import com.aerobox.AeroBoxApplication
 import io.nekohasekai.libbox.ExchangeContext
 import io.nekohasekai.libbox.LocalDNSTransport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.runBlocking
 import java.net.InetAddress
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 object LocalResolverTransport : LocalDNSTransport {
     private const val TAG = "LocalResolverTransport"
     private const val UNKNOWN_ERRNO = 114514
+
+    @Suppress("DEPRECATION")
     private val dnsResolver by lazy {
-        DnsResolver(AeroBoxApplication.appInstance, Looper.getMainLooper())
+        DnsResolver.getInstance()
     }
 
     override fun raw(): Boolean = true
 
-    override fun exchange(ctx: ExchangeContext, message: ByteArray) {
-        val signal = CancellationSignal()
-        ctx.onCancel(signal::cancel)
+    override fun exchange(ctx: ExchangeContext, message: ByteArray) = runBlocking {
+        val defaultNetwork = DefaultNetworkMonitor.defaultNetwork
+            ?: error("missing default network")
+        suspendCoroutine { continuation ->
+            val signal = CancellationSignal()
+            ctx.onCancel(signal::cancel)
 
-        val callback = object : DnsResolver.Callback<ByteArray> {
-            override fun onAnswer(answer: ByteArray, rcode: Int) {
-                ctx.rawSuccess(answer)
-            }
+            val callback = object : DnsResolver.Callback<ByteArray> {
+                override fun onAnswer(answer: ByteArray, rcode: Int) {
+                    try {
+                        if (rcode == 0) {
+                            ctx.rawSuccess(answer)
+                        } else {
+                            ctx.errorCode(rcode)
+                        }
+                    } catch (error: Exception) {
+                        Log.w(TAG, "rawQuery result handling failed", error)
+                        ctx.errnoCode(UNKNOWN_ERRNO)
+                    } finally {
+                        continuation.resume(Unit)
+                    }
+                }
 
-            override fun onError(error: DnsResolver.DnsException) {
-                val cause = error.cause
-                if (cause is ErrnoException) {
-                    ctx.errnoCode(cause.errno)
-                } else {
-                    Log.w(TAG, "rawQuery failed", error)
-                    ctx.errnoCode(UNKNOWN_ERRNO)
+                override fun onError(error: DnsResolver.DnsException) {
+                    try {
+                        reportDnsError(ctx, "rawQuery failed", error)
+                    } finally {
+                        continuation.resume(Unit)
+                    }
                 }
             }
-        }
 
-        dnsResolver.rawQuery(
-            DefaultNetworkMonitor.defaultNetwork,
-            message,
-            DnsResolver.FLAG_NO_RETRY,
-            Dispatchers.IO.asExecutor(),
-            signal,
-            callback
-        )
+            try {
+                dnsResolver.rawQuery(
+                    defaultNetwork,
+                    message,
+                    DnsResolver.FLAG_NO_RETRY,
+                    Dispatchers.IO.asExecutor(),
+                    signal,
+                    callback
+                )
+            } catch (error: Exception) {
+                Log.w(TAG, "rawQuery submission failed", error)
+                ctx.errnoCode(UNKNOWN_ERRNO)
+                continuation.resume(Unit)
+            }
+        }
     }
 
     override fun lookup(ctx: ExchangeContext, network: String, domain: String) {
         lookupWithDnsResolver(ctx, network, domain)
     }
 
-    private fun lookupWithDnsResolver(ctx: ExchangeContext, network: String, domain: String) {
-        val signal = CancellationSignal()
-        ctx.onCancel(signal::cancel)
+    private fun lookupWithDnsResolver(ctx: ExchangeContext, network: String, domain: String) = runBlocking {
+        val defaultNetwork = DefaultNetworkMonitor.defaultNetwork
+            ?: error("missing default network")
+        suspendCoroutine { continuation ->
+            val signal = CancellationSignal()
+            ctx.onCancel(signal::cancel)
 
-        val callback = object : DnsResolver.Callback<Collection<InetAddress>> {
-            override fun onAnswer(answer: Collection<InetAddress>, rcode: Int) {
-                try {
-                    if (rcode == 0) {
-                        ctx.success(answer.mapNotNull { it.hostAddress }.joinToString("\n"))
-                    } else {
-                        ctx.errorCode(rcode)
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "query success handling failed", e)
-                    ctx.errnoCode(UNKNOWN_ERRNO)
-                }
-            }
-
-            override fun onError(error: DnsResolver.DnsException) {
-                try {
-                    val cause = error.cause
-                    if (cause is ErrnoException) {
-                        ctx.errnoCode(cause.errno)
-                    } else {
-                        Log.w(TAG, "query failed", error)
+            val callback = object : DnsResolver.Callback<Collection<InetAddress>> {
+                override fun onAnswer(answer: Collection<InetAddress>, rcode: Int) {
+                    try {
+                        if (rcode == 0) {
+                            ctx.success(answer.mapNotNull { it.hostAddress }.joinToString("\n"))
+                        } else {
+                            ctx.errorCode(rcode)
+                        }
+                    } catch (error: Exception) {
+                        Log.w(TAG, "query result handling failed", error)
                         ctx.errnoCode(UNKNOWN_ERRNO)
+                    } finally {
+                        continuation.resume(Unit)
                     }
-                } catch (e: Exception) {
-                    Log.w(TAG, "query error handling failed", e)
-                    ctx.errnoCode(UNKNOWN_ERRNO)
+                }
+
+                override fun onError(error: DnsResolver.DnsException) {
+                    try {
+                        reportDnsError(ctx, "query failed", error)
+                    } finally {
+                        continuation.resume(Unit)
+                    }
                 }
             }
-        }
 
-        val type = when {
-            network.endsWith("4") -> DnsResolver.TYPE_A
-            network.endsWith("6") -> DnsResolver.TYPE_AAAA
-            else -> null
-        }
+            val type = when {
+                network.endsWith("4") -> DnsResolver.TYPE_A
+                network.endsWith("6") -> DnsResolver.TYPE_AAAA
+                else -> null
+            }
 
-        if (type != null) {
-            // 5-arg overload: query(Network?, String, int, int, Executor, CancellationSignal, Callback)
-            // Resolves only A or AAAA records based on the explicit type.
-            dnsResolver.query(
-                DefaultNetworkMonitor.defaultNetwork,
-                domain,
-                type,
-                DnsResolver.FLAG_NO_RETRY,
-                Dispatchers.IO.asExecutor(),
-                signal,
-                callback
-            )
+            try {
+                if (type != null) {
+                    dnsResolver.query(
+                        defaultNetwork,
+                        domain,
+                        type,
+                        DnsResolver.FLAG_NO_RETRY,
+                        Dispatchers.IO.asExecutor(),
+                        signal,
+                        callback
+                    )
+                } else {
+                    dnsResolver.query(
+                        defaultNetwork,
+                        domain,
+                        DnsResolver.FLAG_NO_RETRY,
+                        Dispatchers.IO.asExecutor(),
+                        signal,
+                        callback
+                    )
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "query submission failed", error)
+                ctx.errnoCode(UNKNOWN_ERRNO)
+                continuation.resume(Unit)
+            }
+        }
+    }
+
+    private fun reportDnsError(
+        ctx: ExchangeContext,
+        message: String,
+        error: DnsResolver.DnsException
+    ) {
+        val cause = error.cause
+        if (cause is ErrnoException) {
+            ctx.errnoCode(cause.errno)
         } else {
-            // 4-arg overload: query(Network?, String, int, Executor, CancellationSignal, Callback)
-            // No type parameter — lets the system resolve both A and AAAA.
-            dnsResolver.query(
-                DefaultNetworkMonitor.defaultNetwork,
-                domain,
-                DnsResolver.FLAG_NO_RETRY,
-                Dispatchers.IO.asExecutor(),
-                signal,
-                callback
-            )
+            Log.w(TAG, message, error)
+            ctx.errnoCode(UNKNOWN_ERRNO)
         }
     }
 }

@@ -180,7 +180,4 @@ fun ProxyNode.effectiveTransportType(): String? {
     return transportType
         .normalizedProxyField()
         ?.takeIf { it in supportedTransportTypes }
-        ?: network
-            .normalizedProxyField()
-            ?.takeIf { it in supportedTransportTypes }
 }

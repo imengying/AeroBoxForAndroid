@@ -196,7 +196,7 @@ object ConfigGenerator {
 
     // ── Private helpers ─────────────────────────────────────────────
 
-    private fun buildExperimental(enableCacheFile: Boolean = false): JSONObject {
+    private fun buildExperimental(enableCacheFile: Boolean): JSONObject {
         return JSONObject().apply {
             if (enableCacheFile) {
                 put(
@@ -205,15 +205,15 @@ object ConfigGenerator {
                 )
             }
             put(
-            "v2ray_api",
-            JSONObject()
-                .put("listen", V2RAY_API_LISTEN)
-                .put(
-                    "stats",
-                    JSONObject()
-                        .put("enabled", true)
-                        .put("outbounds", JSONArray().put("proxy").put("direct"))
-                )
+                "v2ray_api",
+                JSONObject()
+                    .put("listen", V2RAY_API_LISTEN)
+                    .put(
+                        "stats",
+                        JSONObject()
+                            .put("enabled", true)
+                            .put("outbounds", JSONArray().put("proxy").put("direct"))
+                    )
             )
         }
     }
@@ -221,7 +221,7 @@ object ConfigGenerator {
     private fun buildInbounds(
         enableSocks: Boolean,
         enableHttp: Boolean,
-        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE
+        ipv6Mode: IPv6Mode
     ): JSONArray {
         val inbounds = JSONArray()
         val tunAddresses = JSONArray().apply {

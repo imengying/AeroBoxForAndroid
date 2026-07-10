@@ -2,16 +2,22 @@ package com.aerobox.data.model
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URI
 
 data class CustomRuleSet(
     val id: Long,
     val name: String,
     val url: String,
-    val format: RuleSetFormat = RuleSetFormat.BINARY,
-    val action: RuleSetAction = RuleSetAction.DIRECT,
-    val enabled: Boolean = true
+    val format: RuleSetFormat,
+    val action: RuleSetAction,
+    val enabled: Boolean
 ) {
     val tag: String get() = "custom-rule-$id"
+}
+
+fun isValidCustomRuleSetUrl(url: String): Boolean {
+    val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return false
+    return uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank()
 }
 
 enum class RuleSetFormat(val configValue: String) {
@@ -19,10 +25,8 @@ enum class RuleSetFormat(val configValue: String) {
     SOURCE("source");
 
     companion object {
-        fun from(value: String?): RuleSetFormat {
-            return entries.firstOrNull { it.name.equals(value, ignoreCase = true) }
-                ?: entries.firstOrNull { it.configValue.equals(value, ignoreCase = true) }
-                ?: BINARY
+        fun from(value: String?): RuleSetFormat? {
+            return entries.firstOrNull { it.name == value }
         }
     }
 }
@@ -33,8 +37,8 @@ enum class RuleSetAction {
     REJECT;
 
     companion object {
-        fun from(value: String?): RuleSetAction {
-            return entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: DIRECT
+        fun from(value: String?): RuleSetAction? {
+            return entries.firstOrNull { it.name == value }
         }
     }
 }
@@ -42,7 +46,7 @@ enum class RuleSetAction {
 object CustomRuleSetCodec {
     fun encode(ruleSets: List<CustomRuleSet>): String {
         val array = JSONArray()
-        ruleSets.forEach { ruleSet ->
+        ruleSets.filter { isValidCustomRuleSetUrl(it.url) }.forEach { ruleSet ->
             array.put(
                 JSONObject()
                     .put("id", ruleSet.id)
@@ -66,14 +70,17 @@ object CustomRuleSetCodec {
                     val id = obj.optLong("id", 0L).takeIf { it > 0L } ?: continue
                     val name = obj.optString("name").trim()
                     val url = obj.optString("url").trim()
-                    if (name.isBlank() || url.isBlank()) continue
+                    if (name.isBlank() || !isValidCustomRuleSetUrl(url)) continue
+                    val format = RuleSetFormat.from(obj.optString("format")) ?: continue
+                    val action = RuleSetAction.from(obj.optString("action")) ?: continue
+                    if (!obj.has("enabled")) continue
                     add(
                         CustomRuleSet(
                             id = id,
                             name = name,
                             url = url,
-                            format = RuleSetFormat.from(obj.optString("format")),
-                            action = RuleSetAction.from(obj.optString("action")),
+                            format = format,
+                            action = action,
                             enabled = obj.optBoolean("enabled", true)
                         )
                     )

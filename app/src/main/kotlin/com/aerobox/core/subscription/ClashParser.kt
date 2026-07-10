@@ -160,7 +160,7 @@ object ClashParser {
             value(map, "ech_opts"),
             value(map, "tls", "ech")
         )
-        val udpOverTcp = parseUdpOverTcp(
+        val udpOverTcp = parseUdpOverTcpValue(
             firstNonNullValue(
                 value(map, "udp-over-tcp"),
                 value(map, "udp_over_tcp"),
@@ -702,6 +702,4 @@ object ClashParser {
             else -> value.toString().trim().takeIf { it.isNotEmpty() }
         }
     }
-
-    private fun parseUdpOverTcp(value: Any?): Pair<Boolean?, Int?> = parseUdpOverTcpValue(value)
 }

@@ -135,7 +135,7 @@ internal object OutboundConfigBuilder {
                 node.naiveQuicSessionReceiveWindow?.takeIf { it.isNotBlank() }?.let {
                     outbound.put("quic_session_receive_window", it)
                 }
-                buildNaiveExtraHeaders(node.naiveExtraHeaders)?.let { outbound.put("extra_headers", it) }
+                buildHeaderObject(node.naiveExtraHeaders)?.let { outbound.put("extra_headers", it) }
                 buildUdpOverTcp(node.udpOverTcpEnabled, node.udpOverTcpVersion)?.let {
                     outbound.put("udp_over_tcp", it)
                 }
@@ -308,10 +308,6 @@ internal object OutboundConfigBuilder {
         configPath?.let { ech.put("config_path", it) }
         queryServerName?.let { ech.put("query_server_name", it) }
         return ech
-    }
-
-    private fun buildNaiveExtraHeaders(raw: String?): JSONObject? {
-        return buildHeaderObject(raw)
     }
 
     private fun buildHeaderObject(raw: String?, host: String? = null): JSONObject? {

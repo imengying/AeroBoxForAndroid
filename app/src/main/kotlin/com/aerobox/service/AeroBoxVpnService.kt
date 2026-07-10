@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.aerobox.AeroBoxApplication
 import com.aerobox.MainActivity
 import com.aerobox.NotificationSwitchActivity
@@ -191,9 +192,9 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startNotificationLanguageObserver()
         when (intent?.action) {
             ACTION_START, ACTION_SWITCH, ACTION_RELOAD -> {
+                startNotificationLanguageObserver()
                 val config = intent.getStringExtra(EXTRA_CONFIG)?.takeIf { it.isNotBlank() }
                 val nodeId = intent.getLongExtra(EXTRA_NODE_ID, -1L).takeIf { it > 0L }
                 userRequestedStop = false
@@ -212,8 +213,12 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 stopService("Stopping service: ACTION_STOP intent")
                 stopSelf()
             }
+            else -> {
+                Log.w(TAG, "Ignoring VPN service start without a supported action")
+                stopSelf(startId)
+            }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     // ─── VPN Lifecycle ───
@@ -254,11 +259,12 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                         val filter = IntentFilter().apply {
                             addAction(ACTION_STOP)
                         }
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            registerReceiver(closeReceiver, filter, RECEIVER_NOT_EXPORTED)
-                        } else {
-                            registerReceiver(closeReceiver, filter)
-                        }
+                        ContextCompat.registerReceiver(
+                            this@AeroBoxVpnService,
+                            closeReceiver,
+                            filter,
+                            ContextCompat.RECEIVER_NOT_EXPORTED
+                        )
                         receiverRegistered = true
                     }
 
@@ -339,7 +345,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         )
     }
 
-    private fun stopService(reason: String = "Stopping service") {
+    private fun stopService(reason: String) {
         logInfo(reason)
         releaseRuntimeResources(
             closeRunningService = true,

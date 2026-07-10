@@ -54,7 +54,7 @@ internal object JsonNodeParser {
             val echObject = tlsObject?.optJSONObject("ech") ?: obj.optJSONObject("ech")
             val obfsObject = obj.optJSONObject("obfs")
             val headersObject = obj.optJSONObject("headers")
-            val udpOverTcp = UriNodeParser.parseUdpOverTcp(obj.opt("udp_over_tcp"))
+            val udpOverTcp = parseUdpOverTcpValue(obj.opt("udp_over_tcp"))
             val typeRaw = obj.optString("type", obj.optString("protocol", "")).lowercase()
             val type = when {
                 typeRaw == "ss" || typeRaw == "shadowsocks" -> {

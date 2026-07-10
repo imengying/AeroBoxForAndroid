@@ -58,7 +58,6 @@ object GeoAssetManager {
         "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs"
 
     private const val ASSET_PREFIX = "sing-box/"
-    private const val CUSTOM_VERSION = "Custom"
 
     private const val GEOIP_CN_FILE = "geoip-cn.srs"
     private const val GEOSITE_CN_FILE = "geosite-cn.srs"
@@ -108,7 +107,9 @@ object GeoAssetManager {
             true
         }
         if (targets.geoIpCn && ipOk) {
-            writeVersionFile(getGeoIpVersionFile(context), fetchLatestReleaseTag(GEOIP_REPO))
+            fetchLatestReleaseTag(GEOIP_REPO)?.let { version ->
+                writeVersionFile(getGeoIpVersionFile(context), version)
+            }
         }
         val cnOk = if (targets.geoSiteCn) {
             downloadFile(GEOSITE_CN_URL, getGeoSiteFile(context))
@@ -121,7 +122,9 @@ object GeoAssetManager {
             true
         }
         if ((targets.geoSiteCn || targets.geoAds) && (!targets.geoSiteCn || cnOk) && (!targets.geoAds || adsOk)) {
-            writeVersionFile(getGeoSiteVersionFile(context), fetchLatestReleaseTag(GEOSITE_REPO))
+            fetchLatestReleaseTag(GEOSITE_REPO)?.let { version ->
+                writeVersionFile(getGeoSiteVersionFile(context), version)
+            }
         }
         GeoUpdateResult(geoIpOk = ipOk, geoSiteCnOk = cnOk, geoAdsOk = adsOk)
     }
@@ -141,25 +144,22 @@ object GeoAssetManager {
     }
 
     @Synchronized
-    fun ensureBundledAssets(context: Context, useOfficialAssets: Boolean = true) {
+    fun ensureBundledAssets(context: Context) {
         runCatching {
             ensureBundledAsset(
                 context = context,
                 fileName = GEOIP_CN_FILE,
-                versionFileName = GEOIP_VERSION_FILE,
-                useOfficialAssets = useOfficialAssets
+                versionFileName = GEOIP_VERSION_FILE
             )
             ensureBundledAsset(
                 context = context,
                 fileName = GEOSITE_CN_FILE,
-                versionFileName = GEOSITE_VERSION_FILE,
-                useOfficialAssets = useOfficialAssets
+                versionFileName = GEOSITE_VERSION_FILE
             )
             ensureBundledAsset(
                 context = context,
                 fileName = GEOSITE_ADS_FILE,
-                versionFileName = GEOSITE_VERSION_FILE,
-                useOfficialAssets = useOfficialAssets
+                versionFileName = GEOSITE_VERSION_FILE
             )
         }.onFailure { e ->
             Log.w(TAG, "ensureBundledAssets failed: ${e.message}")
@@ -203,8 +203,7 @@ object GeoAssetManager {
     private fun ensureBundledAsset(
         context: Context,
         fileName: String,
-        versionFileName: String,
-        useOfficialAssets: Boolean
+        versionFileName: String
     ) {
         val target = File(getGeoDir(context), fileName)
         val versionFile = File(getGeoDir(context), versionFileName)
@@ -214,8 +213,6 @@ object GeoAssetManager {
 
         val shouldExtract = when {
             !target.isFile -> true
-            !useOfficialAssets -> false
-            localVersion == CUSTOM_VERSION -> false
             localVersion.isBlank() -> true
             else -> shouldReplaceByVersion(assetVersion, localVersion)
         }
@@ -288,9 +285,9 @@ object GeoAssetManager {
         }
     }
 
-    private fun fetchLatestReleaseTag(repo: String): String {
+    private fun fetchLatestReleaseTag(repo: String): String? {
         val url = "https://api.github.com/repos/$repo/releases/latest".toHttpUrlOrNull()
-            ?: return "Unknown-${System.currentTimeMillis()}"
+            ?: return null
         return try {
             val request = Request.Builder()
                 .url(url)
@@ -298,13 +295,13 @@ object GeoAssetManager {
                 .build()
             val response = client.newCall(request).execute()
             response.use {
-                if (!it.isSuccessful) return "Unknown-${System.currentTimeMillis()}"
+                if (!it.isSuccessful) return null
                 val body = it.body.string()
                 val tag = JSONObject(body).optString("tag_name").trim()
-                if (tag.isNotEmpty()) tag else "Unknown-${System.currentTimeMillis()}"
+                tag.takeIf { value -> value.isNotEmpty() }
             }
         } catch (_: Exception) {
-            "Unknown-${System.currentTimeMillis()}"
+            null
         }
     }
 

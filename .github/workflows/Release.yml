@@ -117,6 +117,16 @@ jobs:
           )
           gradle --stacktrace :app:assembleRelease "${EXTRA_ARGS[@]}"
 
+      - name: Run Android lint
+        env:
+          AEROBOX_VERSION_NAME: ${{ env.AEROBOX_VERSION_NAME }}
+          AEROBOX_VERSION_CODE: ${{ env.AEROBOX_VERSION_CODE }}
+        run: |
+          set -euo pipefail
+          gradle --stacktrace :app:lintRelease \
+            "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}" \
+            "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}"
+
       - name: Sign release APKs (v3 only)
         env:
           KEYSTORE_PATH: ${{ env.AEROBOX_KEYSTORE_PATH }}

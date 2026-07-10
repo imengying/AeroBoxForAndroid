@@ -47,8 +47,6 @@ object PreferenceManager {
     private val CUSTOM_RULE_SETS = stringPreferencesKey("custom_rule_sets")
     private val PER_APP_SHOW_SYSTEM = booleanPreferencesKey("per_app_show_system")
 
-    // ── Existing settings ──
-
     fun darkModeFlow(context: Context): Flow<String> =
         context.dataStore.data.map { it[DARK_MODE] ?: "system" }
 
@@ -63,8 +61,6 @@ object PreferenceManager {
 
     fun lastSelectedNodeIdFlow(context: Context): Flow<Long> =
         context.dataStore.data.map { it[LAST_SELECTED_NODE_ID] ?: -1L }
-
-    // ── Phase 2: Routing & Network ──
 
     fun routingModeFlow(context: Context): Flow<RoutingMode> =
         context.dataStore.data.map {

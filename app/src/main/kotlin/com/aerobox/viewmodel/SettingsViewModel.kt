@@ -13,6 +13,7 @@ import com.aerobox.data.model.InstalledAppInfo
 import com.aerobox.data.model.RuleSetAction
 import com.aerobox.data.model.RuleSetFormat
 import com.aerobox.data.model.RoutingMode
+import com.aerobox.data.model.isValidCustomRuleSetUrl
 import com.aerobox.data.repository.AppUpdateInfo
 import com.aerobox.data.repository.AppUpdateRepository
 import com.aerobox.data.repository.AppListRepository
@@ -375,13 +376,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private fun validateCustomRuleSetInput(name: String, url: String): String? {
         if (name.isBlank()) return appString(R.string.routing_custom_rule_name_empty)
-        val uri = runCatching { java.net.URI(url) }.getOrNull()
-            ?: return appString(R.string.routing_custom_rule_url_invalid)
-        val scheme = uri.scheme?.lowercase()
-        if (scheme != "https" && scheme != "http") {
-            return appString(R.string.routing_custom_rule_url_invalid)
-        }
-        if (uri.host.isNullOrBlank()) {
+        if (!isValidCustomRuleSetUrl(url)) {
             return appString(R.string.routing_custom_rule_url_invalid)
         }
         return null
