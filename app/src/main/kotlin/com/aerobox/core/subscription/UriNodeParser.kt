@@ -1,5 +1,6 @@
 package com.aerobox.core.subscription
 
+import android.net.Uri
 import android.util.Base64
 import androidx.core.net.toUri
 import com.aerobox.data.model.ProxyNode

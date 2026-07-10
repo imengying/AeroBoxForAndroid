@@ -1,6 +1,7 @@
 package com.aerobox.data.repository
 
 import android.content.Context
+import android.net.Uri
 import androidx.core.net.toUri
 import androidx.room.withTransaction
 import com.aerobox.AeroBoxApplication
