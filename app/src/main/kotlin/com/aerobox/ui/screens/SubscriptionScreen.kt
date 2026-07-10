@@ -74,6 +74,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -129,6 +130,8 @@ fun SubscriptionScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val cameraPermissionRequired = stringResource(R.string.scan_qr_permission_required)
+    val qrScanPrompt = stringResource(R.string.qr_scan_prompt)
     var orderedSubscriptions by remember { mutableStateOf(subscriptions) }
     var draggingSubscriptionId by remember { mutableStateOf<Long?>(null) }
     var draggingOffsetY by remember { mutableFloatStateOf(0f) }
@@ -150,12 +153,10 @@ fun SubscriptionScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            qrScanLauncher.launch(buildQrScanOptions(context))
+            qrScanLauncher.launch(buildQrScanOptions(qrScanPrompt))
         } else {
             coroutineScope.launch {
-                snackbarHostState.showSnackbar(
-                    context.getString(R.string.scan_qr_permission_required)
-                )
+                snackbarHostState.showSnackbar(cameraPermissionRequired)
             }
         }
     }
@@ -239,7 +240,7 @@ fun SubscriptionScreen(
                     val hasCameraPermission = context.checkSelfPermission(Manifest.permission.CAMERA) ==
                         PackageManager.PERMISSION_GRANTED
                     if (hasCameraPermission) {
-                        qrScanLauncher.launch(buildQrScanOptions(context))
+                        qrScanLauncher.launch(buildQrScanOptions(qrScanPrompt))
                     } else {
                         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                     }
@@ -248,10 +249,10 @@ fun SubscriptionScreen(
                     showImportMenu = false
                     localFileLauncher.launch(arrayOf("*/*"))
                 }
-                val addViaSubscriptionLinkText = context.getString(R.string.add_via_subscription_link)
-                val addViaNodesText = context.getString(R.string.add_via_nodes)
-                val scanQrText = context.getString(R.string.scan_qr)
-                val addViaLocalFileText = context.getString(R.string.add_via_local_file)
+                val addViaSubscriptionLinkText = stringResource(R.string.add_via_subscription_link)
+                val addViaNodesText = stringResource(R.string.add_via_nodes)
+                val scanQrText = stringResource(R.string.scan_qr)
+                val addViaLocalFileText = stringResource(R.string.add_via_local_file)
 
                 DropdownMenu(
                     expanded = showImportMenu,
@@ -436,16 +437,16 @@ fun SubscriptionScreen(
     // Add subscription dialog
     if (showAddSubscriptionDialog) {
         SubscriptionEditorDialog(
-            title = context.getString(R.string.add_subscription),
-            confirmText = context.getString(R.string.add),
-            cancelText = context.getString(R.string.cancel),
-            groupNameLabel = context.getString(R.string.group_new_name_hint),
-            subscriptionNameLabel = context.getString(R.string.subscription_name),
-            subscriptionUrlLabel = context.getString(R.string.subscription_url),
-            autoUpdateText = context.getString(R.string.subscription_auto_update),
-            updateIntervalLabel = context.getString(R.string.subscription_update_interval_minutes),
-            updateIntervalHint = context.getString(R.string.subscription_update_interval_hint),
-            invalidIntervalText = context.getString(R.string.subscription_auto_update_invalid_interval),
+            title = stringResource(R.string.add_subscription),
+            confirmText = stringResource(R.string.add),
+            cancelText = stringResource(R.string.cancel),
+            groupNameLabel = stringResource(R.string.group_new_name_hint),
+            subscriptionNameLabel = stringResource(R.string.subscription_name),
+            subscriptionUrlLabel = stringResource(R.string.subscription_url),
+            autoUpdateText = stringResource(R.string.subscription_auto_update),
+            updateIntervalLabel = stringResource(R.string.subscription_update_interval_minutes),
+            updateIntervalHint = stringResource(R.string.subscription_update_interval_hint),
+            invalidIntervalText = stringResource(R.string.subscription_auto_update_invalid_interval),
             onDismiss = { showAddSubscriptionDialog = false },
             onConfirm = { name, url, autoUpdate, updateInterval ->
                 viewModel.addSubscription(
@@ -462,16 +463,15 @@ fun SubscriptionScreen(
     if (showAddNodeDialog) {
         NodeImportDialog(
             localGroups = localGroups,
-            title = context.getString(R.string.add_via_nodes),
-            nodeContentLabel = context.getString(R.string.node_content),
-            addText = context.getString(R.string.add),
-            cancelText = context.getString(R.string.cancel),
-            defaultLocalGroupName = context.getString(R.string.local_group_label),
-            chooseGroupText = context.getString(R.string.import_choose_group),
-            ungroupedText = context.getString(R.string.group_ungrouped),
-            newGroupText = context.getString(R.string.group_new),
-            newGroupNameHint = context.getString(R.string.group_new_name_hint),
-            nodeCountSuffix = { count -> context.getString(R.string.group_node_count_suffix, count) },
+            title = stringResource(R.string.add_via_nodes),
+            nodeContentLabel = stringResource(R.string.node_content),
+            addText = stringResource(R.string.add),
+            cancelText = stringResource(R.string.cancel),
+            defaultLocalGroupName = stringResource(R.string.local_group_label),
+            chooseGroupText = stringResource(R.string.import_choose_group),
+            ungroupedText = stringResource(R.string.group_ungrouped),
+            newGroupText = stringResource(R.string.group_new),
+            newGroupNameHint = stringResource(R.string.group_new_name_hint),
             onDismiss = { showAddNodeDialog = false },
             onConfirm = { content, target ->
                 viewModel.importNodeContent(source = content, target = target)
@@ -485,15 +485,18 @@ fun SubscriptionScreen(
             nodeCount = pending.nodeCount,
             suggestedName = pending.suggestedName,
             localGroups = localGroups,
-            chooseGroupText = context.getString(R.string.import_choose_group),
-            importNodeCountText = context.getString(R.string.import_node_count, pending.nodeCount),
-            confirmText = context.getString(R.string.confirm),
-            cancelText = context.getString(R.string.cancel),
-            defaultLocalGroupName = context.getString(R.string.local_group_label),
-            ungroupedText = context.getString(R.string.group_ungrouped),
-            newGroupText = context.getString(R.string.group_new),
-            newGroupNameHint = context.getString(R.string.group_new_name_hint),
-            nodeCountSuffix = { count -> context.getString(R.string.group_node_count_suffix, count) },
+            chooseGroupText = stringResource(R.string.import_choose_group),
+            importNodeCountText = pluralStringResource(
+                R.plurals.import_node_count,
+                pending.nodeCount,
+                pending.nodeCount
+            ),
+            confirmText = stringResource(R.string.confirm),
+            cancelText = stringResource(R.string.cancel),
+            defaultLocalGroupName = stringResource(R.string.local_group_label),
+            ungroupedText = stringResource(R.string.group_ungrouped),
+            newGroupText = stringResource(R.string.group_new),
+            newGroupNameHint = stringResource(R.string.group_new_name_hint),
             onConfirm = { target -> viewModel.confirmPendingImport(target) },
             onDismiss = { viewModel.cancelPendingImport() }
         )
@@ -501,16 +504,16 @@ fun SubscriptionScreen(
 
     pendingSubscriptionLink?.let { link ->
         SubscriptionEditorDialog(
-            title = context.getString(R.string.add_subscription),
-            confirmText = context.getString(R.string.add),
-            cancelText = context.getString(R.string.cancel),
-            groupNameLabel = context.getString(R.string.group_new_name_hint),
-            subscriptionNameLabel = context.getString(R.string.subscription_name),
-            subscriptionUrlLabel = context.getString(R.string.subscription_url),
-            autoUpdateText = context.getString(R.string.subscription_auto_update),
-            updateIntervalLabel = context.getString(R.string.subscription_update_interval_minutes),
-            updateIntervalHint = context.getString(R.string.subscription_update_interval_hint),
-            invalidIntervalText = context.getString(R.string.subscription_auto_update_invalid_interval),
+            title = stringResource(R.string.add_subscription),
+            confirmText = stringResource(R.string.add),
+            cancelText = stringResource(R.string.cancel),
+            groupNameLabel = stringResource(R.string.group_new_name_hint),
+            subscriptionNameLabel = stringResource(R.string.subscription_name),
+            subscriptionUrlLabel = stringResource(R.string.subscription_url),
+            autoUpdateText = stringResource(R.string.subscription_auto_update),
+            updateIntervalLabel = stringResource(R.string.subscription_update_interval_minutes),
+            updateIntervalHint = stringResource(R.string.subscription_update_interval_hint),
+            invalidIntervalText = stringResource(R.string.subscription_auto_update_invalid_interval),
             initialName = link.suggestedName,
             initialUrl = link.url,
             initialAutoUpdate = link.autoUpdate,
@@ -529,18 +532,18 @@ fun SubscriptionScreen(
 
     editTarget?.let { subscription ->
         SubscriptionEditorDialog(
-            title = context.getString(
+            title = stringResource(
                 if (subscription.isLocalGroup()) R.string.edit_group else R.string.edit_subscription
             ),
-            confirmText = context.getString(R.string.save),
-            cancelText = context.getString(R.string.cancel),
-            groupNameLabel = context.getString(R.string.group_new_name_hint),
-            subscriptionNameLabel = context.getString(R.string.subscription_name),
-            subscriptionUrlLabel = context.getString(R.string.subscription_url),
-            autoUpdateText = context.getString(R.string.subscription_auto_update),
-            updateIntervalLabel = context.getString(R.string.subscription_update_interval_minutes),
-            updateIntervalHint = context.getString(R.string.subscription_update_interval_hint),
-            invalidIntervalText = context.getString(R.string.subscription_auto_update_invalid_interval),
+            confirmText = stringResource(R.string.save),
+            cancelText = stringResource(R.string.cancel),
+            groupNameLabel = stringResource(R.string.group_new_name_hint),
+            subscriptionNameLabel = stringResource(R.string.subscription_name),
+            subscriptionUrlLabel = stringResource(R.string.subscription_url),
+            autoUpdateText = stringResource(R.string.subscription_auto_update),
+            updateIntervalLabel = stringResource(R.string.subscription_update_interval_minutes),
+            updateIntervalHint = stringResource(R.string.subscription_update_interval_hint),
+            invalidIntervalText = stringResource(R.string.subscription_auto_update_invalid_interval),
             isLocalGroup = subscription.isLocalGroup(),
             initialName = subscription.name,
             initialUrl = subscription.url,
@@ -563,15 +566,15 @@ fun SubscriptionScreen(
     // Delete confirmation dialog
     deleteTarget?.let { subscription ->
         val isLocal = subscription.isLocalGroup()
-        val deleteTitle = context.getString(
+        val deleteTitle = stringResource(
             if (isLocal) R.string.delete_group else R.string.delete_subscription
         )
-        val deleteMessage = context.getString(
+        val deleteMessage = stringResource(
             if (isLocal) R.string.delete_local_group_confirm else R.string.delete_subscription_confirm,
             subscription.name
         )
-        val deleteText = context.getString(R.string.delete)
-        val cancelText = context.getString(R.string.cancel)
+        val deleteText = stringResource(R.string.delete)
+        val cancelText = stringResource(R.string.cancel)
         ProvideAppLocale {
             Dialog(onDismissRequest = { deleteTarget = null }) {
                 Surface(
@@ -617,10 +620,10 @@ fun SubscriptionScreen(
     }
 }
 
-private fun buildQrScanOptions(context: android.content.Context): ScanOptions {
+private fun buildQrScanOptions(prompt: String): ScanOptions {
     return ScanOptions().apply {
         setCaptureActivity(AeroBoxQrCaptureActivity::class.java)
-        setPrompt(context.getString(R.string.qr_scan_prompt))
+        setPrompt(prompt)
         setDesiredBarcodeFormats(ScanOptions.QR_CODE)
         setBeepEnabled(false)
         setOrientationLocked(false)
@@ -639,7 +642,6 @@ private fun NodeImportDialog(
     ungroupedText: String,
     newGroupText: String,
     newGroupNameHint: String,
-    nodeCountSuffix: (Int) -> String,
     onDismiss: () -> Unit,
     onConfirm: (content: String, target: ImportGroupTarget) -> Unit
 ) {
@@ -687,8 +689,7 @@ private fun NodeImportDialog(
                             chooseGroupText = chooseGroupText,
                             ungroupedText = ungroupedText,
                             newGroupText = newGroupText,
-                            newGroupNameHint = newGroupNameHint,
-                            nodeCountSuffix = nodeCountSuffix
+                            newGroupNameHint = newGroupNameHint
                         )
                     }
                     Row(
@@ -735,7 +736,6 @@ private fun SubscriptionItem(
     onDragEnd: () -> Unit,
     onDragCancel: () -> Unit
 ) {
-    val context = LocalContext.current
     val isLocalGroup = subscription.isLocalGroup()
     val containerColor by animateColorAsState(
         targetValue = if (isDragging) {
@@ -757,7 +757,11 @@ private fun SubscriptionItem(
     }
     val localGroupSubtitle = if (isLocalGroup) {
         val label = stringResource(R.string.local_group_label)
-        val suffix = stringResource(R.string.group_node_count_suffix, subscription.nodeCount)
+        val suffix = pluralStringResource(
+            R.plurals.group_node_count_suffix,
+            subscription.nodeCount,
+            subscription.nodeCount
+        )
         "$label · $suffix"
     } else {
         null
@@ -798,7 +802,7 @@ private fun SubscriptionItem(
                     Spacer(Modifier.width(8.dp))
                     if (!isLocalGroup) {
                         Text(
-                            text = buildRelativeTimeText(context, subscription.updateTime),
+                            text = relativeTimeText(subscription.updateTime),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -931,7 +935,11 @@ private fun UngroupedCard(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = stringResource(R.string.group_node_count_suffix, nodeCount),
+                    text = pluralStringResource(
+                        R.plurals.group_node_count_suffix,
+                        nodeCount,
+                        nodeCount
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -944,17 +952,18 @@ private fun formatSubscriptionDate(timestampMs: Long): String {
     return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(timestampMs))
 }
 
-private fun buildRelativeTimeText(context: android.content.Context, timestampMs: Long): String {
-    if (timestampMs <= 0L) return context.getString(R.string.never_updated)
+@Composable
+private fun relativeTimeText(timestampMs: Long): String {
+    if (timestampMs <= 0L) return stringResource(R.string.never_updated)
     val diff = System.currentTimeMillis() - timestampMs
     val seconds = diff / 1000
-    if (seconds < 60) return context.getString(R.string.just_updated)
+    if (seconds < 60) return stringResource(R.string.just_updated)
     val minutes = seconds / 60
-    if (minutes < 60) return context.getString(R.string.minutes_ago_format, minutes.toInt())
+    if (minutes < 60) return stringResource(R.string.minutes_ago_format, minutes.toInt())
     val hours = minutes / 60
-    if (hours < 24) return context.getString(R.string.hours_ago_format, hours.toInt())
+    if (hours < 24) return stringResource(R.string.hours_ago_format, hours.toInt())
     val days = hours / 24
-    return context.getString(R.string.days_ago_format, days.toInt())
+    return stringResource(R.string.days_ago_format, days.toInt())
 }
 
 @Composable

@@ -30,12 +30,12 @@
     <string name="subscription_name">订阅名称</string>
     <string name="subscription_url">订阅链接</string>
     <string name="notification_title">AeroBox</string>
-    <string name="notification_connecting">正在连接...</string>
+    <string name="notification_connecting">正在连接…</string>
     <string name="notification_action_switch">切换</string>
     <string name="notification_action_stop">停止</string>
     <string name="hint_add_subscription">请先添加订阅以获取节点配置</string>
     <string name="refresh">刷新</string>
-    <string name="not_selected">未选择节点</string>
+    <string name="node_not_selected">未选择节点</string>
     <string name="permission_required">需要 VPN 权限</string>
     <string name="notification_permission_hint">未授予通知权限，状态栏通知可能不会显示</string>
     <string name="operation_failed">操作失败，请稍后重试</string>
@@ -58,14 +58,18 @@
     <string name="enable_ipv6">IPv6 支持</string>
     <string name="connection_fix_success">修复已完成，请重试连接</string>
     <string name="connection_fix_failed">修复失败，请检查网络后重试</string>
-    <string name="detecting_ip">检测中...</string>
-    <string name="detecting_ip_later">稍后自动检测...</string>
+    <string name="detecting_ip">检测中…</string>
+    <string name="detecting_ip_later">稍后自动检测…</string>
     <string name="import_choose_group">选择分组</string>
-    <string name="import_node_count">将导入 %1$d 个节点</string>
+    <plurals name="import_node_count">
+        <item quantity="other">将导入 %1$d 个节点</item>
+    </plurals>
     <string name="group_ungrouped">未分组</string>
     <string name="group_new">新建分组</string>
     <string name="group_new_name_hint">分组名称</string>
-    <string name="group_node_count_suffix">%1$d 个节点</string>
+    <plurals name="group_node_count_suffix">
+        <item quantity="other">%1$d 个节点</item>
+    </plurals>
     <string name="local_group_label">本地分组</string>
     <string name="edit_group">编辑分组</string>
     <string name="delete_group">删除分组</string>
@@ -92,8 +96,12 @@
     <string name="modified_item_format">已修改%1$s：%2$s</string>
     <string name="local_group_no_refresh">本地分组无需刷新</string>
     <string name="no_refreshable_subscription">暂无可刷新的订阅</string>
-    <string name="subscription_update_complete_all_format">订阅更新完成：%1$d 个（新增 %2$d / 更新 %3$d / 删除 %4$d）</string>
-    <string name="subscription_update_metadata_suffix">，%1$d 个同步流量/到期信息</string>
+    <plurals name="subscription_update_complete_all_format">
+        <item quantity="other">订阅更新完成：%1$d 个（新增 %2$d / 更新 %3$d / 删除 %4$d）</item>
+    </plurals>
+    <plurals name="subscription_update_metadata_suffix">
+        <item quantity="other">，%1$d 个同步流量/到期信息</item>
+    </plurals>
     <string name="subscription_update_partial_fail_format">订阅部分更新失败（成功 %1$d / 失败 %2$d，新增 %3$d / 更新 %4$d / 删除 %5$d）</string>
     <string name="subscription_update_partial_fail_error_suffix">，%1$s</string>
     <string name="import_empty_content">导入内容为空</string>
@@ -103,8 +111,12 @@
     <string name="local_file_too_large">本地文件过大，暂不支持超过 8 MB 的配置</string>
     <string name="cannot_read_local_file">无法读取本地文件</string>
     <string name="import_local_file_failed">导入本地文件失败：%1$s</string>
-    <string name="import_success_ungrouped_format">导入成功：已添加 %1$d 个节点到未分组</string>
-    <string name="import_success_with_count_format">导入成功：%1$d 个节点</string>
+    <plurals name="import_success_ungrouped_format">
+        <item quantity="other">导入成功：已添加 %1$d 个节点到未分组</item>
+    </plurals>
+    <plurals name="import_success_with_count_format">
+        <item quantity="other">导入成功：%1$d 个节点</item>
+    </plurals>
     <string name="import_success_metadata_suffix">，已读取订阅流量/到期信息</string>
     <string name="import_fail_local_group_target">订阅分组不可作为导入目标</string>
     <string name="subscription_update_complete_format">订阅更新完成：%1$s</string>
@@ -114,7 +126,9 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">未解析到可用节点，请检查订阅格式</string>
     <string name="error_no_valid_nodes_hints_format">未解析到可用节点。可能原因：%1$s</string>
-    <string name="warning_insecure_nodes_format">注意：%1$d 个节点禁用了 TLS 证书校验，存在中间人攻击风险</string>
+    <plurals name="warning_insecure_nodes_format">
+        <item quantity="other">注意：%1$d 个节点禁用了 TLS 证书校验，存在中间人攻击风险</item>
+    </plurals>
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">订阅内容不是受支持的 sing-box、Clash 或节点链接格式</string>

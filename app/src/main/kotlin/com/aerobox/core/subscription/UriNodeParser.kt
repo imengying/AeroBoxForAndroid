@@ -1,7 +1,7 @@
 package com.aerobox.core.subscription
 
-import android.net.Uri
 import android.util.Base64
+import androidx.core.net.toUri
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
 import org.json.JSONArray
@@ -188,7 +188,7 @@ internal object UriNodeParser {
     }
 
     internal fun parseVlessUri(uri: String): ProxyNode? {
-        val parsed = Uri.parse(uri)
+        val parsed = uri.toUri()
         val userInfo = extractUserInfo(parsed) ?: return null
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
@@ -239,7 +239,7 @@ internal object UriNodeParser {
     }
 
     internal fun parseTrojanUri(uri: String): ProxyNode? {
-        val parsed = Uri.parse(uri)
+        val parsed = uri.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
         val params = parseUriParams(parsed.query)
@@ -290,7 +290,7 @@ internal object UriNodeParser {
         } else {
             uri
         }
-        val parsed = Uri.parse(normalized)
+        val parsed = normalized.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
         val params = parseUriParams(parsed.query)
@@ -327,7 +327,7 @@ internal object UriNodeParser {
     }
 
     internal fun parseTuicUri(uri: String): ProxyNode? {
-        val parsed = Uri.parse(uri)
+        val parsed = uri.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
         val params = parseUriParams(parsed.query)
@@ -372,7 +372,7 @@ internal object UriNodeParser {
     }
 
     internal fun parseNaiveUri(uri: String): ProxyNode? {
-        val parsed = Uri.parse(uri)
+        val parsed = uri.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: 443
         val params = parseUriParams(parsed.query)
@@ -447,7 +447,7 @@ internal object UriNodeParser {
     internal fun parseSocksUri(uri: String): ProxyNode? {
         val normalized = uri
             .replaceFirst(Regex("^socks5?://", RegexOption.IGNORE_CASE), "socks://")
-        val parsed = Uri.parse(normalized)
+        val parsed = normalized.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
         val userInfo = extractUserInfo(parsed)
@@ -467,7 +467,7 @@ internal object UriNodeParser {
     }
 
     internal fun parseHttpProxyUri(uri: String): ProxyNode? {
-        val parsed = Uri.parse(uri)
+        val parsed = uri.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
         val path = parsed.path.orEmpty()

@@ -38,11 +38,11 @@ fun SectionHeader(title: String) {
 fun SettingItem(
     icon: @Composable () -> Unit,
     title: String,
+    modifier: Modifier = Modifier,
     supporting: String? = null,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
-    enabled: Boolean = true,
-    modifier: Modifier = Modifier
+    enabled: Boolean = true
 ) {
     val shape = RoundedCornerShape(16.dp)
     val colors = CardDefaults.cardColors(

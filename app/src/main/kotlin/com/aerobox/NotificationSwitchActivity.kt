@@ -30,6 +30,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -201,7 +202,7 @@ private fun NotificationSwitchDialog(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                var selectedGroupIndex by remember { mutableStateOf(0) }
+                var selectedGroupIndex by remember { mutableIntStateOf(0) }
 
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),

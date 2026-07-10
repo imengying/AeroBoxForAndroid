@@ -171,7 +171,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         detectIpJob?.cancel()
         connectWatchdogJob?.cancel()
         ipDetector.shutdown()
-        super.onCleared()
     }
 
     init {

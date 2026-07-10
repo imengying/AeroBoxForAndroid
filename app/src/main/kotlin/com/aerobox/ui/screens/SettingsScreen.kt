@@ -1,7 +1,6 @@
 package com.aerobox.ui.screens
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,7 +38,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -47,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.net.toUri
 import com.aerobox.R
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.ui.components.AppSnackbarHost
@@ -71,7 +70,6 @@ fun SettingsScreen(
         }
     )
 ) {
-    val context = LocalContext.current
     val activity = requireNotNull(LocalView.current.context.findComponentActivity()) {
         "SettingsScreen requires a ComponentActivity"
     }
@@ -178,9 +176,9 @@ fun SettingsScreen(
         }
         item {
             var expanded by remember { mutableStateOf(false) }
-            val themeSystemText = context.getString(R.string.settings_theme_system)
-            val themeDarkText = context.getString(R.string.settings_theme_dark)
-            val themeLightText = context.getString(R.string.settings_theme_light)
+            val themeSystemText = stringResource(R.string.settings_theme_system)
+            val themeDarkText = stringResource(R.string.settings_theme_dark)
+            val themeLightText = stringResource(R.string.settings_theme_light)
             SettingItem(
                 onClick = { expanded = true },
                 icon = { Icon(AppIcons.DarkMode, contentDescription = null) },
@@ -387,19 +385,19 @@ fun SettingsScreen(
 
     availableAppUpdate?.let { update ->
         AppUpdateDialog(
-            titleText = context.getString(R.string.app_update_available_title),
-            messageText = context.getString(
+            titleText = stringResource(R.string.app_update_available_title),
+            messageText = stringResource(
                 R.string.app_update_available_message,
                 update.currentVersion,
                 update.latestVersion
             ),
-            openText = context.getString(R.string.app_update_open_release),
-            cancelText = context.getString(R.string.cancel),
+            openText = stringResource(R.string.app_update_open_release),
+            cancelText = stringResource(R.string.cancel),
             onDismiss = viewModel::dismissAppUpdateDialog,
             onOpenRelease = {
                 viewModel.dismissAppUpdateDialog()
                 activity.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(update.releaseUrl))
+                    Intent(Intent.ACTION_VIEW, update.releaseUrl.toUri())
                 )
             }
         )
@@ -410,14 +408,14 @@ fun SettingsScreen(
         DnsSettingsDialog(
             remoteDns = remoteDns,
             directDns = directDns,
-            titleText = context.getString(R.string.dns_dialog_title),
-            remoteLabelText = context.getString(R.string.dns_label_remote),
-            remoteExampleText = context.getString(R.string.dns_dialog_remote_example),
-            directLabelText = context.getString(R.string.dns_label_direct),
-            directExampleText = context.getString(R.string.dns_dialog_direct_example),
-            confirmText = context.getString(R.string.confirm),
-            cancelText = context.getString(R.string.cancel),
-            resetText = context.getString(R.string.dns_dialog_reset),
+            titleText = stringResource(R.string.dns_dialog_title),
+            remoteLabelText = stringResource(R.string.dns_label_remote),
+            remoteExampleText = stringResource(R.string.dns_dialog_remote_example),
+            directLabelText = stringResource(R.string.dns_label_direct),
+            directExampleText = stringResource(R.string.dns_dialog_direct_example),
+            confirmText = stringResource(R.string.confirm),
+            cancelText = stringResource(R.string.cancel),
+            resetText = stringResource(R.string.dns_dialog_reset),
             onDismiss = { showDnsDialog = false },
             onReset = {
                 scope.launch {
@@ -437,11 +435,11 @@ fun SettingsScreen(
     if (showLanguageDialog) {
         LanguageSettingsDialog(
             selectedLanguageTag = effectiveLanguageTag,
-            titleText = context.getString(R.string.settings_language),
-            confirmText = context.getString(R.string.confirm),
-            cancelText = context.getString(R.string.cancel),
+            titleText = stringResource(R.string.settings_language),
+            confirmText = stringResource(R.string.confirm),
+            cancelText = stringResource(R.string.cancel),
             languageOptions = AppLocaleManager.supportedLanguages.map { language ->
-                language.tag to context.getString(language.labelResId)
+                language.tag to stringResource(language.labelResId)
             },
             onDismiss = { showLanguageDialog = false },
             onConfirm = { selectedTag ->

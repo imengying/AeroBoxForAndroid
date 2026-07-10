@@ -1,5 +1,6 @@
 package com.aerobox.service
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
@@ -114,17 +115,7 @@ class AeroBoxTileService : TileService() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 putExtra("action", "toggle_vpn")
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startActivityAndCollapse(
-                    PendingIntent.getActivity(
-                        this, 0, launchIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    )
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                startActivityAndCollapse(launchIntent)
-            }
+            startPermissionActivity(launchIntent)
             return
         }
 
@@ -171,6 +162,24 @@ class AeroBoxTileService : TileService() {
                     }
                 }
             }
+        }
+    }
+
+    @SuppressLint("StartActivityAndCollapseDeprecated")
+    @Suppress("DEPRECATION")
+    private fun startPermissionActivity(launchIntent: Intent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startActivityAndCollapse(
+                PendingIntent.getActivity(
+                    this,
+                    0,
+                    launchIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+        } else {
+            // Android 12 and 13 do not provide the PendingIntent overload.
+            startActivityAndCollapse(launchIntent)
         }
     }
 

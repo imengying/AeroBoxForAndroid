@@ -76,13 +76,15 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     var showNodeList by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
+    val notificationPermissionHint = stringResource(R.string.notification_permission_hint)
+    val permissionRequiredMessage = stringResource(R.string.permission_required)
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (!granted) {
             snackbarScope.launch {
-                snackbarHostState.showSnackbar(context.getString(R.string.notification_permission_hint))
+                snackbarHostState.showSnackbar(notificationPermissionHint)
             }
         }
         viewModel.onVpnPermissionGranted()
@@ -98,7 +100,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             )
         } else {
             snackbarScope.launch {
-                snackbarHostState.showSnackbar(context.getString(R.string.permission_required))
+                snackbarHostState.showSnackbar(permissionRequiredMessage)
             }
         }
     }
@@ -164,7 +166,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     NodeSelectorCard(
-                        nodeName = selectedNode?.name ?: stringResource(R.string.not_selected),
+                        nodeName = selectedNode?.name ?: stringResource(R.string.node_not_selected),
                         nodeAddress = selectedNode?.type?.displayName() ?: "--",
                         onClick = { showNodeList = true },
                         modifier = Modifier.weight(0.5f).height(92.dp)
@@ -210,12 +212,12 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             subscriptions = subscriptions,
             selectedNodeId = selectedNode?.id ?: -1,
             nodeSortOrder = nodeSortOrder,
-            titleText = context.getString(R.string.node_list_title),
-            emptyHintText = context.getString(R.string.node_list_empty_hint),
-            speedTestText = context.getString(R.string.node_list_speed_test),
-            latencyTestingText = context.getString(R.string.latency_testing),
-            latencyFailedText = context.getString(R.string.latency_failed),
-            ungroupedText = context.getString(R.string.group_ungrouped),
+            titleText = stringResource(R.string.node_list_title),
+            emptyHintText = stringResource(R.string.node_list_empty_hint),
+            speedTestText = stringResource(R.string.node_list_speed_test),
+            latencyTestingText = stringResource(R.string.latency_testing),
+            latencyFailedText = stringResource(R.string.latency_failed),
+            ungroupedText = stringResource(R.string.group_ungrouped),
             onNodeSelected = { node ->
                 viewModel.selectNode(node)
                 showNodeList = false

@@ -35,7 +35,7 @@
     <string name="notification_action_stop">توقف</string>
     <string name="hint_add_subscription">برای دریافت گره‌ها ابتدا یک اشتراک اضافه کنید</string>
     <string name="refresh">بازخوانی</string>
-    <string name="not_selected">گره‌ای انتخاب نشده</string>
+    <string name="node_not_selected">گره‌ای انتخاب نشده</string>
     <string name="permission_required">مجوز VPN لازم است</string>
     <string name="notification_permission_hint">مجوز اعلان داده نشده؛ ممکن است اعلان نوار وضعیت نمایش داده نشود</string>
     <string name="operation_failed">عملیات ناموفق بود، دوباره تلاش کنید</string>
@@ -61,11 +61,15 @@
     <string name="detecting_ip">در حال تشخیص…</string>
     <string name="detecting_ip_later">به‌طور خودکار تشخیص داده می‌شود…</string>
     <string name="import_choose_group">انتخاب گروه</string>
-    <string name="import_node_count">‫%1$d‬ گره وارد می‌شود</string>
+    <plurals name="import_node_count">
+        <item quantity="other">‫%1$d‬ گره وارد می‌شود</item>
+    </plurals>
     <string name="group_ungrouped">بدون گروه</string>
     <string name="group_new">گروه جدید</string>
     <string name="group_new_name_hint">نام گروه</string>
-    <string name="group_node_count_suffix">‫%1$d‬ گره</string>
+    <plurals name="group_node_count_suffix">
+        <item quantity="other">‫%1$d‬ گره</item>
+    </plurals>
     <string name="local_group_label">گروه محلی</string>
     <string name="edit_group">ویرایش گروه</string>
     <string name="delete_group">حذف گروه</string>
@@ -92,8 +96,12 @@
     <string name="modified_item_format">%1$s ویرایش شد: %2$s</string>
     <string name="local_group_no_refresh">گروه‌های محلی نیاز به بازخوانی ندارند</string>
     <string name="no_refreshable_subscription">اشتراک قابل بازخوانی وجود ندارد</string>
-    <string name="subscription_update_complete_all_format">به‌روزرسانی اشتراک تکمیل شد: ‫%1$d‬ مورد (افزوده ‫%2$d‬ / تغییر ‫%3$d‬ / حذف ‫%4$d‬)</string>
-    <string name="subscription_update_metadata_suffix">، اطلاعات ترافیک/انقضای ‫%1$d‬ مورد همگام شد</string>
+    <plurals name="subscription_update_complete_all_format">
+        <item quantity="other">به‌روزرسانی اشتراک تکمیل شد: ‫%1$d‬ مورد (افزوده ‫%2$d‬ / تغییر ‫%3$d‬ / حذف ‫%4$d‬)</item>
+    </plurals>
+    <plurals name="subscription_update_metadata_suffix">
+        <item quantity="other">، اطلاعات ترافیک/انقضای ‫%1$d‬ مورد همگام شد</item>
+    </plurals>
     <string name="subscription_update_partial_fail_format">به‌روزرسانی نسبی ناموفق (موفق ‫%1$d‬ / ناموفق ‫%2$d‬، افزوده ‫%3$d‬ / تغییر ‫%4$d‬ / حذف ‫%5$d‬)</string>
     <string name="subscription_update_partial_fail_error_suffix">، %1$s</string>
     <string name="import_empty_content">محتوای ورود خالی است</string>
@@ -103,8 +111,12 @@
     <string name="local_file_too_large">فایل بسیار بزرگ است؛ پیکربندی بزرگ‌تر از ۸ مگابایت پشتیبانی نمی‌شود</string>
     <string name="cannot_read_local_file">خواندن فایل محلی امکان‌پذیر نیست</string>
     <string name="import_local_file_failed">ورود فایل محلی ناموفق بود: %1$s</string>
-    <string name="import_success_ungrouped_format">ورود موفق: ‫%1$d‬ گره به «بدون گروه» افزوده شد</string>
-    <string name="import_success_with_count_format">ورود موفق: ‫%1$d‬ گره</string>
+    <plurals name="import_success_ungrouped_format">
+        <item quantity="other">ورود موفق: ‫%1$d‬ گره به «بدون گروه» افزوده شد</item>
+    </plurals>
+    <plurals name="import_success_with_count_format">
+        <item quantity="other">ورود موفق: ‫%1$d‬ گره</item>
+    </plurals>
     <string name="import_success_metadata_suffix">، اطلاعات ترافیک/انقضای اشتراک خوانده شد</string>
     <string name="import_fail_local_group_target">گروه‌های اشتراک نمی‌توانند مقصد ورود باشند</string>
     <string name="subscription_update_complete_format">اشتراک به‌روز شد: %1$s</string>
@@ -114,7 +126,9 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">گره معتبری استخراج نشد؛ قالب اشتراک را بررسی کنید</string>
     <string name="error_no_valid_nodes_hints_format">گره معتبری استخراج نشد. دلایل احتمالی: %1$s</string>
-    <string name="warning_insecure_nodes_format">هشدار: ‫%1$d‬ گره اعتبارسنجی گواهی TLS را غیرفعال کرده‌اند و در معرض حمله MITM قرار دارند</string>
+    <plurals name="warning_insecure_nodes_format">
+        <item quantity="other">هشدار: ‫%1$d‬ گره اعتبارسنجی گواهی TLS را غیرفعال کرده‌اند و در معرض حمله MITM قرار دارند</item>
+    </plurals>
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">محتوای اشتراک یکی از قالب‌های پشتیبانی‌شده sing-box، Clash یا لینک گره نیست</string>

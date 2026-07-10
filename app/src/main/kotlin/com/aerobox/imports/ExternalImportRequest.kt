@@ -1,7 +1,7 @@
 package com.aerobox.imports
 
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 
 data class ExternalImportRequest(
     val id: Long = System.nanoTime(),
@@ -36,7 +36,7 @@ object ExternalImportParser {
 
     fun fromText(raw: String?): ExternalImportRequest? {
         val text = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
-        val parsed = runCatching { Uri.parse(text) }.getOrNull()
+        val parsed = runCatching { text.toUri() }.getOrNull()
         val scheme = parsed?.scheme?.lowercase()
 
         return when {

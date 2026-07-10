@@ -35,7 +35,7 @@
     <string name="notification_action_stop">Стоп</string>
     <string name="hint_add_subscription">Сначала добавьте подписку, чтобы получить узлы</string>
     <string name="refresh">Обновить</string>
-    <string name="not_selected">Узел не выбран</string>
+    <string name="node_not_selected">Узел не выбран</string>
     <string name="permission_required">Требуется разрешение VPN</string>
     <string name="notification_permission_hint">Разрешение на уведомления не предоставлено; уведомления в строке состояния могут не отображаться</string>
     <string name="operation_failed">Операция не выполнена, попробуйте ещё раз</string>
@@ -61,11 +61,21 @@
     <string name="detecting_ip">Определение…</string>
     <string name="detecting_ip_later">Будет определено автоматически…</string>
     <string name="import_choose_group">Выбрать группу</string>
-    <string name="import_node_count">Будет импортировано узлов: %1$d</string>
+    <plurals name="import_node_count">
+        <item quantity="one">Будет импортирован %1$d узел</item>
+        <item quantity="few">Будет импортировано %1$d узла</item>
+        <item quantity="many">Будет импортировано %1$d узлов</item>
+        <item quantity="other">Будет импортировано %1$d узлов</item>
+    </plurals>
     <string name="group_ungrouped">Без группы</string>
     <string name="group_new">Новая группа</string>
     <string name="group_new_name_hint">Название группы</string>
-    <string name="group_node_count_suffix">Узлов: %1$d</string>
+    <plurals name="group_node_count_suffix">
+        <item quantity="one">%1$d узел</item>
+        <item quantity="few">%1$d узла</item>
+        <item quantity="many">%1$d узлов</item>
+        <item quantity="other">%1$d узлов</item>
+    </plurals>
     <string name="local_group_label">Локальная группа</string>
     <string name="edit_group">Изменить группу</string>
     <string name="delete_group">Удалить группу</string>
@@ -92,8 +102,18 @@
     <string name="modified_item_format">Изменена %1$s: %2$s</string>
     <string name="local_group_no_refresh">Локальные группы не требуют обновления</string>
     <string name="no_refreshable_subscription">Нет подписок, доступных для обновления</string>
-    <string name="subscription_update_complete_all_format">Обновлено подписок: %1$d (добавлено %2$d / изменено %3$d / удалено %4$d)</string>
-    <string name="subscription_update_metadata_suffix">; синхронизированы трафик/срок: %1$d</string>
+    <plurals name="subscription_update_complete_all_format">
+        <item quantity="one">Обновлена %1$d подписка (добавлено %2$d / изменено %3$d / удалено %4$d)</item>
+        <item quantity="few">Обновлено %1$d подписки (добавлено %2$d / изменено %3$d / удалено %4$d)</item>
+        <item quantity="many">Обновлено %1$d подписок (добавлено %2$d / изменено %3$d / удалено %4$d)</item>
+        <item quantity="other">Обновлено %1$d подписок (добавлено %2$d / изменено %3$d / удалено %4$d)</item>
+    </plurals>
+    <plurals name="subscription_update_metadata_suffix">
+        <item quantity="one">; синхронизированы трафик/срок для %1$d подписки</item>
+        <item quantity="few">; синхронизированы трафик/срок для %1$d подписок</item>
+        <item quantity="many">; синхронизированы трафик/срок для %1$d подписок</item>
+        <item quantity="other">; синхронизированы трафик/срок для %1$d подписок</item>
+    </plurals>
     <string name="subscription_update_partial_fail_format">Частичная неудача обновления (успешно %1$d / неудачно %2$d, добавлено %3$d / изменено %4$d / удалено %5$d)</string>
     <string name="subscription_update_partial_fail_error_suffix">; %1$s</string>
     <string name="import_empty_content">Содержимое импорта пустое</string>
@@ -103,8 +123,18 @@
     <string name="local_file_too_large">Файл слишком большой; конфигурации более 8 МБ не поддерживаются</string>
     <string name="cannot_read_local_file">Не удалось прочитать локальный файл</string>
     <string name="import_local_file_failed">Не удалось импортировать локальный файл: %1$s</string>
-    <string name="import_success_ungrouped_format">Импорт выполнен: добавлено узлов в «Без группы»: %1$d</string>
-    <string name="import_success_with_count_format">Импорт выполнен: %1$d узлов</string>
+    <plurals name="import_success_ungrouped_format">
+        <item quantity="one">Импорт выполнен: в «Без группы» добавлен %1$d узел</item>
+        <item quantity="few">Импорт выполнен: в «Без группы» добавлено %1$d узла</item>
+        <item quantity="many">Импорт выполнен: в «Без группы» добавлено %1$d узлов</item>
+        <item quantity="other">Импорт выполнен: в «Без группы» добавлено %1$d узлов</item>
+    </plurals>
+    <plurals name="import_success_with_count_format">
+        <item quantity="one">Импорт выполнен: %1$d узел</item>
+        <item quantity="few">Импорт выполнен: %1$d узла</item>
+        <item quantity="many">Импорт выполнен: %1$d узлов</item>
+        <item quantity="other">Импорт выполнен: %1$d узлов</item>
+    </plurals>
     <string name="import_success_metadata_suffix">; информация о трафике/сроке считана</string>
     <string name="import_fail_local_group_target">Группы подписок нельзя использовать как цель импорта</string>
     <string name="subscription_update_complete_format">Подписка обновлена: %1$s</string>
@@ -114,7 +144,12 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">Не удалось распарсить рабочие узлы; проверьте формат подписки</string>
     <string name="error_no_valid_nodes_hints_format">Не удалось распарсить рабочие узлы. Возможные причины: %1$s</string>
-    <string name="warning_insecure_nodes_format">Внимание: у %1$d узлов отключена проверка TLS-сертификата, есть риск MITM-атаки</string>
+    <plurals name="warning_insecure_nodes_format">
+        <item quantity="one">Внимание: у %1$d узла отключена проверка TLS-сертификата, есть риск MITM-атаки</item>
+        <item quantity="few">Внимание: у %1$d узлов отключена проверка TLS-сертификата, есть риск MITM-атаки</item>
+        <item quantity="many">Внимание: у %1$d узлов отключена проверка TLS-сертификата, есть риск MITM-атаки</item>
+        <item quantity="other">Внимание: у %1$d узлов отключена проверка TLS-сертификата, есть риск MITM-атаки</item>
+    </plurals>
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">Содержимое подписки не является поддерживаемым форматом sing-box, Clash или ссылок на узлы</string>

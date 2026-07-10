@@ -35,7 +35,7 @@
     <string name="notification_action_stop">Stop</string>
     <string name="hint_add_subscription">Add a subscription first to fetch nodes</string>
     <string name="refresh">Refresh</string>
-    <string name="not_selected">No node selected</string>
+    <string name="node_not_selected">No node selected</string>
     <string name="permission_required">VPN permission required</string>
     <string name="notification_permission_hint">Notification permission denied; status-bar notifications may not appear</string>
     <string name="operation_failed">Operation failed, please try again</string>
@@ -61,11 +61,17 @@
     <string name="detecting_ip">Detecting…</string>
     <string name="detecting_ip_later">Will detect automatically…</string>
     <string name="import_choose_group">Choose group</string>
-    <string name="import_node_count">%1$d nodes will be imported</string>
+    <plurals name="import_node_count">
+        <item quantity="one">%1$d node will be imported</item>
+        <item quantity="other">%1$d nodes will be imported</item>
+    </plurals>
     <string name="group_ungrouped">Ungrouped</string>
     <string name="group_new">New group</string>
     <string name="group_new_name_hint">Group name</string>
-    <string name="group_node_count_suffix">%1$d nodes</string>
+    <plurals name="group_node_count_suffix">
+        <item quantity="one">%1$d node</item>
+        <item quantity="other">%1$d nodes</item>
+    </plurals>
     <string name="local_group_label">Local group</string>
     <string name="edit_group">Edit group</string>
     <string name="delete_group">Delete group</string>
@@ -92,8 +98,14 @@
     <string name="modified_item_format">Updated %1$s: %2$s</string>
     <string name="local_group_no_refresh">Local groups don\'t need refresh</string>
     <string name="no_refreshable_subscription">No refreshable subscriptions</string>
-    <string name="subscription_update_complete_all_format">Updated %1$d subscriptions (added %2$d / changed %3$d / removed %4$d)</string>
-    <string name="subscription_update_metadata_suffix">; %1$d synced traffic/expiry info</string>
+    <plurals name="subscription_update_complete_all_format">
+        <item quantity="one">Updated %1$d subscription (added %2$d / changed %3$d / removed %4$d)</item>
+        <item quantity="other">Updated %1$d subscriptions (added %2$d / changed %3$d / removed %4$d)</item>
+    </plurals>
+    <plurals name="subscription_update_metadata_suffix">
+        <item quantity="one">; traffic/expiry info synced for %1$d subscription</item>
+        <item quantity="other">; traffic/expiry info synced for %1$d subscriptions</item>
+    </plurals>
     <string name="subscription_update_partial_fail_format">Partial update failure (success %1$d / failed %2$d, added %3$d / changed %4$d / removed %5$d)</string>
     <string name="subscription_update_partial_fail_error_suffix">; %1$s</string>
     <string name="import_empty_content">Import content is empty</string>
@@ -103,8 +115,14 @@
     <string name="local_file_too_large">File too large; configurations over 8 MB are not supported</string>
     <string name="cannot_read_local_file">Unable to read the local file</string>
     <string name="import_local_file_failed">Failed to import local file: %1$s</string>
-    <string name="import_success_ungrouped_format">Imported successfully: added %1$d nodes to Ungrouped</string>
-    <string name="import_success_with_count_format">Imported successfully: %1$d nodes</string>
+    <plurals name="import_success_ungrouped_format">
+        <item quantity="one">Imported successfully: added %1$d node to Ungrouped</item>
+        <item quantity="other">Imported successfully: added %1$d nodes to Ungrouped</item>
+    </plurals>
+    <plurals name="import_success_with_count_format">
+        <item quantity="one">Imported successfully: %1$d node</item>
+        <item quantity="other">Imported successfully: %1$d nodes</item>
+    </plurals>
     <string name="import_success_metadata_suffix">; subscription traffic/expiry info read</string>
     <string name="import_fail_local_group_target">Subscription groups cannot be used as import targets</string>
     <string name="subscription_update_complete_format">Subscription updated: %1$s</string>
@@ -114,7 +132,10 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">No usable nodes parsed; check the subscription format</string>
     <string name="error_no_valid_nodes_hints_format">No usable nodes parsed. Possible reasons: %1$s</string>
-    <string name="warning_insecure_nodes_format">Warning: %1$d nodes have TLS verification disabled, exposing them to MITM attacks</string>
+    <plurals name="warning_insecure_nodes_format">
+        <item quantity="one">Warning: %1$d node has TLS verification disabled, exposing it to MITM attacks</item>
+        <item quantity="other">Warning: %1$d nodes have TLS verification disabled, exposing them to MITM attacks</item>
+    </plurals>
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">Subscription content is not a supported sing-box, Clash, or node URL format</string>

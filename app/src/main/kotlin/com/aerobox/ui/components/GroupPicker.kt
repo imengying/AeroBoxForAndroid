@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -104,8 +105,7 @@ fun GroupPickerSection(
     chooseGroupText: String? = null,
     ungroupedText: String? = null,
     newGroupText: String? = null,
-    newGroupNameHint: String? = null,
-    nodeCountSuffix: ((Int) -> String)? = null
+    newGroupNameHint: String? = null
 ) {
     val resolvedChooseGroupText = chooseGroupText ?: stringResource(R.string.import_choose_group)
     val resolvedUngroupedText = ungroupedText ?: stringResource(R.string.group_ungrouped)
@@ -158,8 +158,11 @@ fun GroupPickerSection(
                     localGroups.forEach { group ->
                         DropdownMenuItem(
                             text = {
-                                val suffix = nodeCountSuffix?.invoke(group.nodeCount)
-                                    ?: stringResource(R.string.group_node_count_suffix, group.nodeCount)
+                                val suffix = pluralStringResource(
+                                    R.plurals.group_node_count_suffix,
+                                    group.nodeCount,
+                                    group.nodeCount
+                                )
                                 Text(
                                     text = "${group.name}（$suffix）",
                                     maxLines = 1,
@@ -215,12 +218,15 @@ fun GroupPickerDialog(
     ungroupedText: String? = null,
     newGroupText: String? = null,
     newGroupNameHint: String? = null,
-    nodeCountSuffix: ((Int) -> String)? = null,
     onConfirm: (ImportGroupTarget) -> Unit,
     onDismiss: () -> Unit
 ) {
     val resolvedChooseGroupText = chooseGroupText ?: stringResource(R.string.import_choose_group)
-    val resolvedImportNodeCountText = importNodeCountText ?: stringResource(R.string.import_node_count, nodeCount)
+    val resolvedImportNodeCountText = importNodeCountText ?: pluralStringResource(
+        R.plurals.import_node_count,
+        nodeCount,
+        nodeCount
+    )
     val resolvedConfirmText = confirmText ?: stringResource(R.string.confirm)
     val resolvedCancelText = cancelText ?: stringResource(R.string.cancel)
     val resolvedDefaultLocalGroupName = defaultLocalGroupName ?: stringResource(R.string.local_group_label)
@@ -261,8 +267,7 @@ fun GroupPickerDialog(
                         chooseGroupText = resolvedChooseGroupText,
                         ungroupedText = resolvedUngroupedText,
                         newGroupText = resolvedNewGroupText,
-                        newGroupNameHint = resolvedNewGroupNameHint,
-                        nodeCountSuffix = nodeCountSuffix
+                        newGroupNameHint = resolvedNewGroupNameHint
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),

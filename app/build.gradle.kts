@@ -12,13 +12,6 @@ android {
     val ciVersionName = (project.findProperty("AEROBOX_VERSION_NAME") as? String)?.trim()
     val ciVersionCode = (project.findProperty("AEROBOX_VERSION_CODE") as? String)
         ?.toIntOrNull()
-    val configuredAbis = ((project.findProperty("AEROBOX_ABIS") as? String)
-        ?.split(',')
-        ?.map { it.trim() }
-        ?.filter { it.isNotEmpty() })
-        ?.takeIf { it.isNotEmpty() }
-        ?: listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-
     defaultConfig {
         applicationId = "com.aerobox"
         minSdk = 31
@@ -70,8 +63,14 @@ android {
         abi {
             isEnable = true
             reset()
-            include(*configuredAbis.toTypedArray())
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
             isUniversalApk = false
+        }
+    }
+
+    bundle {
+        language {
+            enableSplit = false
         }
     }
 
@@ -100,7 +99,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.activity:activity-compose:1.13.0")
 
-    implementation(platform("androidx.compose:compose-bom:2026.06.00"))
+    implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")

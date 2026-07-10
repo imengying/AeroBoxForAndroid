@@ -29,7 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -41,15 +41,16 @@ import com.aerobox.R
 fun LicenseScreen(
     onNavigateBack: () -> Unit
 ) {
-    val context = LocalContext.current
+    val resources = LocalResources.current
+    val readFailedText = stringResource(R.string.license_read_failed)
     var licenseBody by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(resources, readFailedText) {
         licenseBody = runCatching {
-            context.resources.openRawResource(R.raw.project_license)
+            resources.openRawResource(R.raw.project_license)
                 .bufferedReader()
                 .use { it.readText().trim() }
-        }.getOrElse { context.getString(R.string.license_read_failed) }
+        }.getOrElse { readFailedText }
     }
 
     Scaffold(

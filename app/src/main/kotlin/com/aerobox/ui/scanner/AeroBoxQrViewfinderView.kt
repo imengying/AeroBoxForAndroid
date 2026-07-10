@@ -17,6 +17,7 @@ class AeroBoxQrViewfinderView @JvmOverloads constructor(
     private val cornerLength = 24f * density
     private val frameStrokeWidth = 2f * density
     private val cornerStrokeWidth = 4f * density
+    private val frameBounds = RectF()
 
     private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.qr_scanner_frame)
@@ -51,7 +52,8 @@ class AeroBoxQrViewfinderView @JvmOverloads constructor(
             return
         }
 
-        val rect = RectF(frame)
+        frameBounds.set(frame)
+        val rect = frameBounds
         canvas.drawRoundRect(rect, frameRadius, frameRadius, framePaint)
         drawCornerAccents(canvas, rect)
 

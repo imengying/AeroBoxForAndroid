@@ -1,7 +1,7 @@
 package com.aerobox.data.repository
 
 import android.content.Context
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.room.withTransaction
 import com.aerobox.AeroBoxApplication
 import com.aerobox.R
@@ -1097,7 +1097,7 @@ class SubscriptionRepository(context: Context) {
 
     private fun deriveSubscriptionName(url: String): String? {
         return runCatching {
-            val uri = Uri.parse(url)
+            val uri = url.toUri()
             uri.fragment?.trim()?.takeIf { it.isNotBlank() }
                 ?: sanitizeProfileFileName(uri.lastPathSegment ?: uri.host.orEmpty())
         }.getOrNull()
@@ -1111,7 +1111,7 @@ class SubscriptionRepository(context: Context) {
 
     fun isValidRemoteSubscriptionUrl(url: String): Boolean {
         return runCatching {
-            val parsed = Uri.parse(url.trim())
+            val parsed = url.trim().toUri()
             parsed.scheme.equals("https", ignoreCase = true) && !parsed.host.isNullOrBlank()
         }.getOrDefault(false)
     }

@@ -1,8 +1,8 @@
 package com.aerobox.viewmodel
 
 import android.app.Application
-import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aerobox.R
@@ -214,8 +214,9 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 _uiMessage.tryEmit(
                     buildString {
                         append(
-                            appString(
-                                R.string.subscription_update_complete_all_format,
+                            appQuantityString(
+                                R.plurals.subscription_update_complete_all_format,
+                                successCount,
                                 successCount,
                                 addedCount,
                                 updatedCount,
@@ -223,13 +224,20 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                             )
                         )
                         if (metadataCount > 0) {
-                            append(appString(R.string.subscription_update_metadata_suffix, metadataCount))
+                            append(
+                                appQuantityString(
+                                    R.plurals.subscription_update_metadata_suffix,
+                                    metadataCount,
+                                    metadataCount
+                                )
+                            )
                         }
                         if (insecureCount > 0) {
                             append('\n')
                             append(
-                                appString(
-                                    R.string.warning_insecure_nodes_format,
+                                appQuantityString(
+                                    R.plurals.warning_insecure_nodes_format,
+                                    insecureCount,
                                     insecureCount
                                 )
                             )
@@ -253,13 +261,20 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                             )
                         )
                         if (metadataCount > 0) {
-                            append(appString(R.string.subscription_update_metadata_suffix, metadataCount))
+                            append(
+                                appQuantityString(
+                                    R.plurals.subscription_update_metadata_suffix,
+                                    metadataCount,
+                                    metadataCount
+                                )
+                            )
                         }
                         if (insecureCount > 0) {
                             append('\n')
                             append(
-                                appString(
-                                    R.string.warning_insecure_nodes_format,
+                                appQuantityString(
+                                    R.plurals.warning_insecure_nodes_format,
+                                    insecureCount,
                                     insecureCount
                                 )
                             )
@@ -478,7 +493,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun looksLikeHttpProxyNode(source: String): Boolean {
-        val parsed = runCatching { Uri.parse(source) }.getOrNull() ?: return false
+        val parsed = runCatching { source.toUri() }.getOrNull() ?: return false
         val scheme = parsed.scheme?.lowercase()
         if (scheme != "http" && scheme != "https") return false
         if (parsed.encodedAuthority.orEmpty().contains('@')) return true
@@ -512,9 +527,17 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         val error = result.error
         if (error == null && result.nodeCount > 0) {
             val successPrefix = if (result.subscriptionId == 0L) {
-                appString(R.string.import_success_ungrouped_format, result.nodeCount)
+                appQuantityString(
+                    R.plurals.import_success_ungrouped_format,
+                    result.nodeCount,
+                    result.nodeCount
+                )
             } else {
-                appString(R.string.import_success_with_count_format, result.nodeCount)
+                appQuantityString(
+                    R.plurals.import_success_with_count_format,
+                    result.nodeCount,
+                    result.nodeCount
+                )
             }
             return buildString {
                 append(successPrefix)
@@ -524,8 +547,9 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 if (result.insecureNodeCount > 0) {
                     append('\n')
                     append(
-                        appString(
-                            R.string.warning_insecure_nodes_format,
+                        appQuantityString(
+                            R.plurals.warning_insecure_nodes_format,
+                            result.insecureNodeCount,
                             result.insecureNodeCount
                         )
                     )
@@ -656,8 +680,9 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             if (result.insecureNodeCount > 0) {
                 append('\n')
                 append(
-                    appString(
-                        R.string.warning_insecure_nodes_format,
+                    appQuantityString(
+                        R.plurals.warning_insecure_nodes_format,
+                        result.insecureNodeCount,
                         result.insecureNodeCount
                     )
                 )
@@ -687,5 +712,13 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         } else {
             context.getString(resId, *formatArgs)
         }
+    }
+
+    private fun appQuantityString(resId: Int, quantity: Int, vararg formatArgs: Any): String {
+        return localizedStringContext().resources.getQuantityString(
+            resId,
+            quantity,
+            *formatArgs
+        )
     }
 }
