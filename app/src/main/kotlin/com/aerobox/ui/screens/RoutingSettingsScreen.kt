@@ -1,7 +1,6 @@
 package com.aerobox.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -49,7 +48,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
@@ -57,6 +55,7 @@ import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.data.model.CustomRuleSet
 import com.aerobox.data.model.RuleSetAction
 import com.aerobox.data.model.RuleSetFormat
+import com.aerobox.ui.components.AppDialog
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.SectionHeader
 import com.aerobox.ui.components.SettingItem
@@ -342,134 +341,122 @@ private fun CustomRuleSetDialog(
     var action by remember(ruleSet) { mutableStateOf(ruleSet?.action ?: RuleSetAction.DIRECT) }
     var enabled by remember(ruleSet) { mutableStateOf(ruleSet?.enabled ?: true) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+    AppDialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                tonalElevation = 6.dp,
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Text(
-                        text = stringResource(
-                            if (ruleSet == null) R.string.routing_custom_rule_add
-                            else R.string.routing_custom_rule_edit
-                        ),
-                        style = MaterialTheme.typography.titleMedium
-                    )
+            Text(
+                text = stringResource(
+                    if (ruleSet == null) R.string.routing_custom_rule_add
+                    else R.string.routing_custom_rule_edit
+                ),
+                style = MaterialTheme.typography.titleMedium
+            )
 
-                    Column(
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.routing_custom_rule_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text(stringResource(R.string.routing_custom_rule_url)) },
+                    supportingText = { Text(stringResource(R.string.routing_custom_rule_url_hint)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = stringResource(R.string.routing_custom_rule_action),
+                    style = MaterialTheme.typography.labelLarge
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    RuleSetAction.entries.forEach { option ->
+                        FilterChip(
+                            selected = action == option,
+                            onClick = { action = option },
+                            label = { Text(option.label()) }
+                        )
+                    }
+                }
+
+                Text(
+                    text = stringResource(R.string.routing_custom_rule_format),
+                    style = MaterialTheme.typography.labelLarge
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    RuleSetFormat.entries.forEach { option ->
+                        FilterChip(
+                            selected = format == option,
+                            onClick = { format = option },
+                            label = { Text(option.label()) }
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 420.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = name,
-                            onValueChange = { name = it },
-                            label = { Text(stringResource(R.string.routing_custom_rule_name)) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = url,
-                            onValueChange = { url = it },
-                            label = { Text(stringResource(R.string.routing_custom_rule_url)) },
-                            supportingText = { Text(stringResource(R.string.routing_custom_rule_url_hint)) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Text(
-                            text = stringResource(R.string.routing_custom_rule_action),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            RuleSetAction.entries.forEach { option ->
-                                FilterChip(
-                                    selected = action == option,
-                                    onClick = { action = option },
-                                    label = { Text(option.label()) }
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = stringResource(R.string.routing_custom_rule_format),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            RuleSetFormat.entries.forEach { option ->
-                                FilterChip(
-                                    selected = format == option,
-                                    onClick = { format = option },
-                                    label = { Text(option.label()) }
-                                )
-                            }
-                        }
-
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.routing_custom_rule_enabled),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                Switch(
-                                    checked = enabled,
-                                    onCheckedChange = { enabled = it }
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (ruleSet != null) {
-                            TextButton(onClick = { onDelete(ruleSet) }) {
-                                Text(stringResource(R.string.delete))
-                            }
-                        }
-                        Spacer(modifier = Modifier.weight(1f))
-                        TextButton(onClick = onDismiss) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        TextButton(
-                            onClick = { onConfirm(name, url, format, action, enabled) },
-                            enabled = name.isNotBlank() && url.isNotBlank()
-                        ) {
-                            Text(stringResource(R.string.save))
-                        }
+                        Text(
+                            text = stringResource(R.string.routing_custom_rule_enabled),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Switch(
+                            checked = enabled,
+                            onCheckedChange = { enabled = it }
+                        )
                     }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (ruleSet != null) {
+                    TextButton(onClick = { onDelete(ruleSet) }) {
+                        Text(stringResource(R.string.delete))
+                    }
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = { onConfirm(name, url, format, action, enabled) },
+                    enabled = name.isNotBlank() && url.isNotBlank()
+                ) {
+                    Text(stringResource(R.string.save))
                 }
             }
         }

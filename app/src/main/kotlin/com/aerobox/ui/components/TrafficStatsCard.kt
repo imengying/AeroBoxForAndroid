@@ -41,43 +41,34 @@ fun TrafficStatsCard(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 14.dp, vertical = 12.dp),
-            contentAlignment = Alignment.Center
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                verticalArrangement = Arrangement.Center
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TrafficMetric(
-                        title = stringResource(R.string.upload),
-                        prefix = "↑",
-                        value = NetworkUtils.formatBytesCompact(stats.totalUpload),
-                        modifier = Modifier.weight(1f)
+            TrafficMetric(
+                title = stringResource(R.string.upload),
+                prefix = "↑",
+                value = NetworkUtils.formatBytesCompact(stats.totalUpload),
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(36.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        shape = RoundedCornerShape(999.dp)
                     )
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(36.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                shape = RoundedCornerShape(999.dp)
-                            )
-                    )
-                    TrafficMetric(
-                        title = stringResource(R.string.download),
-                        prefix = "↓",
-                        value = NetworkUtils.formatBytesCompact(stats.totalDownload),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
+            )
+            TrafficMetric(
+                title = stringResource(R.string.download),
+                prefix = "↓",
+                value = NetworkUtils.formatBytesCompact(stats.totalDownload),
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

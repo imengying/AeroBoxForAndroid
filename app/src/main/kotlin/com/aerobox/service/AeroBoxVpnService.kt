@@ -746,14 +746,8 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         )
     }
 
-    private fun notificationString(resId: Int, vararg formatArgs: Any): String {
-        val localizedContext = AppLocaleManager.localizedContext(this, notificationLanguageTag)
-        return if (formatArgs.isEmpty()) {
-            localizedContext.getString(resId)
-        } else {
-            localizedContext.getString(resId, *formatArgs)
-        }
-    }
+    private fun notificationString(resId: Int, vararg formatArgs: Any) =
+        AppLocaleManager.string(this, notificationLanguageTag, resId, *formatArgs)
 
     private fun buildNotification(contentText: String = "", connected: Boolean = false): Notification {
         val displayNode = if (connected) {

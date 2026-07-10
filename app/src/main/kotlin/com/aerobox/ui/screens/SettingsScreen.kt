@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -24,7 +23,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -42,12 +40,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.net.toUri
 import com.aerobox.R
 import com.aerobox.data.model.IPv6Mode
+import com.aerobox.ui.components.AppDialog
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.SectionHeader
 import com.aerobox.ui.components.SettingItem
@@ -444,44 +442,37 @@ private fun AppUpdateDialog(
     onDismiss: () -> Unit,
     onOpenRelease: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+    AppDialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
+            Text(
+                text = stringResource(R.string.app_update_available_title),
+                style = MaterialTheme.typography.headlineSmall
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = stringResource(
+                    R.string.app_update_available_message,
+                    currentVersion,
+                    latestVersion
+                ),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = stringResource(R.string.app_update_available_title),
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = stringResource(
-                        R.string.app_update_available_message,
-                        currentVersion,
-                        latestVersion
-                    ),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = onOpenRelease) {
-                        Text(stringResource(R.string.app_update_open_release))
-                    }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = onOpenRelease) {
+                    Text(stringResource(R.string.app_update_open_release))
                 }
             }
         }
@@ -502,54 +493,50 @@ private fun LanguageSettingsDialog(
         language.tag to stringResource(language.labelResId)
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.width(292.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+    AppDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.width(292.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 8.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 18.dp, top = 14.dp, end = 18.dp, bottom = 8.dp)
+            Text(
+                text = stringResource(R.string.settings_language),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(Modifier.height(10.dp))
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = stringResource(R.string.settings_language),
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(Modifier.height(10.dp))
-                androidx.compose.foundation.layout.FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    languageOptions.forEach { (tag, label) ->
-                        FilterChip(
-                            selected = selected == tag,
-                            onClick = { selected = tag },
-                            label = {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            }
-                        )
-                    }
+                languageOptions.forEach { (tag, label) ->
+                    FilterChip(
+                        selected = selected == tag,
+                        onClick = { selected = tag },
+                        label = {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    )
                 }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    TextButton(onClick = { onConfirm(selected) }) {
-                        Text(stringResource(R.string.confirm))
-                    }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Spacer(Modifier.width(4.dp))
+                TextButton(onClick = { onConfirm(selected) }) {
+                    Text(stringResource(R.string.confirm))
                 }
             }
         }
@@ -567,60 +554,53 @@ private fun DnsSettingsDialog(
     var remote by remember { mutableStateOf(remoteDns) }
     var direct by remember { mutableStateOf(directDns) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+    AppDialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 24.dp, top = 18.dp, end = 24.dp, bottom = 10.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.dns_dialog_title),
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                Spacer(Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = remote,
-                    onValueChange = { remote = it },
-                    label = { Text(stringResource(R.string.dns_label_remote)) },
-                    supportingText = { Text(stringResource(R.string.dns_dialog_remote_example)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = direct,
-                    onValueChange = { direct = it },
-                    label = { Text(stringResource(R.string.dns_label_direct)) },
-                    supportingText = { Text(stringResource(R.string.dns_dialog_direct_example)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Text(
+                text = stringResource(R.string.dns_dialog_title),
+                style = MaterialTheme.typography.headlineSmall
+            )
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = remote,
+                onValueChange = { remote = it },
+                label = { Text(stringResource(R.string.dns_label_remote)) },
+                supportingText = { Text(stringResource(R.string.dns_dialog_remote_example)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = direct,
+                onValueChange = { direct = it },
+                label = { Text(stringResource(R.string.dns_label_direct)) },
+                supportingText = { Text(stringResource(R.string.dns_dialog_direct_example)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
 
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onReset) {
+                    Text(stringResource(R.string.dns_dialog_reset))
+                }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    onClick = { onConfirm(remote.trim(), direct.trim()) },
+                    enabled = remote.isNotBlank() && direct.isNotBlank()
                 ) {
-                    TextButton(onClick = onReset) {
-                        Text(stringResource(R.string.dns_dialog_reset))
-                    }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(
-                        onClick = { onConfirm(remote.trim(), direct.trim()) },
-                        enabled = remote.isNotBlank() && direct.isNotBlank()
-                    ) {
-                        Text(stringResource(R.string.confirm))
-                    }
+                    Text(stringResource(R.string.confirm))
                 }
             }
         }

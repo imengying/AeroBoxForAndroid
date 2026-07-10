@@ -695,23 +695,9 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    private fun localizedStringContext() = AppLocaleManager.localizedContext(appContext, languageTag.value)
+    private fun appString(resId: Int, vararg formatArgs: Any) =
+        AppLocaleManager.string(appContext, languageTag.value, resId, *formatArgs)
 
-    private fun appString(resId: Int, vararg formatArgs: Any): String {
-        val context = localizedStringContext()
-        return if (formatArgs.isEmpty()) {
-            context.getString(resId)
-        } else {
-            context.getString(resId, *formatArgs)
-        }
-    }
-
-    private fun appCountString(resId: Int, quantity: Int, vararg formatArgs: Any): String {
-        return localizedStringContext().resources.getQuantityString(
-            resId,
-            quantity,
-            quantity,
-            *formatArgs
-        )
-    }
+    private fun appCountString(resId: Int, quantity: Int, vararg formatArgs: Any) =
+        AppLocaleManager.countString(appContext, languageTag.value, resId, quantity, *formatArgs)
 }

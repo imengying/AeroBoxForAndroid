@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -16,7 +15,6 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,7 +29,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.aerobox.R
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.repository.ImportGroupTarget
@@ -71,14 +68,13 @@ data class GroupPickerState(
 
 @Composable
 fun rememberGroupPickerState(
-    suggestedName: String,
-    localGroups: List<Subscription>,
-    initialOption: GroupPickerOption? = null
+    suggestedName: String
 ): GroupPickerStateHolder {
-    val defaultOption = remember(initialOption, suggestedName, localGroups) {
-        initialOption ?: if (suggestedName.isNotBlank()) GroupPickerOption.New else GroupPickerOption.Ungrouped
+    var option by remember {
+        mutableStateOf(
+            if (suggestedName.isNotBlank()) GroupPickerOption.New else GroupPickerOption.Ungrouped
+        )
     }
-    var option by remember { mutableStateOf<GroupPickerOption>(defaultOption) }
     var newName by remember(suggestedName) { mutableStateOf(suggestedName) }
     return GroupPickerStateHolder(
         state = GroupPickerState(option, newName),
@@ -216,53 +212,48 @@ fun GroupPickerDialog(
     val cancelText = stringResource(R.string.cancel)
     val defaultLocalGroupName = stringResource(R.string.local_group_label)
     val holder = rememberGroupPickerState(
-        suggestedName = suggestedName,
-        localGroups = localGroups
+        suggestedName = suggestedName
     )
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.width(320.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+    AppDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.width(320.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Text(
+                text = importNodeCountText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            GroupPickerSection(
+                holder = holder,
+                localGroups = localGroups
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = importNodeCountText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                GroupPickerSection(
-                    holder = holder,
-                    localGroups = localGroups
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(cancelText)
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    TextButton(
-                        onClick = {
-                            onConfirm(
-                                holder.state.toTarget(
-                                    fallbackName = suggestedName,
-                                    defaultName = defaultLocalGroupName
-                                )
+                TextButton(onClick = onDismiss) {
+                    Text(cancelText)
+                }
+                Spacer(Modifier.width(4.dp))
+                TextButton(
+                    onClick = {
+                        onConfirm(
+                            holder.state.toTarget(
+                                fallbackName = suggestedName,
+                                defaultName = defaultLocalGroupName
                             )
-                        }
-                    ) {
-                        Text(confirmText)
+                        )
                     }
+                ) {
+                    Text(confirmText)
                 }
             }
         }

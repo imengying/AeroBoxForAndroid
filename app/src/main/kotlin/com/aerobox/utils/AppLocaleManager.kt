@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
 import android.os.LocaleList
+import androidx.annotation.PluralsRes
+import androidx.annotation.StringRes
 
 object AppLocaleManager {
     const val SYSTEM_LANGUAGE_TAG = ""
@@ -48,6 +50,33 @@ object AppLocaleManager {
         configuration.setLocales(LocaleList.forLanguageTags(normalized))
         return base.createConfigurationContext(configuration)
     }
+
+    fun string(
+        base: Context,
+        languageTag: String,
+        @StringRes resId: Int,
+        vararg formatArgs: Any
+    ): String {
+        val context = localizedContext(base, languageTag)
+        return if (formatArgs.isEmpty()) {
+            context.getString(resId)
+        } else {
+            context.getString(resId, *formatArgs)
+        }
+    }
+
+    fun countString(
+        base: Context,
+        languageTag: String,
+        @PluralsRes resId: Int,
+        quantity: Int,
+        vararg formatArgs: Any
+    ): String = localizedContext(base, languageTag).resources.getQuantityString(
+        resId,
+        quantity,
+        quantity,
+        *formatArgs
+    )
 
     fun currentLanguageTag(context: Context, storedLanguageTag: String): String {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

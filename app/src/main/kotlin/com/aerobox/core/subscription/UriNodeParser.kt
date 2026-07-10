@@ -20,11 +20,7 @@ internal object UriNodeParser {
 
     private val supportedTransportTypes = SubscriptionParser.supportedTransportTypes
     private val supportedEnabledNetworks = setOf("tcp", "udp")
-
-    internal data class NodeParseBatch(
-        val nodes: List<ProxyNode>,
-        val diagnostics: ParseDiagnostics = ParseDiagnostics()
-    )
+    private val portPattern = Regex("""\d{1,5}""")
 
     internal fun parseUriList(content: String): NodeParseBatch {
         val nodes = mutableListOf<ProxyNode>()
@@ -446,8 +442,7 @@ internal object UriNodeParser {
     }
 
     internal fun parseSocksUri(uri: String): ProxyNode? {
-        val normalized = uri
-            .replaceFirst(Regex("^socks5?://", RegexOption.IGNORE_CASE), "socks://")
+        val normalized = "socks://${uri.substringAfter("://")}"
         val parsed = normalized.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
@@ -728,15 +723,11 @@ internal object UriNodeParser {
         return values.firstOrNull { !it.isNullOrBlank() }?.trim()?.takeIf { it.isNotEmpty() }
     }
 
-
-
-
     internal fun firstPortFromPortList(serverPorts: String?): Int? {
         return serverPorts
             ?.split(",")
             ?.firstNotNullOfOrNull { entry ->
-                Regex("""\d{1,5}""")
-                    .find(entry)
+                portPattern.find(entry)
                     ?.value
                     ?.toIntOrNull()
                     ?.takeIf { it in 1..65535 }

@@ -64,10 +64,6 @@ fun NodeListSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val titleText = stringResource(R.string.node_list_title)
-    val emptyHintText = stringResource(R.string.node_list_empty_hint)
-    val speedTestText = stringResource(R.string.node_list_speed_test)
-    val latencyTestingText = stringResource(R.string.latency_testing)
-    val latencyFailedText = stringResource(R.string.latency_failed)
     val ungroupedText = stringResource(R.string.group_ungrouped)
 
     ModalBottomSheet(
@@ -77,146 +73,143 @@ fun NodeListSheet(
         BoxWithConstraints {
             val listMaxHeight = maxHeight * 0.65f
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            if (nodes.isEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = titleText,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = emptyHintText,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else {
-                val grouped = remember(nodes, subscriptions, ungroupedText) {
-                    val subscriptionOrder = subscriptions.withIndex().associate { it.value.id to it.index }
-                    val subscriptionNames = subscriptions.associate { it.id to it.name }
-                    nodes
-                        .groupBy { it.subscriptionId }
-                        .filterValues { groupNodes -> groupNodes.isNotEmpty() }
-                        .toList()
-                        .sortedWith(
-                            compareBy<Pair<Long, List<ProxyNode>>> { (subId, _) ->
-                                subscriptionOrder[subId] ?: Int.MAX_VALUE
-                            }.thenBy { (subId, _) ->
-                                if (subId == 0L || !subscriptionNames.containsKey(subId)) 1 else 0
-                            }.thenBy { (subId, _) ->
-                                subscriptionNames[subId] ?: ungroupedText
-                            }
-                        )
-                }
-                val subscriptionNames = remember(subscriptions) {
-                    subscriptions.associate { it.id to it.name }
-                }
-                val groupIds = remember(grouped) { grouped.map { it.first } }
-                var selectedSubscriptionId by remember { mutableStateOf<Long?>(null) }
-                LaunchedEffect(selectedNodeId, groupIds) {
-                    val selectedGroupId = grouped.firstOrNull { (_, groupNodes) ->
-                        groupNodes.any { it.id == selectedNodeId }
-                    }?.first
-                    val hasCurrent = groupIds.contains(selectedSubscriptionId)
-                    selectedSubscriptionId = when {
-                        selectedGroupId != null -> selectedGroupId
-                        hasCurrent -> selectedSubscriptionId
-                        else -> grouped.firstOrNull()?.first
-                    }
-                }
-                val currentGroupNodes = remember(grouped, selectedSubscriptionId, nodeSortOrder) {
-                    val groupNodes = grouped.firstOrNull { (subId, _) ->
-                        subId == selectedSubscriptionId
-                    }?.second.orEmpty()
-                    val sortedIds = selectedSubscriptionId?.let { nodeSortOrder[it] }
-                    if (sortedIds != null) {
-                        val idToNode = groupNodes.associateBy { it.id }
-                        val sorted = sortedIds.mapNotNull { idToNode[it] }
-                        // Append any nodes not in the snapshot (e.g. newly added)
-                        val sortedIdSet = sortedIds.toSet()
-                        val remaining = groupNodes.filter { it.id !in sortedIdSet }
-                        sorted + remaining
-                    } else {
-                        groupNodes
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = titleText,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    TextButton(onClick = { onTestSubscription(currentGroupNodes) }) {
-                        Icon(
-                            Icons.Filled.Refresh,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(speedTestText)
-                    }
-                }
-
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(grouped, key = { it.first }) { (subId, groupNodes) ->
-                        FilterChip(
-                            selected = subId == selectedSubscriptionId,
-                            onClick = { selectedSubscriptionId = subId },
-                            label = {
-                                Text(
-                                    text = subscriptionNames[subId] ?: ungroupedText,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                            border = null
+                if (nodes.isEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = titleText,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
                         )
                     }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 240.dp, max = listMaxHeight),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(currentGroupNodes, key = { it.id }) { node ->
-                        NodeItem(
-                            node = node,
-                            isSelected = node.id == selectedNodeId,
-                            onClick = { onNodeSelected(node) },
-                            onTestLatency = { onTestNode(node) },
-                            speedTestText = speedTestText,
-                            latencyTestingText = latencyTestingText,
-                            latencyFailedText = latencyFailedText
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.node_list_empty_hint),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-            }
+                } else {
+                    val subscriptionOrder = remember(subscriptions) {
+                        subscriptions.withIndex().associate { it.value.id to it.index }
+                    }
+                    val subscriptionNames = remember(subscriptions) {
+                        subscriptions.associate { it.id to it.name }
+                    }
+                    val grouped = remember(nodes, subscriptionOrder, subscriptionNames, ungroupedText) {
+                        nodes
+                            .groupBy { it.subscriptionId }
+                            .toList()
+                            .sortedWith(
+                                compareBy<Pair<Long, List<ProxyNode>>> { (subId, _) ->
+                                    subscriptionOrder[subId] ?: Int.MAX_VALUE
+                                }.thenBy { (subId, _) ->
+                                    if (subId == 0L || !subscriptionNames.containsKey(subId)) 1 else 0
+                                }.thenBy { (subId, _) ->
+                                    subscriptionNames[subId] ?: ungroupedText
+                                }
+                            )
+                    }
+                    val groupIds = remember(grouped) { grouped.map { it.first } }
+                    var selectedSubscriptionId by remember { mutableStateOf<Long?>(null) }
+                    LaunchedEffect(selectedNodeId, groupIds) {
+                        val selectedGroupId = grouped.firstOrNull { (_, groupNodes) ->
+                            groupNodes.any { it.id == selectedNodeId }
+                        }?.first
+                        val hasCurrent = groupIds.contains(selectedSubscriptionId)
+                        selectedSubscriptionId = when {
+                            selectedGroupId != null -> selectedGroupId
+                            hasCurrent -> selectedSubscriptionId
+                            else -> grouped.firstOrNull()?.first
+                        }
+                    }
+                    val currentGroupNodes = remember(grouped, selectedSubscriptionId, nodeSortOrder) {
+                        val groupNodes = grouped.firstOrNull { (subId, _) ->
+                            subId == selectedSubscriptionId
+                        }?.second.orEmpty()
+                        val sortedIds = selectedSubscriptionId?.let { nodeSortOrder[it] }
+                        if (sortedIds != null) {
+                            val idToNode = groupNodes.associateBy { it.id }
+                            val sorted = sortedIds.mapNotNull { idToNode[it] }
+                            // Append any nodes not in the snapshot (e.g. newly added)
+                            val sortedIdSet = sortedIds.toSet()
+                            val remaining = groupNodes.filter { it.id !in sortedIdSet }
+                            sorted + remaining
+                        } else {
+                            groupNodes
+                        }
+                    }
 
-            Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = titleText,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        TextButton(onClick = { onTestSubscription(currentGroupNodes) }) {
+                            Icon(
+                                Icons.Filled.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(stringResource(R.string.node_list_speed_test))
+                        }
+                    }
+
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(grouped, key = { it.first }) { (subId, _) ->
+                            FilterChip(
+                                selected = subId == selectedSubscriptionId,
+                                onClick = { selectedSubscriptionId = subId },
+                                label = {
+                                    Text(
+                                        text = subscriptionNames[subId] ?: ungroupedText,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                border = null
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 240.dp, max = listMaxHeight),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(currentGroupNodes, key = { it.id }) { node ->
+                            NodeItem(
+                                node = node,
+                                isSelected = node.id == selectedNodeId,
+                                onClick = { onNodeSelected(node) },
+                                onTestLatency = { onTestNode(node) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
             }
         }
     }
@@ -227,10 +220,7 @@ private fun NodeItem(
     node: ProxyNode,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onTestLatency: () -> Unit,
-    speedTestText: String,
-    latencyTestingText: String,
-    latencyFailedText: String
+    onTestLatency: () -> Unit
 ) {
     Card(
         onClick = onClick,
@@ -298,10 +288,7 @@ private fun NodeItem(
             // Clickable latency badge — tap to test this node
             LatencyBadge(
                 latency = node.latency,
-                onClick = onTestLatency,
-                speedTestText = speedTestText,
-                testingText = latencyTestingText,
-                failedText = latencyFailedText
+                onClick = onTestLatency
             )
         }
     }
@@ -310,15 +297,15 @@ private fun NodeItem(
 @Composable
 private fun LatencyBadge(
     latency: Int,
-    onClick: () -> Unit,
-    speedTestText: String,
-    testingText: String,
-    failedText: String
+    onClick: () -> Unit
 ) {
     val (color, text) = when {
-        latency == NodeLatencyState.TESTING -> MaterialTheme.colorScheme.primary to testingText
-        latency == NodeLatencyState.FAILED -> MaterialTheme.colorScheme.error to failedText
-        latency == NodeLatencyState.UNTESTED -> MaterialTheme.colorScheme.outline to speedTestText
+        latency == NodeLatencyState.TESTING ->
+            MaterialTheme.colorScheme.primary to stringResource(R.string.latency_testing)
+        latency == NodeLatencyState.FAILED ->
+            MaterialTheme.colorScheme.error to stringResource(R.string.latency_failed)
+        latency == NodeLatencyState.UNTESTED ->
+            MaterialTheme.colorScheme.outline to stringResource(R.string.node_list_speed_test)
         latency < 100 -> MaterialTheme.colorScheme.primary to "${latency}ms"
         latency < 300 -> MaterialTheme.colorScheme.tertiary to "${latency}ms"
         else -> MaterialTheme.colorScheme.error to "${latency}ms"

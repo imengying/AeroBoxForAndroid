@@ -13,11 +13,6 @@ import org.json.JSONObject
  */
 internal object JsonNodeParser {
 
-    internal data class NodeParseBatch(
-        val nodes: List<ProxyNode>,
-        val diagnostics: ParseDiagnostics = ParseDiagnostics()
-    )
-
     internal fun parseJsonContent(content: String): NodeParseBatch {
         return runCatching {
             if (content.trimStart().startsWith("[")) {

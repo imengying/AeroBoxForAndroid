@@ -532,14 +532,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun localizedStringContext() = AppLocaleManager.localizedContext(appContext, languageTag.value)
-
-    private fun appString(resId: Int, vararg formatArgs: Any): String {
-        val context = localizedStringContext()
-        return if (formatArgs.isEmpty()) {
-            context.getString(resId)
-        } else {
-            context.getString(resId, *formatArgs)
-        }
-    }
+    private fun appString(resId: Int, vararg formatArgs: Any) =
+        AppLocaleManager.string(appContext, languageTag.value, resId, *formatArgs)
 }

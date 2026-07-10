@@ -131,12 +131,7 @@ class NotificationSwitchActivity : ComponentActivity() {
 
     private suspend fun appString(resId: Int, vararg formatArgs: Any): String {
         val languageTag = PreferenceManager.languageTagFlow(applicationContext).first()
-        val localizedContext = AppLocaleManager.localizedContext(this, languageTag)
-        return if (formatArgs.isEmpty()) {
-            localizedContext.getString(resId)
-        } else {
-            localizedContext.getString(resId, *formatArgs)
-        }
+        return AppLocaleManager.string(this, languageTag, resId, *formatArgs)
     }
 }
 

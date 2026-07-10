@@ -23,11 +23,12 @@ data class ParseDiagnostics(
     val ignoredEntryCount: Int = 0,
     val reasonCounts: Map<String, Int> = emptyMap()
 ) {
-    fun withIgnored(reason: String): ParseDiagnostics {
+    fun withIgnored(reason: String, count: Int = 1): ParseDiagnostics {
+        if (count <= 0) return this
         val normalized = reason.trim().ifEmpty { "unknown_reason" }
         return copy(
-            ignoredEntryCount = ignoredEntryCount + 1,
-            reasonCounts = reasonCounts + (normalized to ((reasonCounts[normalized] ?: 0) + 1))
+            ignoredEntryCount = ignoredEntryCount + count,
+            reasonCounts = reasonCounts + (normalized to ((reasonCounts[normalized] ?: 0) + count))
         )
     }
 
@@ -81,11 +82,6 @@ internal fun parseUdpOverTcpValue(value: Any?): Pair<Boolean?, Int?> {
 object SubscriptionParser {
     private const val TAG = "SubscriptionParser"
     internal val supportedTransportTypes = setOf("ws", "grpc", "http", "h2", "httpupgrade", "quic")
-
-    private data class NodeParseBatch(
-        val nodes: List<ProxyNode>,
-        val diagnostics: ParseDiagnostics = ParseDiagnostics()
-    )
 
     private val trafficInfoPrefixes = listOf(
         "剩余流量",
@@ -180,8 +176,8 @@ object SubscriptionParser {
         """
         (?ix)
         ^
-        \d+\s*
-        (?:
+        (\d+)\s*
+        (
             天|日|小时|小時|时|時|分钟|分鐘|分|秒|秒钟|秒鐘|
             day|days|hour|hours|hr|hrs|minute|minutes|min|mins|second|seconds|sec|secs|
             d|h|m|s
@@ -213,6 +209,15 @@ object SubscriptionParser {
     )
 
     private val timestampValuePattern = Regex("^\\d{10,13}$")
+    private val invisibleCharsPattern = Regex("[\\u00A0\\u200B-\\u200D\\u2060\\uFEFF]")
+    private val trafficAmountPattern = Regex(
+        """(?ix)^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB|PB|KIB|MIB|GIB|TIB|PIB|BYTE|BYTES|字节|字節)$"""
+    )
+    private val dateTimeFormatters = listOf(
+        DateTimeFormatter.ofPattern("yyyy-M-d H:mm:ss"),
+        DateTimeFormatter.ofPattern("yyyy-M-d H:mm")
+    )
+    private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-M-d")
 
     suspend fun parseSubscriptionContent(content: String): ParsedSubscription = withContext(Dispatchers.Default) {
         runCatching {
@@ -226,7 +231,7 @@ object SubscriptionParser {
                 return@runCatching parseClashSubscription(normalized)
             }
 
-            val base64Decoded = tryBase64Decode(normalized)
+            val base64Decoded = UriNodeParser.tryBase64Decode(normalized)
 
             // Also check if Base64-decoded content is Clash YAML
             if (base64Decoded != normalized && ClashParser.isClashYaml(base64Decoded)) {
@@ -241,8 +246,9 @@ object SubscriptionParser {
                 else -> normalized
             }
             val batch = when {
-                targetContent.startsWith("{") || targetContent.startsWith("[") -> parseJsonContent(targetContent)
-                targetContent.contains("://") -> parseUriList(targetContent)
+                targetContent.startsWith("{") || targetContent.startsWith("[") ->
+                    JsonNodeParser.parseJsonContent(targetContent)
+                targetContent.contains("://") -> UriNodeParser.parseUriList(targetContent)
                 else -> NodeParseBatch(
                     nodes = emptyList(),
                     diagnostics = ParseDiagnostics().withIgnored("unsupported_subscription_content")
@@ -266,26 +272,17 @@ object SubscriptionParser {
         if (infoNodes.isNotEmpty()) {
             Log.i(TAG, "Filtered ${infoNodes.size} informational nodes: ${infoNodes.joinToString { it.name }}")
         }
-        val dedupedNodes = dedupeNodes(validNodes)
+        val dedupedNodes = validNodes.distinctBy { it.connectionFingerprint() }
         val duplicateCount = (validNodes.size - dedupedNodes.size).coerceAtLeast(0)
-        var finalDiagnostics = diagnostics
-        repeat(infoNodes.size) {
-            finalDiagnostics = finalDiagnostics.withIgnored("informational_entry")
-        }
-        repeat(duplicateCount) {
-            finalDiagnostics = finalDiagnostics.withIgnored("duplicate_entry")
-        }
+        val finalDiagnostics = diagnostics
+            .withIgnored("informational_entry", infoNodes.size)
+            .withIgnored("duplicate_entry", duplicateCount)
         return ParsedSubscription(
             nodes = dedupedNodes,
             trafficBytes = infoNodes.mapNotNull { extractTrafficBytes(it.name) }.firstOrNull() ?: 0L,
             expireTimestamp = infoNodes.mapNotNull { extractExpireTimestamp(it.name) }.firstOrNull() ?: 0L,
             diagnostics = finalDiagnostics
         )
-    }
-
-    private fun dedupeNodes(nodes: List<ProxyNode>): List<ProxyNode> {
-        return nodes
-            .distinctBy { it.connectionFingerprint() }
     }
 
     private fun isInformationalNode(node: ProxyNode): Boolean {
@@ -321,7 +318,7 @@ object SubscriptionParser {
 
     private fun parseInformationalNode(name: String): InformationalNode? {
         val normalizedName = name
-            .replace(Regex("[\\u00A0\\u200B-\\u200D\\u2060\\uFEFF]"), "")
+            .replace(invisibleCharsPattern, "")
             .replace('：', ':')
             .replace('｜', '|')
             .replace('；', ';')
@@ -356,7 +353,7 @@ object SubscriptionParser {
 
     private fun isPermanentValidityValue(value: String): Boolean {
         val normalizedValue = value
-            .replace(Regex("[\\u00A0\\u200B-\\u200D\\u2060\\uFEFF]"), "")
+            .replace(invisibleCharsPattern, "")
             .trim()
             .trim(' ', ':', '|', ';', ',', '-', '_', '/', '\\', '(', ')', '[', ']', '【', '】', '。', '.', '!', '！')
 
@@ -366,9 +363,7 @@ object SubscriptionParser {
 
     private fun parseTrafficBytes(value: String): Long? {
         val normalized = value.substringBefore('/').trim()
-        val match = Regex(
-            """(?ix)^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB|PB|KIB|MIB|GIB|TIB|PIB|BYTE|BYTES|字节|字節)$"""
-        ).find(normalized) ?: return null
+        val match = trafficAmountPattern.matchEntire(normalized) ?: return null
 
         val amount = match.groupValues[1].toDoubleOrNull() ?: return null
         val multiplier = when (match.groupValues[2].uppercase(Locale.ROOT)) {
@@ -396,14 +391,10 @@ object SubscriptionParser {
 
         val normalized = value.replace('/', '-').replace('.', '-').replace('T', ' ').trim()
         val zoneId = ZoneId.systemDefault()
-        val dateTimePatterns = listOf(
-            "yyyy-M-d H:mm:ss",
-            "yyyy-M-d H:mm"
-        )
 
-        dateTimePatterns.forEach { pattern ->
+        dateTimeFormatters.forEach { formatter ->
             runCatching {
-                LocalDateTime.parse(normalized, DateTimeFormatter.ofPattern(pattern))
+                LocalDateTime.parse(normalized, formatter)
                     .atZone(zoneId)
                     .toInstant()
                     .toEpochMilli()
@@ -412,7 +403,7 @@ object SubscriptionParser {
 
         val datePart = normalized.substringBefore(' ')
         return runCatching {
-            LocalDate.parse(datePart, DateTimeFormatter.ofPattern("yyyy-M-d"))
+            LocalDate.parse(datePart, dateFormatter)
                 .atStartOfDay(zoneId)
                 .toInstant()
                 .toEpochMilli()
@@ -420,19 +411,7 @@ object SubscriptionParser {
     }
 
     private fun parseRelativeDurationMillis(value: String): Long? {
-        val match = Regex(
-            """
-            (?ix)
-            ^
-            (\d+)\s*
-            (
-                天|日|小时|小時|时|時|分钟|分鐘|分|秒|秒钟|秒鐘|
-                day|days|hour|hours|hr|hrs|minute|minutes|min|mins|second|seconds|sec|secs|
-                d|h|m|s
-            )
-            $
-            """.trimIndent()
-        ).find(value) ?: return null
+        val match = relativeTimeValuePattern.matchEntire(value) ?: return null
 
         val amount = match.groupValues[1].toLongOrNull() ?: return null
         return when (match.groupValues[2].lowercase(Locale.ROOT)) {
@@ -453,17 +432,4 @@ object SubscriptionParser {
         val value: String
     )
 
-    // ─── Delegation to extracted parsers ───
-
-    private fun parseUriList(content: String): NodeParseBatch {
-        val batch = UriNodeParser.parseUriList(content)
-        return NodeParseBatch(nodes = batch.nodes, diagnostics = batch.diagnostics)
-    }
-
-    private fun parseJsonContent(content: String): NodeParseBatch {
-        val batch = JsonNodeParser.parseJsonContent(content)
-        return NodeParseBatch(nodes = batch.nodes, diagnostics = batch.diagnostics)
-    }
-
-    private fun tryBase64Decode(value: String): String = UriNodeParser.tryBase64Decode(value)
 }

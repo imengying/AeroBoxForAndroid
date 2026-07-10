@@ -184,9 +184,7 @@ object GeoAssetManager {
                         true
                     } else {
                         // renameTo can fail across filesystems; fall back to copy
-                        tmpFile.inputStream().use { input ->
-                            FileOutputStream(target).use { output -> input.copyTo(output) }
-                        }
+                        tmpFile.copyTo(target, overwrite = true)
                         tmpFile.delete()
                         target.exists() && target.length() > 0
                     }
@@ -230,9 +228,7 @@ object GeoAssetManager {
 
         target.delete()
         if (!tmpFile.renameTo(target)) {
-            tmpFile.inputStream().use { input ->
-                FileOutputStream(target).use { output -> input.copyTo(output) }
-            }
+            tmpFile.copyTo(target, overwrite = true)
             tmpFile.delete()
         }
 
@@ -278,11 +274,7 @@ object GeoAssetManager {
         if (assetVersion == localVersion) return false
         val assetNum = assetVersion.toLongOrNull()
         val localNum = localVersion.toLongOrNull()
-        return if (assetNum != null && localNum != null) {
-            assetNum > localNum
-        } else {
-            assetVersion != localVersion
-        }
+        return assetNum == null || localNum == null || assetNum > localNum
     }
 
     private fun fetchLatestReleaseTag(repo: String): String? {

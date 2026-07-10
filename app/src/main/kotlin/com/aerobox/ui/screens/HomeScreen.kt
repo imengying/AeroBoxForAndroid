@@ -25,7 +25,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -43,7 +42,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
@@ -52,6 +50,7 @@ import com.aerobox.core.connection.ConnectionFixAction
 import com.aerobox.ui.components.ConnectionCard
 import com.aerobox.ui.components.NodeListSheet
 import com.aerobox.ui.components.TrafficStatsCard
+import com.aerobox.ui.components.AppDialog
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.utils.needsNotificationPermission
 import com.aerobox.viewmodel.HomeViewModel
@@ -104,7 +103,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             }
         }
     }
-    val baseBottomSpacing = 24.dp
 
     LaunchedEffect(viewModel) {
         viewModel.uiMessage.collectLatest { message ->
@@ -115,35 +113,33 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 80.dp, start = 16.dp, end = 16.dp, bottom = baseBottomSpacing),
+                .padding(top = 80.dp, start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    ConnectionCard(
-                        isConnected = vpnState.isConnected,
-                        isConnecting = isConnecting,
-                        connectionDuration = connectionDuration,
-                        onToggleConnection = {
-                            if (vpnState.isConnected || isConnecting) {
-                                viewModel.toggleConnection(context)
+                ConnectionCard(
+                    isConnected = vpnState.isConnected,
+                    isConnecting = isConnecting,
+                    connectionDuration = connectionDuration,
+                    onToggleConnection = {
+                        if (vpnState.isConnected || isConnecting) {
+                            viewModel.toggleConnection(context)
+                        } else {
+                            val permissionIntent = VpnService.prepare(context)
+                            if (permissionIntent != null) {
+                                permissionLauncher.launch(permissionIntent)
                             } else {
-                                val permissionIntent = VpnService.prepare(context)
-                                if (permissionIntent != null) {
-                                    permissionLauncher.launch(permissionIntent)
-                                } else {
-                                    ensureNotificationPermissionThenStart(
-                                        context = context,
-                                        onContinue = { viewModel.onVpnPermissionGranted() },
-                                        onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
-                                    )
-                                }
+                                ensureNotificationPermissionThenStart(
+                                    context = context,
+                                    onContinue = { viewModel.onVpnPermissionGranted() },
+                                    onRequest = { permission -> notificationPermissionLauncher.launch(permission) }
+                                )
                             }
-                        },
-                    )
-                }
+                        }
+                    }
+                )
 
                 if (selectedNode == null) {
                     Text(
@@ -223,59 +219,52 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
     }
 
     connectionIssue?.let { issue ->
-        Dialog(onDismissRequest = { viewModel.dismissConnectionIssue() }) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp
+        AppDialog(onDismissRequest = { viewModel.dismissConnectionIssue() }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = stringResource(issue.titleResId),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = buildString {
-                            append(stringResource(issue.messageResId))
-                            if (issue.rawError.isNotBlank()) {
-                                append("\n\n")
-                                append(stringResource(R.string.connection_issue_raw_error_prefix))
-                                append(issue.rawError.take(220))
-                            }
-                        },
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
-                            Text(
-                                stringResource(
-                                    if (issue.fixAction == ConnectionFixAction.REFRESH_SUBSCRIPTIONS) {
-                                        R.string.connection_issue_dismiss_for_now
-                                    } else {
-                                        R.string.cancel
-                                    }
-                                )
-                            )
+                Text(
+                    text = stringResource(issue.titleResId),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = buildString {
+                        append(stringResource(issue.messageResId))
+                        if (issue.rawError.isNotBlank()) {
+                            append("\n\n")
+                            append(stringResource(R.string.connection_issue_raw_error_prefix))
+                            append(issue.rawError.take(220))
                         }
-                        val action = issue.fixAction
-                        if (action != null) {
-                            TextButton(onClick = { viewModel.applyConnectionFix(action) }) {
-                                Text(stringResource(action.labelResId))
-                            }
-                        } else {
-                            TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
-                                Text(stringResource(R.string.confirm))
-                            }
+                    },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
+                        Text(
+                            stringResource(
+                                if (issue.fixAction == ConnectionFixAction.REFRESH_SUBSCRIPTIONS) {
+                                    R.string.connection_issue_dismiss_for_now
+                                } else {
+                                    R.string.cancel
+                                }
+                            )
+                        )
+                    }
+                    val action = issue.fixAction
+                    if (action != null) {
+                        TextButton(onClick = { viewModel.applyConnectionFix(action) }) {
+                            Text(stringResource(action.labelResId))
+                        }
+                    } else {
+                        TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
+                            Text(stringResource(R.string.confirm))
                         }
                     }
                 }
@@ -444,49 +433,44 @@ private fun RoutingModeRow(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(8.dp),
-            contentAlignment = Alignment.Center
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                modes.forEach { (mode, label) ->
-                    val isSelected = selected == mode
-                    val bgColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
-                        else MaterialTheme.colorScheme.surfaceContainerHighest,
-                        label = "modeBg"
-                    )
-                    val textColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        label = "modeText"
-                    )
+            modes.forEach { (mode, label) ->
+                val isSelected = selected == mode
+                val bgColor by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainerHighest,
+                    label = "modeBg"
+                )
+                val textColor by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    label = "modeText"
+                )
 
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(bgColor)
-                            .clickable { onSelect(mode) }
-                            .padding(horizontal = 2.dp, vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = textColor,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(bgColor)
+                        .clickable { onSelect(mode) }
+                        .padding(horizontal = 2.dp, vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = textColor,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }

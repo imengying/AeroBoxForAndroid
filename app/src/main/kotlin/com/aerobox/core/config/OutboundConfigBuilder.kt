@@ -16,6 +16,7 @@ import org.json.JSONObject
  * package-private and called exclusively by the generator.
  */
 internal object OutboundConfigBuilder {
+    private val hysteriaPortRangePattern = Regex("""^(\d{1,5})\s*-\s*(\d{1,5})$""")
 
     fun buildProxyOutbound(node: ProxyNode): JSONObject {
         validateTlsServerNameRequirements(node)
@@ -491,7 +492,7 @@ internal object OutboundConfigBuilder {
         val trimmed = entry.trim()
         if (trimmed.isEmpty()) return null
 
-        val dashRange = Regex("""^(\d{1,5})\s*-\s*(\d{1,5})$""").matchEntire(trimmed)
+        val dashRange = hysteriaPortRangePattern.matchEntire(trimmed)
         if (dashRange != null) {
             val start = dashRange.groupValues[1]
             val end = dashRange.groupValues[2]
@@ -503,7 +504,7 @@ internal object OutboundConfigBuilder {
 
     private fun normalizeHysteriaHopInterval(value: String): String {
         val trimmed = value.trim()
-        return if (Regex("""^\d+$""").matches(trimmed)) "${trimmed}s" else trimmed
+        return if (trimmed.isNotEmpty() && trimmed.all { it.isDigit() }) "${trimmed}s" else trimmed
     }
 
     private fun firstTransportHost(node: ProxyNode): String? {
