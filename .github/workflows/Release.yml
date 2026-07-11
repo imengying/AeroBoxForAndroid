@@ -119,7 +119,7 @@ jobs:
             "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}"
             "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}"
           )
-          gradle --stacktrace :app:assembleRelease "${EXTRA_ARGS[@]}" \
+          gradle --stacktrace --warning-mode all :app:assembleRelease "${EXTRA_ARGS[@]}" \
             2>&1 | tee build-logs/assemble-release.log
 
       - name: Run Android lint
@@ -130,7 +130,7 @@ jobs:
         run: |
           set -euo pipefail
           REPORT="app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt"
-          if ! gradle --stacktrace :app:lintRelease \
+          if ! gradle --stacktrace --warning-mode all :app:lintRelease \
             "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}" \
             "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}" \
             2>&1 | tee build-logs/lint-release.log; then

@@ -75,14 +75,16 @@ jobs:
         if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/main' && github.event_name != 'workflow_dispatch')
         run: |
           set -euo pipefail
-          gradle --stacktrace :app:assembleRelease 2>&1 | tee build-logs/assemble-release.log
+          gradle --stacktrace --warning-mode all :app:assembleRelease \
+            2>&1 | tee build-logs/assemble-release.log
 
       - name: Run Android lint
         id: lint
         run: |
           set -euo pipefail
           REPORT="app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt"
-          if ! gradle --stacktrace :app:lintRelease 2>&1 | tee build-logs/lint-release.log; then
+          if ! gradle --stacktrace --warning-mode all :app:lintRelease \
+            2>&1 | tee build-logs/lint-release.log; then
             if [ -f "${REPORT}" ]; then
               cat "${REPORT}"
             else
@@ -103,7 +105,8 @@ jobs:
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
         run: |
           set -euo pipefail
-          gradle --stacktrace :app:assembleBeta 2>&1 | tee build-logs/assemble-beta.log
+          gradle --stacktrace --warning-mode all :app:assembleBeta \
+            2>&1 | tee build-logs/assemble-beta.log
 
       - name: Sign beta APKs (v3 only)
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
