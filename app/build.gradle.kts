@@ -1,3 +1,5 @@
+import com.android.build.api.variant.HostTestBuilder
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -96,7 +98,7 @@ android {
 androidComponents {
     beforeVariants(selector().all()) { variantBuilder ->
         variantBuilder.enableAndroidTest = false
-        variantBuilder.enableUnitTest = false
+        variantBuilder.hostTests[HostTestBuilder.UNIT_TEST_TYPE]?.enable = false
     }
 }
 
