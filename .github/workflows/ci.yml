@@ -34,6 +34,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Prepare build logs
+        run: mkdir -p build-logs
+
       - name: Set up JDK 21
         uses: actions/setup-java@v5.4.0
         with:
@@ -61,7 +64,9 @@ jobs:
         run: bash .github/scripts/resolve-sing-box-version.sh
 
       - name: Build libbox.aar
-        run: bash .github/scripts/build-libbox.sh
+        run: |
+          set -euo pipefail
+          bash .github/scripts/build-libbox.sh 2>&1 | tee build-logs/libbox.log
 
       - name: Prepare bundled routing rule-set assets
         run: bash .github/scripts/prepare-geo-assets.sh
@@ -70,14 +75,14 @@ jobs:
         if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/main' && github.event_name != 'workflow_dispatch')
         run: |
           set -euo pipefail
-          gradle --stacktrace :app:assembleRelease
+          gradle --stacktrace :app:assembleRelease 2>&1 | tee build-logs/assemble-release.log
 
       - name: Run Android lint
         id: lint
         run: |
           set -euo pipefail
           REPORT="app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt"
-          if ! gradle --stacktrace :app:lintRelease; then
+          if ! gradle --stacktrace :app:lintRelease 2>&1 | tee build-logs/lint-release.log; then
             if [ -f "${REPORT}" ]; then
               cat "${REPORT}"
             else
@@ -98,7 +103,7 @@ jobs:
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
         run: |
           set -euo pipefail
-          gradle --stacktrace :app:assembleBeta
+          gradle --stacktrace :app:assembleBeta 2>&1 | tee build-logs/assemble-beta.log
 
       - name: Sign beta APKs (v3 only)
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
@@ -207,9 +212,20 @@ jobs:
         if: failure()
         run: |
           set +e
-          echo "========== libbox.aar =========="
-          ls -la "${GITHUB_WORKSPACE}/app/build/libbox/" || true
-          echo "========== app/build/outputs =========="
-          if [ -d "${GITHUB_WORKSPACE}/app/build/outputs" ]; then
-            find "${GITHUB_WORKSPACE}/app/build/outputs" -maxdepth 5 -print | sort
-          fi
+          {
+            echo "========== libbox.aar =========="
+            ls -la "${GITHUB_WORKSPACE}/app/build/libbox/" || true
+            echo "========== app/build/outputs =========="
+            if [ -d "${GITHUB_WORKSPACE}/app/build/outputs" ]; then
+              find "${GITHUB_WORKSPACE}/app/build/outputs" -maxdepth 5 -print | sort
+            fi
+          } 2>&1 | tee build-logs/debug.log
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: aerobox-ci-build-logs-${{ github.run_number }}-${{ github.run_attempt }}
+          path: build-logs/*.log
+          if-no-files-found: warn
+          retention-days: 14
