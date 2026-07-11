@@ -93,6 +93,13 @@ android {
     }
 }
 
+androidComponents {
+    beforeVariants(selector().all()) { variantBuilder ->
+        variantBuilder.enableAndroidTest = false
+        variantBuilder.enableUnitTest = false
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.19.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")

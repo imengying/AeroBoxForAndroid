@@ -261,4 +261,4 @@ jobs:
           name: aerobox-release-build-logs-${{ github.ref_name }}-${{ github.run_attempt }}
           path: build-logs/*.log
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 3
