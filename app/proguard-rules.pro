@@ -5,10 +5,6 @@
 # and avoids subtle release-only NPEs the day we add a generics-aware lib.
 -keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
 
-# Keep Room entities and DAO (required by annotation processor)
--keep class com.aerobox.data.model.** { *; }
--keep class com.aerobox.data.database.** { *; }
-
 # Keep JNI native methods
 -keepclasseswithmembernames class * {
     native <methods>;
@@ -24,9 +20,7 @@
 -dontwarn javax.annotation.**
 
 # SnakeYAML references java.beans on desktop JDKs, but those code paths are not
-# used by our Android Map-based parsing flow.
--keep class org.yaml.snakeyaml.** { *; }
--dontwarn org.yaml.snakeyaml.**
+# used by our SafeConstructor-based Android Map parsing flow.
 -dontwarn java.beans.**
 
 # Strip verbose logging in release

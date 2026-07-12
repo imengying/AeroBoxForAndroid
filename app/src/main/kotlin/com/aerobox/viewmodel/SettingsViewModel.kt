@@ -135,30 +135,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         PreferenceManager.setAutoConnect(appContext, enabled)
     }
 
-    suspend fun setRemoteDns(dns: String) {
-        val normalizedDns = dns.trim()
-        val currentPrefs = PreferenceManager.readVpnConfigPreferences(appContext)
-        validateAndPersistDnsSettings(
-            remoteDns = normalizedDns,
-            directDns = currentPrefs.directDns
-        ) ?: return
-        refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appString(R.string.dns_setting_failed)
-        )
-    }
-
-    suspend fun setDirectDns(dns: String) {
-        val normalizedDns = dns.trim()
-        val currentPrefs = PreferenceManager.readVpnConfigPreferences(appContext)
-        validateAndPersistDnsSettings(
-            remoteDns = currentPrefs.remoteDns,
-            directDns = normalizedDns
-        ) ?: return
-        refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appString(R.string.dns_setting_failed)
-        )
-    }
-
     suspend fun setDnsServers(remoteDns: String, directDns: String) {
         val normalizedRemoteDns = remoteDns.trim()
         val normalizedDirectDns = directDns.trim()

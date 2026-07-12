@@ -12,12 +12,12 @@ import androidx.compose.ui.window.Dialog
 @Composable
 fun AppDialog(
     onDismissRequest: () -> Unit,
-    modifier: Modifier = Modifier.fillMaxWidth(),
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     Dialog(onDismissRequest = onDismissRequest) {
         Surface(
-            modifier = modifier,
+            modifier = modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp,

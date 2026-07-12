@@ -351,10 +351,6 @@ class SubscriptionRepository(context: Context) {
         subscriptionDao.update(subscription.copy(name = trimmed))
     }
 
-    suspend fun createLocalGroup(name: String): Long {
-        return subscriptionDao.insert(buildLocalGroup(name))
-    }
-
     suspend fun refreshAllSubscriptions(subscriptions: List<Subscription>): List<Result<SubscriptionUpdateResult>> {
         val refreshable = subscriptions.filterNot { it.isLocalGroup() }
         val results = refreshSubscriptions(refreshable)
@@ -451,41 +447,6 @@ class SubscriptionRepository(context: Context) {
                 metadataFromHeader = prepared.metadataFromHeader,
                 diagnostics = prepared.diagnostics
             )
-        }
-    }
-
-    suspend fun moveNodesToGroup(
-        nodeIds: List<Long>,
-        target: ImportGroupTarget
-    ): Result<Long> {
-        if (nodeIds.isEmpty()) return Result.success(0L)
-        return runCatching {
-            database.withTransaction {
-                val affectedSourceIds = nodeIds
-                    .mapNotNull { proxyNodeDao.getNodeById(it)?.subscriptionId }
-                    .toSet()
-                if (affectedSourceIds.isEmpty()) return@withTransaction 0L
-
-                val targetId = when (target) {
-                    is ImportGroupTarget.Ungrouped -> 0L
-                    is ImportGroupTarget.Existing -> {
-                        val existing = subscriptionDao.getById(target.subscriptionId)
-                            ?: throw IllegalStateException(appContext.getString(R.string.error_target_group_not_found))
-                        if (!existing.isLocalGroup()) {
-                            throw IllegalStateException(LOCAL_GROUP_TARGET_INVALID_ERROR)
-                        }
-                        existing.id
-                    }
-                    is ImportGroupTarget.New -> subscriptionDao.insert(buildLocalGroup(target.name))
-                }
-
-                proxyNodeDao.moveNodesToSubscription(nodeIds, targetId)
-                recomputeLocalGroupCount(targetId)
-                affectedSourceIds.forEach { sourceId ->
-                    if (sourceId != targetId) recomputeLocalGroupCount(sourceId)
-                }
-                targetId
-            }
         }
     }
 

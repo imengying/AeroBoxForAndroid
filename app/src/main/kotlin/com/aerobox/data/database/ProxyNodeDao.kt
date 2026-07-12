@@ -36,9 +36,6 @@ interface ProxyNodeDao {
     @Query("UPDATE proxy_nodes SET latency = :latency WHERE id = :id")
     suspend fun updateLatency(id: Long, latency: Int)
 
-    @Query("UPDATE proxy_nodes SET subscriptionId = :targetSubscriptionId WHERE id IN (:ids)")
-    suspend fun moveNodesToSubscription(ids: List<Long>, targetSubscriptionId: Long)
-
     @Query("UPDATE proxy_nodes SET subscriptionId = :targetSubscriptionId WHERE subscriptionId = :fromSubscriptionId")
     suspend fun reassignBySubscription(fromSubscriptionId: Long, targetSubscriptionId: Long)
 

@@ -31,18 +31,6 @@ data class ParseDiagnostics(
             reasonCounts = reasonCounts + (normalized to ((reasonCounts[normalized] ?: 0) + count))
         )
     }
-
-    operator fun plus(other: ParseDiagnostics): ParseDiagnostics {
-        if (other.ignoredEntryCount == 0 && other.reasonCounts.isEmpty()) return this
-        val merged = reasonCounts.toMutableMap()
-        other.reasonCounts.forEach { (reason, count) ->
-            merged[reason] = (merged[reason] ?: 0) + count
-        }
-        return ParseDiagnostics(
-            ignoredEntryCount = ignoredEntryCount + other.ignoredEntryCount,
-            reasonCounts = merged.toMap()
-        )
-    }
 }
 
 internal fun parseUdpOverTcpValue(value: Any?): Pair<Boolean?, Int?> {

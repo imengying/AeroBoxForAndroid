@@ -635,11 +635,7 @@ object ClashParser {
     // Clash entries already matched a Naive type above, so unknown/blank protocol
     // values can safely fall back to the default HTTPS transport.
     private fun resolveNaiveProtocol(type: String, protocol: String?, proto: String?, quic: Boolean?): String {
-        return when {
-            type == "naive+quic" || quic == true -> "quic"
-            firstNonBlank(protocol, proto)?.equals("quic", ignoreCase = true) == true -> "quic"
-            else -> "https"
-        }
+        return UriNodeParser.resolveNaiveProtocol(type, protocol, proto, quic) ?: "https"
     }
 
     private fun naiveExtraHeadersValue(value: Any?): String? {

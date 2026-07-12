@@ -155,38 +155,6 @@ object AppIcons {
         }.build()
     }
 
-    val Speed: ImageVector by lazy {
-        ImageVector.Builder("Speed", 24.dp, 24.dp, 24f, 24f).apply {
-            path(fill = SolidColor(Color.Black)) {
-                moveTo(20.38f, 8.57f)
-                lineToRelative(-1.23f, 1.85f)
-                curveToRelative(0.53f, 0.97f, 0.85f, 2.06f, 0.85f, 3.23f)
-                curveToRelative(0f, 3.7f, -3.01f, 6.7f, -6.71f, 6.7f)
-                reflectiveCurveToRelative(-6.71f, -3f, -6.71f, -6.7f)
-                curveToRelative(0f, -3.7f, 3.01f, -6.7f, 6.71f, -6.7f)
-                curveToRelative(0.76f, 0f, 1.49f, 0.13f, 2.17f, 0.36f)
-                lineToRelative(1.84f, -1.23f)
-                curveTo(16.01f, 5.43f, 14.57f, 5f, 13.04f, 5f)
-                horizontalLineToRelative(-0.18f)
-                lineToRelative(1.01f, -3f)
-                lineToRelative(-2.04f, 0f)
-                lineToRelative(-1.01f, 3f)
-                lineToRelative(-0.86f, 0f)
-                curveTo(5.55f, 5f, 2f, 8.58f, 2f, 13.65f)
-                curveToRelative(0f, 4.59f, 3.37f, 8.35f, 8f, 8.35f)
-                reflectiveCurveToRelative(8f, -3.76f, 8f, -8.35f)
-                curveToRelative(0f, -1.88f, -0.59f, -3.62f, -1.62f, -5.08f)
-                close()
-                moveTo(10.59f, 15.41f)
-                curveToRelative(0.78f, 0.78f, 2.05f, 0.78f, 2.83f, 0f)
-                lineToRelative(5.66f, -8.49f)
-                lineToRelative(-8.49f, 5.66f)
-                curveToRelative(-0.78f, 0.78f, -0.78f, 2.05f, 0f, 2.83f)
-                close()
-            }
-        }.build()
-    }
-
     val Flight: ImageVector by lazy {
         ImageVector.Builder("Flight", 24.dp, 24.dp, 24f, 24f).apply {
             path(fill = SolidColor(Color.Black)) {
