@@ -140,7 +140,7 @@ jobs:
 
           for apk in "${APKS[@]}"; do
             signed_apk="${apk%.apk}-signed.apk"
-            "${APKSIGNER}" sign \
+            "${APKSIGNER}" -J-enable-native-access=ALL-UNNAMED sign \
               --ks "${KEYSTORE_PATH}" \
               --ks-key-alias androiddebugkey \
               --ks-pass pass:android \
@@ -153,7 +153,8 @@ jobs:
               "${apk}"
 
             mv -f "${signed_apk}" "${apk}"
-            "${APKSIGNER}" verify --min-sdk-version 31 --verbose "${apk}"
+            "${APKSIGNER}" -J-enable-native-access=ALL-UNNAMED \
+              verify --min-sdk-version 31 --verbose "${apk}"
           done
 
       - name: Prepare beta APKs

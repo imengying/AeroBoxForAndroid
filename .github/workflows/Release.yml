@@ -174,7 +174,7 @@ jobs:
 
           for apk in "${APKS[@]}"; do
             signed_apk="${apk%.apk}-signed.apk"
-            "${APKSIGNER}" sign \
+            "${APKSIGNER}" -J-enable-native-access=ALL-UNNAMED sign \
               --ks "${KEYSTORE_PATH}" \
               --ks-key-alias "${KEY_ALIAS}" \
               --ks-pass env:KEYSTORE_PASSWORD \
@@ -187,6 +187,8 @@ jobs:
               "${apk}"
 
             mv -f "${signed_apk}" "${apk}"
+            "${APKSIGNER}" -J-enable-native-access=ALL-UNNAMED \
+              verify --min-sdk-version 31 --verbose "${apk}"
           done
 
       - name: Rename APKs
