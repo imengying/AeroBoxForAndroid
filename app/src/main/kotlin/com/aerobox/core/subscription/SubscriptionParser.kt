@@ -244,7 +244,13 @@ object SubscriptionParser {
             }
 
             sanitizeParsedNodes(batch.nodes, batch.diagnostics)
-        }.getOrDefault(ParsedSubscription(emptyList()))
+        }.getOrElse { error ->
+            Log.e(TAG, "Failed to parse subscription content", error)
+            ParsedSubscription(
+                nodes = emptyList(),
+                diagnostics = ParseDiagnostics().withIgnored("subscription_parse_error")
+            )
+        }
     }
 
     private fun parseClashSubscription(content: String): ParsedSubscription {

@@ -621,7 +621,8 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         val resId = when (reason) {
             "unsupported_subscription_content",
             "invalid_json_content",
-            "invalid_clash_yaml" -> R.string.diag_unsupported_subscription_content
+            "invalid_clash_yaml",
+            "subscription_parse_error" -> R.string.diag_unsupported_subscription_content
 
             "missing_clash_proxies" -> R.string.diag_missing_clash_proxies
 
