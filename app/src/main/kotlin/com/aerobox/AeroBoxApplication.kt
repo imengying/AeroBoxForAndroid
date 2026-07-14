@@ -66,7 +66,7 @@ class AeroBoxApplication : Application() {
                 AppDatabase::class.java,
                 "aerobox.db"
             )
-                .fallbackToDestructiveMigration(true)
+                .addMigrations(AppDatabase.MIGRATION_1_2)
                 .build()
         }
 

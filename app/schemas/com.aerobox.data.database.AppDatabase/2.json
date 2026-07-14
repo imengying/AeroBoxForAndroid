@@ -1,0 +1,624 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "64f091a475363f08b8ca3cfca1b71085",
+    "entities": [
+      {
+        "tableName": "proxy_nodes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `server` TEXT NOT NULL, `port` INTEGER NOT NULL, `bindInterface` TEXT, `connectTimeout` TEXT, `tcpFastOpen` INTEGER, `tcpMultiPath` INTEGER, `udpFragment` INTEGER, `networkStrategy` TEXT, `networkType` TEXT, `fallbackNetworkType` TEXT, `fallbackDelay` TEXT, `uuid` TEXT, `alterId` INTEGER NOT NULL, `globalPadding` INTEGER, `authenticatedLength` INTEGER, `password` TEXT, `method` TEXT, `flow` TEXT, `security` TEXT, `network` TEXT, `transportType` TEXT, `tls` INTEGER NOT NULL, `sni` TEXT, `transportHost` TEXT, `transportPath` TEXT, `transportMethod` TEXT, `transportHeaders` TEXT, `transportIdleTimeout` TEXT, `transportPingTimeout` TEXT, `grpcPermitWithoutStream` INTEGER, `transportServiceName` TEXT, `wsMaxEarlyData` INTEGER, `wsEarlyDataHeaderName` TEXT, `alpn` TEXT, `tlsDisableSni` INTEGER, `tlsMinVersion` TEXT, `tlsMaxVersion` TEXT, `tlsCipherSuites` TEXT, `tlsCurvePreferences` TEXT, `tlsCertificatePublicKeySha256` TEXT, `tlsClientCertificate` TEXT, `tlsClientCertificatePath` TEXT, `tlsClientKey` TEXT, `tlsClientKeyPath` TEXT, `tlsFragment` INTEGER, `tlsFragmentFallbackDelay` TEXT, `tlsRecordFragment` INTEGER, `tlsKernelTx` INTEGER, `tlsKernelRx` INTEGER, `fingerprint` TEXT, `publicKey` TEXT, `shortId` TEXT, `packetEncoding` TEXT, `subscriptionId` INTEGER NOT NULL, `latency` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `username` TEXT, `socksVersion` TEXT, `allowInsecure` INTEGER NOT NULL, `plugin` TEXT, `pluginOpts` TEXT, `udpOverTcpEnabled` INTEGER, `udpOverTcpVersion` INTEGER, `obfsType` TEXT, `obfsPassword` TEXT, `serverPorts` TEXT, `hopInterval` TEXT, `upMbps` INTEGER, `downMbps` INTEGER, `brutalDebug` INTEGER, `muxEnabled` INTEGER, `muxProtocol` TEXT, `muxMaxConnections` INTEGER, `muxMinStreams` INTEGER, `muxMaxStreams` INTEGER, `muxPadding` INTEGER, `muxBrutalEnabled` INTEGER, `muxBrutalUpMbps` INTEGER, `muxBrutalDownMbps` INTEGER, `congestionControl` TEXT, `udpRelayMode` TEXT, `udpOverStream` INTEGER, `zeroRttHandshake` INTEGER, `heartbeat` TEXT, `naiveProtocol` TEXT, `naiveExtraHeaders` TEXT, `naiveInsecureConcurrency` INTEGER, `naiveStreamReceiveWindow` TEXT, `naiveQuicSessionReceiveWindow` TEXT, `tlsCertificate` TEXT, `tlsCertificatePath` TEXT, `echEnabled` INTEGER, `echConfig` TEXT, `echConfigPath` TEXT, `echQueryServerName` TEXT, `disableTcpKeepAlive` INTEGER, `tcpKeepAlive` TEXT, `tcpKeepAliveInterval` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "server",
+            "columnName": "server",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "port",
+            "columnName": "port",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bindInterface",
+            "columnName": "bindInterface",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "connectTimeout",
+            "columnName": "connectTimeout",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tcpFastOpen",
+            "columnName": "tcpFastOpen",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tcpMultiPath",
+            "columnName": "tcpMultiPath",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "udpFragment",
+            "columnName": "udpFragment",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "networkStrategy",
+            "columnName": "networkStrategy",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "networkType",
+            "columnName": "networkType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fallbackNetworkType",
+            "columnName": "fallbackNetworkType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fallbackDelay",
+            "columnName": "fallbackDelay",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "alterId",
+            "columnName": "alterId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "globalPadding",
+            "columnName": "globalPadding",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "authenticatedLength",
+            "columnName": "authenticatedLength",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "password",
+            "columnName": "password",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "method",
+            "columnName": "method",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "flow",
+            "columnName": "flow",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "security",
+            "columnName": "security",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "network",
+            "columnName": "network",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "transportType",
+            "columnName": "transportType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tls",
+            "columnName": "tls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sni",
+            "columnName": "sni",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "transportHost",
+            "columnName": "transportHost",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "transportPath",
+            "columnName": "transportPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "transportMethod",
+            "columnName": "transportMethod",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "transportHeaders",
+            "columnName": "transportHeaders",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "transportIdleTimeout",
+            "columnName": "transportIdleTimeout",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "transportPingTimeout",
+            "columnName": "transportPingTimeout",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "grpcPermitWithoutStream",
+            "columnName": "grpcPermitWithoutStream",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "transportServiceName",
+            "columnName": "transportServiceName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "wsMaxEarlyData",
+            "columnName": "wsMaxEarlyData",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "wsEarlyDataHeaderName",
+            "columnName": "wsEarlyDataHeaderName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "alpn",
+            "columnName": "alpn",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsDisableSni",
+            "columnName": "tlsDisableSni",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tlsMinVersion",
+            "columnName": "tlsMinVersion",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsMaxVersion",
+            "columnName": "tlsMaxVersion",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsCipherSuites",
+            "columnName": "tlsCipherSuites",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsCurvePreferences",
+            "columnName": "tlsCurvePreferences",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsCertificatePublicKeySha256",
+            "columnName": "tlsCertificatePublicKeySha256",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsClientCertificate",
+            "columnName": "tlsClientCertificate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsClientCertificatePath",
+            "columnName": "tlsClientCertificatePath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsClientKey",
+            "columnName": "tlsClientKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsClientKeyPath",
+            "columnName": "tlsClientKeyPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsFragment",
+            "columnName": "tlsFragment",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tlsFragmentFallbackDelay",
+            "columnName": "tlsFragmentFallbackDelay",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsRecordFragment",
+            "columnName": "tlsRecordFragment",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tlsKernelTx",
+            "columnName": "tlsKernelTx",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tlsKernelRx",
+            "columnName": "tlsKernelRx",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fingerprint",
+            "columnName": "fingerprint",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "publicKey",
+            "columnName": "publicKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "shortId",
+            "columnName": "shortId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "packetEncoding",
+            "columnName": "packetEncoding",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "subscriptionId",
+            "columnName": "subscriptionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latency",
+            "columnName": "latency",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "username",
+            "columnName": "username",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "socksVersion",
+            "columnName": "socksVersion",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "allowInsecure",
+            "columnName": "allowInsecure",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "plugin",
+            "columnName": "plugin",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pluginOpts",
+            "columnName": "pluginOpts",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "udpOverTcpEnabled",
+            "columnName": "udpOverTcpEnabled",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "udpOverTcpVersion",
+            "columnName": "udpOverTcpVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "obfsType",
+            "columnName": "obfsType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "obfsPassword",
+            "columnName": "obfsPassword",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "serverPorts",
+            "columnName": "serverPorts",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hopInterval",
+            "columnName": "hopInterval",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "upMbps",
+            "columnName": "upMbps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "downMbps",
+            "columnName": "downMbps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "brutalDebug",
+            "columnName": "brutalDebug",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "muxEnabled",
+            "columnName": "muxEnabled",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "muxProtocol",
+            "columnName": "muxProtocol",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "muxMaxConnections",
+            "columnName": "muxMaxConnections",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "muxMinStreams",
+            "columnName": "muxMinStreams",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "muxMaxStreams",
+            "columnName": "muxMaxStreams",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "muxPadding",
+            "columnName": "muxPadding",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "muxBrutalEnabled",
+            "columnName": "muxBrutalEnabled",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "muxBrutalUpMbps",
+            "columnName": "muxBrutalUpMbps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "muxBrutalDownMbps",
+            "columnName": "muxBrutalDownMbps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "congestionControl",
+            "columnName": "congestionControl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "udpRelayMode",
+            "columnName": "udpRelayMode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "udpOverStream",
+            "columnName": "udpOverStream",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "zeroRttHandshake",
+            "columnName": "zeroRttHandshake",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "heartbeat",
+            "columnName": "heartbeat",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "naiveProtocol",
+            "columnName": "naiveProtocol",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "naiveExtraHeaders",
+            "columnName": "naiveExtraHeaders",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "naiveInsecureConcurrency",
+            "columnName": "naiveInsecureConcurrency",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "naiveStreamReceiveWindow",
+            "columnName": "naiveStreamReceiveWindow",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "naiveQuicSessionReceiveWindow",
+            "columnName": "naiveQuicSessionReceiveWindow",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsCertificate",
+            "columnName": "tlsCertificate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tlsCertificatePath",
+            "columnName": "tlsCertificatePath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "echEnabled",
+            "columnName": "echEnabled",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "echConfig",
+            "columnName": "echConfig",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "echConfigPath",
+            "columnName": "echConfigPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "echQueryServerName",
+            "columnName": "echQueryServerName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "disableTcpKeepAlive",
+            "columnName": "disableTcpKeepAlive",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "tcpKeepAlive",
+            "columnName": "tcpKeepAlive",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tcpKeepAliveInterval",
+            "columnName": "tcpKeepAliveInterval",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_proxy_nodes_subscriptionId",
+            "unique": false,
+            "columnNames": [
+              "subscriptionId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_proxy_nodes_subscriptionId` ON `${TABLE_NAME}` (`subscriptionId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "subscriptions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `url` TEXT NOT NULL, `updateTime` INTEGER NOT NULL, `nodeCount` INTEGER NOT NULL, `autoUpdate` INTEGER NOT NULL, `updateInterval` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `trafficBytes` INTEGER NOT NULL, `expireTimestamp` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "url",
+            "columnName": "url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updateTime",
+            "columnName": "updateTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nodeCount",
+            "columnName": "nodeCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "autoUpdate",
+            "columnName": "autoUpdate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updateInterval",
+            "columnName": "updateInterval",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trafficBytes",
+            "columnName": "trafficBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expireTimestamp",
+            "columnName": "expireTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '64f091a475363f08b8ca3cfca1b71085')"
+    ]
+  }
+}
