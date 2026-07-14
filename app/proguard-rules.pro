@@ -24,7 +24,7 @@
 
 # SnakeYAML references java.beans on desktop JDKs, but those code paths are not
 # used by our SafeConstructor-based Android Map parsing flow.
--keep class org.yaml.snakeyaml.** { *; }
+-keep,allowshrinking class org.yaml.snakeyaml.** { *; }
 -dontwarn org.yaml.snakeyaml.**
 -dontwarn java.beans.**
 
