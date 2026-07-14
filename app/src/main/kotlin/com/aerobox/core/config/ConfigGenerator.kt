@@ -85,7 +85,11 @@ object ConfigGenerator {
         config.put("inbounds", buildInbounds(enableSocksInbound, enableHttpInbound, ipv6Mode))
 
         val outboundsArray = JSONArray()
-            .put(OutboundConfigBuilder.buildProxyOutbound(node).put("tag", PROXY_OUTBOUND_TAG))
+            .put(
+                OutboundConfigBuilder
+                    .buildProxyOutbound(node, ipv6Mode, nodeIsIpv6Only)
+                    .put("tag", PROXY_OUTBOUND_TAG)
+            )
         outboundsArray.put(JSONObject().put("type", "direct").put("tag", "direct"))
         config.put("outbounds", outboundsArray)
 
@@ -140,7 +144,11 @@ object ConfigGenerator {
         config.put("inbounds", JSONArray())
 
         val urlTestOutbounds = JSONArray()
-            .put(OutboundConfigBuilder.buildProxyOutbound(node).put("tag", PROXY_OUTBOUND_TAG))
+            .put(
+                OutboundConfigBuilder
+                    .buildProxyOutbound(node, ipv6Mode, nodeIsIpv6Only)
+                    .put("tag", PROXY_OUTBOUND_TAG)
+            )
         urlTestOutbounds.put(JSONObject().put("type", "direct").put("tag", "direct"))
         config.put("outbounds", urlTestOutbounds)
 

@@ -2,6 +2,7 @@ package com.aerobox.core.config
 
 import com.aerobox.R
 import com.aerobox.core.errors.LocalizedException
+import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
 import com.aerobox.data.model.effectiveEnabledNetwork
@@ -18,7 +19,11 @@ import org.json.JSONObject
 internal object OutboundConfigBuilder {
     private val hysteriaPortRangePattern = Regex("""^(\d{1,5})\s*-\s*(\d{1,5})$""")
 
-    fun buildProxyOutbound(node: ProxyNode): JSONObject {
+    fun buildProxyOutbound(
+        node: ProxyNode,
+        ipv6Mode: IPv6Mode,
+        nodeIsIpv6Only: Boolean
+    ): JSONObject {
         validateTlsServerNameRequirements(node)
         val cleanServer = ConfigGenerator.normalizeOutboundServer(node.server)
         if (cleanServer.isBlank()) {
@@ -186,7 +191,14 @@ internal object OutboundConfigBuilder {
                 "domain_resolver",
                 JSONObject()
                     .put("server", ConfigGenerator.DNS_DIRECT_TAG)
-                    .put("strategy", "prefer_ipv4")
+                    .put(
+                        "strategy",
+                        if (nodeIsIpv6Only || ipv6Mode.enablesIpv6Tun()) {
+                            "prefer_ipv6"
+                        } else {
+                            "ipv4_only"
+                        }
+                    )
             )
         }
         return outbound
