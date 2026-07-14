@@ -214,16 +214,12 @@ object SubscriptionParser {
                 return@runCatching ParsedSubscription(emptyList())
             }
 
-            // Check for Clash/ClashMeta YAML format first
-            if (ClashParser.isClashYaml(normalized)) {
-                return@runCatching parseClashSubscription(normalized)
-            }
+            parseClashSubscription(normalized)?.let { return@runCatching it }
 
             val base64Decoded = UriNodeParser.tryBase64Decode(normalized)
 
-            // Also check if Base64-decoded content is Clash YAML
-            if (base64Decoded != normalized && ClashParser.isClashYaml(base64Decoded)) {
-                return@runCatching parseClashSubscription(base64Decoded)
+            if (base64Decoded != normalized) {
+                parseClashSubscription(base64Decoded)?.let { return@runCatching it }
             }
 
             val targetContent = when {
@@ -246,15 +242,12 @@ object SubscriptionParser {
             sanitizeParsedNodes(batch.nodes, batch.diagnostics)
         }.getOrElse { error ->
             Log.e(TAG, "Failed to parse subscription content", error)
-            ParsedSubscription(
-                nodes = emptyList(),
-                diagnostics = ParseDiagnostics().withIgnored("subscription_parse_error")
-            )
+            ParsedSubscription(emptyList())
         }
     }
 
-    private fun parseClashSubscription(content: String): ParsedSubscription {
-        val result = ClashParser.parseClashYamlDetailed(content)
+    private fun parseClashSubscription(content: String): ParsedSubscription? {
+        val result = ClashParser.parseClashYaml(content) ?: return null
         return sanitizeParsedNodes(result.nodes, result.diagnostics)
     }
 

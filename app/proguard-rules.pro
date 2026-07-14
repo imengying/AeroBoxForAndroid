@@ -5,10 +5,8 @@
 # and avoids subtle release-only NPEs the day we add a generics-aware lib.
 -keepattributes Signature, InnerClasses, EnclosingMethod, *Annotation*
 
-# Room-generated code directly accesses these types, and ProxyType names are
-# persisted in SQLite. Keep the persistence contract stable across releases.
--keep class com.aerobox.data.model.** { *; }
--keep class com.aerobox.data.database.** { *; }
+# ProxyType names are persisted in SQLite.
+-keep enum com.aerobox.data.model.ProxyType { *; }
 
 # Keep JNI native methods
 -keepclasseswithmembernames class * {

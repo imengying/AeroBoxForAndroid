@@ -132,7 +132,6 @@
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">订阅内容不是受支持的 sing-box、Clash 或节点链接格式</string>
-    <string name="diag_missing_clash_proxies">Clash 配置里没有 proxies 节点列表</string>
     <string name="diag_unsupported_type_or_scheme">订阅里包含当前暂不支持的节点类型或链接协议</string>
     <string name="diag_unsupported_transport">订阅里包含当前暂不支持的传输配置</string>
     <string name="diag_missing_endpoint">部分节点缺少服务器地址或端口</string>

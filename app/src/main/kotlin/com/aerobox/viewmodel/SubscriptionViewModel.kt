@@ -620,11 +620,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     private fun diagnosticsHint(reason: String): String? {
         val resId = when (reason) {
             "unsupported_subscription_content",
-            "invalid_json_content",
-            "invalid_clash_yaml",
-            "subscription_parse_error" -> R.string.diag_unsupported_subscription_content
-
-            "missing_clash_proxies" -> R.string.diag_missing_clash_proxies
+            "invalid_json_content" -> R.string.diag_unsupported_subscription_content
 
             "unsupported_json_type",
             "unsupported_clash_type",

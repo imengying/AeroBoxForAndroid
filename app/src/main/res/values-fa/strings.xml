@@ -139,7 +139,6 @@
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">محتوای اشتراک یکی از قالب‌های پشتیبانی‌شده sing-box، Clash یا لینک گره نیست</string>
-    <string name="diag_missing_clash_proxies">در پیکربندی Clash فهرست proxies یافت نشد</string>
     <string name="diag_unsupported_type_or_scheme">اشتراک شامل نوع گره یا پروتکل لینک پشتیبانی‌نشده است</string>
     <string name="diag_unsupported_transport">اشتراک شامل پیکربندی انتقال پشتیبانی‌نشده است</string>
     <string name="diag_missing_endpoint">برخی گره‌ها فاقد آدرس یا پورت سرور هستند</string>

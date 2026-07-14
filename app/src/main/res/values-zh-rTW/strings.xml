@@ -132,7 +132,6 @@
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">訂閱內容不是支援的 sing-box、Clash 或節點連結格式</string>
-    <string name="diag_missing_clash_proxies">Clash 設定中沒有 proxies 節點清單</string>
     <string name="diag_unsupported_type_or_scheme">訂閱包含目前不支援的節點類型或連結通訊協定</string>
     <string name="diag_unsupported_transport">訂閱包含目前不支援的傳輸設定</string>
     <string name="diag_missing_endpoint">部分節點缺少伺服器位址或連接埠</string>

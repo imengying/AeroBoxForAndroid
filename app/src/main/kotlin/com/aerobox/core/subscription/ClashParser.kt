@@ -19,16 +19,17 @@ object ClashParser {
         val diagnostics: ParseDiagnostics = ParseDiagnostics()
     )
 
-    fun parseClashYamlDetailed(content: String): ClashParseResult {
-        val root = loadYamlRoot(content) ?: return ClashParseResult(
-            nodes = emptyList(),
-            diagnostics = ParseDiagnostics().withIgnored("invalid_clash_yaml")
-        )
-        val proxies = value(root, "proxies") as? List<*>
-            ?: return ClashParseResult(
-                nodes = emptyList(),
-                diagnostics = ParseDiagnostics().withIgnored("missing_clash_proxies")
-            )
+    fun parseClashYaml(content: String): ClashParseResult? {
+        if (!content.contains("proxies:")) return null
+        val root = loadYamlRoot(content) ?: return null
+        val proxies = value(root, "proxies") as? List<*> ?: return null
+        val hasProxy = proxies.any { item ->
+            val proxy = item as? Map<*, *> ?: return@any false
+            stringValue(proxy, "name") != null &&
+                (stringValue(proxy, "type") != null || stringValue(proxy, "server") != null)
+        }
+        if (!hasProxy) return null
+
         val nodes = mutableListOf<ProxyNode>()
         var diagnostics = ParseDiagnostics()
         proxies.forEach { item ->
@@ -39,17 +40,6 @@ object ClashParser {
         }
         return ClashParseResult(nodes = nodes, diagnostics = diagnostics)
     }
-    fun isClashYaml(content: String): Boolean {
-        if (!content.contains("proxies:")) return false
-        val root = loadYamlRoot(content) ?: return false
-        val proxies = value(root, "proxies") as? List<*> ?: return false
-        return proxies.any { item ->
-            val proxy = item as? Map<*, *> ?: return@any false
-            stringValue(proxy, "name") != null &&
-                (stringValue(proxy, "type") != null || stringValue(proxy, "server") != null)
-        }
-    }
-
 
     private fun loadYamlRoot(content: String): Any? {
         return runCatching {
