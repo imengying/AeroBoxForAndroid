@@ -3,6 +3,7 @@ package com.aerobox.viewmodel
 import android.app.Application
 import android.content.Context
 import android.os.Debug
+import android.os.SystemClock
 import android.content.Intent
 import android.net.VpnService
 import androidx.lifecycle.AndroidViewModel
@@ -30,6 +31,7 @@ import com.aerobox.utils.formatDuration
 import com.aerobox.utils.toTrafficStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,7 +61,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         const val POST_CONNECT_IP_DETECT_DELAY_MS = 500L
         const val NODE_TEST_TIMEOUT_MS = 5000
-        const val NODE_TEST_CONCURRENCY = 10
+        const val NODE_TEST_CONCURRENCY = 3
+        const val CONNECT_TIMEOUT_MS = 12_000L
+        const val AUTO_RECONNECT_TIMEOUT_MS = 5 * 60_000L
     }
 
     private data class UrlTestSettings(
@@ -72,6 +76,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val vpnRepository = AeroBoxApplication.vpnRepository
     private val subscriptionRepository = AeroBoxApplication.subscriptionRepository
     private val ipDetector = PublicIpDetector()
+    private var latencyTestJob: Job? = null
     private val languageTag = PreferenceManager.languageTagFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppLocaleManager.SYSTEM_LANGUAGE_TAG)
 
@@ -305,24 +310,27 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         connectWatchdogJob?.cancel()
         connectWatchdogJob = viewModelScope.launch {
             val autoReconnectEnabled = PreferenceManager.autoReconnectFlow(appContext).first()
-            if (autoReconnectEnabled) {
-                while (isActive) {
-                    if (vpnState.value.isConnected) {
-                        return@launch
-                    }
-                    val rawError = VpnStateManager.lastError.value?.takeIf { it.isNotBlank() }
-                    if (rawError != null) {
-                        handleConnectionFailure(rawError)
-                        return@launch
-                    }
-                    delay(500)
-                }
+            val timeoutMs = if (autoReconnectEnabled) {
+                AUTO_RECONNECT_TIMEOUT_MS
             } else {
-                delay(12_000)
-                if (!vpnState.value.isConnected) {
-                    val rawError = VpnStateManager.lastError.value ?: "service start timeout"
-                    handleConnectionFailure(rawError)
+                CONNECT_TIMEOUT_MS
+            }
+            val deadline = SystemClock.elapsedRealtime() + timeoutMs
+            while (isActive) {
+                if (vpnState.value.isConnected) {
+                    return@launch
                 }
+                val rawError = VpnStateManager.lastError.value?.takeIf { it.isNotBlank() }
+                if (rawError != null) {
+                    handleConnectionFailure(rawError)
+                    return@launch
+                }
+                if (SystemClock.elapsedRealtime() >= deadline) {
+                    val timeoutError = "service start timeout"
+                    handleConnectionFailure(timeoutError)
+                    return@launch
+                }
+                delay(500)
             }
         }
     }
@@ -349,7 +357,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun testSubscriptionNodesLatency(nodes: List<ProxyNode>) {
-        viewModelScope.launch {
+        val previousTest = latencyTestJob
+        latencyTestJob = viewModelScope.launch {
+            previousTest?.cancelAndJoin()
             val subscriptionId = nodes.firstOrNull()?.subscriptionId ?: return@launch
             val testSettings = loadUrlTestSettings()
             val semaphore = Semaphore(NODE_TEST_CONCURRENCY)
@@ -407,7 +417,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun testSingleNodeLatency(node: ProxyNode) {
-        viewModelScope.launch {
+        val previousTest = latencyTestJob
+        latencyTestJob = viewModelScope.launch {
+            previousTest?.cancelAndJoin()
             val testSettings = loadUrlTestSettings()
             _nodeLatencyOverrides.update { it + (node.id to NodeLatencyState.TESTING) }
             try {

@@ -7,7 +7,6 @@ import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
@@ -833,7 +832,7 @@ internal object UriNodeParser {
 
     internal fun decodeName(value: String): String {
         return runCatching {
-            URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+            Uri.decode(value)
         }.getOrDefault(value)
     }
 

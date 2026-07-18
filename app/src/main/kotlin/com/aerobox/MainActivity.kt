@@ -1,73 +1,24 @@
 package com.aerobox
 
-import android.Manifest
 import android.content.Intent
-import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.aerobox.core.connection.ConnectionDiagnostics
-import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.imports.ExternalImportParser
 import com.aerobox.imports.ExternalImportRequest
-import com.aerobox.service.AeroBoxVpnService
-import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.ProvideAppLocale
 import com.aerobox.ui.navigation.AppNavigation
 import com.aerobox.ui.theme.SingBoxVPNTheme
-import com.aerobox.utils.needsNotificationPermission
-import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    private companion object {
-        const val EXTRA_ACTION = "action"
-        const val ACTION_TOGGLE_VPN = "toggle_vpn"
-    }
-
-    private val uiMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
     private val pendingExternalImport = MutableStateFlow<ExternalImportRequest?>(null)
-
-    private val vpnPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            ensureNotificationPermissionThenStartVpn()
-        } else {
-            lifecycleScope.launch {
-                uiMessage.tryEmit(appString(R.string.permission_required))
-            }
-        }
-    }
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (!granted) {
-            lifecycleScope.launch {
-                uiMessage.tryEmit(appString(R.string.notification_permission_hint))
-            }
-        }
-        startVpnFromIntent()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,29 +41,17 @@ class MainActivity : ComponentActivity() {
                 darkTheme = useDarkTheme,
                 dynamicColor = dynamicColor
             ) {
-                val snackbarHostState = remember { SnackbarHostState() }
                 val importRequest by pendingExternalImport.collectAsStateWithLifecycle()
-                LaunchedEffect(Unit) {
-                    uiMessage.collectLatest { message ->
-                        snackbarHostState.showSnackbar(message)
-                    }
-                }
                 ProvideAppLocale {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        AppNavigation(
-                            pendingExternalImport = importRequest,
-                            onExternalImportHandled = { requestId ->
-                                val current = pendingExternalImport.value
-                                if (current?.id == requestId) {
-                                    pendingExternalImport.value = null
-                                }
+                    AppNavigation(
+                        pendingExternalImport = importRequest,
+                        onExternalImportHandled = { requestId ->
+                            val current = pendingExternalImport.value
+                            if (current?.id == requestId) {
+                                pendingExternalImport.value = null
                             }
-                        )
-                        AppSnackbarHost(
-                            hostState = snackbarHostState,
-                            modifier = Modifier.align(Alignment.BottomCenter)
-                        )
-                    }
+                        }
+                    )
                 }
             }
         }
@@ -129,65 +68,6 @@ class MainActivity : ComponentActivity() {
     private fun consumeActionIntent(intent: Intent?) {
         ExternalImportParser.fromIntent(intent)?.let { request ->
             pendingExternalImport.value = request
-            return
         }
-
-        val action = intent?.getStringExtra(EXTRA_ACTION) ?: return
-        if (action == ACTION_TOGGLE_VPN) {
-            intent.removeExtra(EXTRA_ACTION)
-            toggleVpnFromIntent()
-        }
-    }
-
-    private fun toggleVpnFromIntent() {
-        if (AeroBoxVpnService.isServiceActive.value) {
-            startService(
-                Intent(this, AeroBoxVpnService::class.java).apply {
-                    this.action = AeroBoxVpnService.ACTION_STOP
-                }
-            )
-            return
-        }
-
-        val permissionIntent = VpnService.prepare(this)
-        if (permissionIntent != null) {
-            vpnPermissionLauncher.launch(permissionIntent)
-        } else {
-            ensureNotificationPermissionThenStartVpn()
-        }
-    }
-
-    private fun ensureNotificationPermissionThenStartVpn() {
-        if (needsNotificationPermission()) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            startVpnFromIntent()
-        }
-    }
-
-    private fun startVpnFromIntent() {
-        lifecycleScope.launch {
-            when (val result = AeroBoxApplication.vpnRepository.connectSelectedNode()) {
-                VpnConnectionResult.NoNodeAvailable -> {
-                    uiMessage.tryEmit(appString(R.string.add_node_first))
-                }
-
-                is VpnConnectionResult.Success -> Unit
-                is VpnConnectionResult.InvalidConfig,
-                is VpnConnectionResult.Failure -> {
-                    uiMessage.tryEmit(
-                        ConnectionDiagnostics.userFacingFailureMessage(
-                            result = result,
-                            operationFailedText = appString(R.string.operation_failed)
-                        )
-                    )
-                }
-            }
-        }
-    }
-
-    private suspend fun appString(resId: Int, vararg formatArgs: Any): String {
-        val languageTag = PreferenceManager.languageTagFlow(applicationContext).first()
-        return AppLocaleManager.string(this, languageTag, resId, *formatArgs)
     }
 }

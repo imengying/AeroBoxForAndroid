@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -77,8 +78,39 @@ class VpnRepository(private val context: Context) {
     }
 
     suspend fun reloadActiveConnection(node: ProxyNode): VpnConnectionResult {
-        return launchNodeAction(node) { config, resolvedNode ->
+        val revisionBeforeReload = VpnStateManager.serviceOperationResult.value.revision
+        val launchResult = launchNodeAction(node) { config, resolvedNode ->
             startServiceWithAction(AeroBoxVpnService.ACTION_RELOAD, config, resolvedNode.id)
+        }
+        val launchedNode = (launchResult as? VpnConnectionResult.Success)?.node
+            ?: return launchResult
+
+        val operationResult = withTimeoutOrNull(30_000L) {
+            VpnStateManager.serviceOperationResult
+                .filter { it.revision > revisionBeforeReload }
+                .first()
+        }
+        if (operationResult == null) {
+            return VpnConnectionResult.Failure(
+                IllegalStateException("Timed out waiting for VPN reload")
+            )
+        }
+        if (!operationResult.success) {
+            return VpnConnectionResult.Failure(
+                IllegalStateException(operationResult.error ?: "VPN reload failed")
+            )
+        }
+
+        val state = VpnStateManager.vpnState.value
+        val connectedNode = state.currentNode
+        return if (state.isConnected && connectedNode?.id == launchedNode.id) {
+            VpnConnectionResult.Success(connectedNode)
+        } else {
+            VpnConnectionResult.Failure(
+                IllegalStateException(
+                    VpnStateManager.lastError.value ?: "VPN reload failed"
+                )
+            )
         }
     }
 
@@ -229,7 +261,8 @@ class VpnRepository(private val context: Context) {
                 configContent = config,
                 outboundTag = "proxy",
                 testUrl = testUrl,
-                timeoutMs = timeoutMs
+                timeoutMs = timeoutMs,
+                platformInterface = AeroBoxVpnService.activePlatformInterface()
             )
             result
         }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.aerobox.core.logging.RuntimeLogBuffer
 import io.nekohasekai.libbox.Libbox
+import io.nekohasekai.libbox.PlatformInterface
 import io.nekohasekai.libbox.SetupOptions
 
 /**
@@ -33,6 +34,8 @@ object SingBoxNative {
                 basePath = context.filesDir.absolutePath
                 workingPath = context.getDir("singbox", Context.MODE_PRIVATE).absolutePath
                 tempPath = context.cacheDir.absolutePath
+                debug = true
+                logMaxLines = 300
             }
             Libbox.setup(options)
             initialized = true
@@ -77,7 +80,8 @@ object SingBoxNative {
         configContent: String,
         outboundTag: String = "proxy",
         testUrl: String = "http://cp.cloudflare.com/",
-        timeoutMs: Int = 3000
+        timeoutMs: Int = 3000,
+        platformInterface: PlatformInterface? = null
     ): Int {
         if (!initialized) {
             Log.e(TAG, "libbox not initialized — cannot run URL test")
@@ -85,7 +89,17 @@ object SingBoxNative {
             return -1
         }
         return try {
-            Libbox.urlTestOutbound(configContent, outboundTag, testUrl, timeoutMs)
+            if (platformInterface != null) {
+                Libbox.urlTestOutboundWithPlatform(
+                    configContent,
+                    outboundTag,
+                    testUrl,
+                    timeoutMs,
+                    platformInterface
+                )
+            } else {
+                Libbox.urlTestOutbound(configContent, outboundTag, testUrl, timeoutMs)
+            }
         } catch (e: Exception) {
             val msg = e.message ?: "unknown error"
             Log.w(TAG, "urlTestOutbound failed: $msg")
@@ -121,5 +135,10 @@ object SingBoxNative {
             }
             null
         }
+    }
+
+    fun closeV2RayOutboundStats() {
+        if (!initialized) return
+        runCatching { Libbox.closeV2RayOutboundStats() }
     }
 }

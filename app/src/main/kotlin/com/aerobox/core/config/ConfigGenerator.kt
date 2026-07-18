@@ -238,7 +238,7 @@ object ConfigGenerator {
                 put("fdfe:dcba:9876::1/126")
             }
         }
-        val inboundListen = if (ipv6Mode == IPv6Mode.DISABLE) "0.0.0.0" else "::"
+        val inboundListen = "127.0.0.1"
 
         val tunInbound = JSONObject()
             .put("type", "tun")

@@ -10,12 +10,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 object VpnStateManager {
+    data class ServiceOperationResult(
+        val revision: Long = 0L,
+        val success: Boolean = false,
+        val error: String? = null
+    )
+
     private val _vpnState = MutableStateFlow(VpnState())
     val vpnState: StateFlow<VpnState> = _vpnState.asStateFlow()
     private val _serviceActive = MutableStateFlow(false)
     val serviceActive: StateFlow<Boolean> = _serviceActive.asStateFlow()
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
+    private val _serviceOperationResult = MutableStateFlow(ServiceOperationResult())
+    val serviceOperationResult: StateFlow<ServiceOperationResult> =
+        _serviceOperationResult.asStateFlow()
 
     fun updateServiceActive(active: Boolean) {
         _serviceActive.value = active
@@ -50,6 +59,16 @@ object VpnStateManager {
 
     fun clearLastError() {
         _lastError.value = null
+    }
+
+    fun reportServiceOperation(success: Boolean, error: String? = null) {
+        _serviceOperationResult.update { current ->
+            ServiceOperationResult(
+                revision = current.revision + 1L,
+                success = success,
+                error = error?.takeIf { it.isNotBlank() }
+            )
+        }
     }
 
     fun updateTrafficStats(

@@ -32,6 +32,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -109,7 +110,28 @@ fun PerAppProxyScreen(
     val showSystem by viewModel.perAppShowSystem.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
     var pendingShowSystem by remember { mutableStateOf<Boolean?>(null) }
+    var pendingSelectedPackages by remember { mutableStateOf<Set<String>?>(null) }
+    var selectionDirty by remember { mutableStateOf(false) }
+    var savingSelection by remember { mutableStateOf(false) }
     val effectiveShowSystem = pendingShowSystem ?: showSystem
+    val effectiveSelectedPackages = pendingSelectedPackages ?: selectedPackages
+
+    LaunchedEffect(selectedPackages) {
+        if (!selectionDirty) {
+            pendingSelectedPackages = selectedPackages
+        }
+    }
+
+    val saveAndNavigateBack = {
+        if (!savingSelection) {
+            savingSelection = true
+            scope.launch {
+                viewModel.setPerAppProxyPackages(effectiveSelectedPackages)
+                onNavigateBack()
+            }
+        }
+    }
+    BackHandler(onBack = saveAndNavigateBack)
 
     // Snapshot selected packages at screen open for stable sort order.
     // Selecting/deselecting an app won't cause it to jump in the list.
@@ -119,7 +141,7 @@ fun PerAppProxyScreen(
     var initialSelectedPackages by remember { mutableStateOf<Set<String>?>(null) }
     LaunchedEffect(isLoadingApps, selectedPackages) {
         if (initialSelectedPackages == null && !isLoadingApps && apps.isNotEmpty()) {
-            initialSelectedPackages = selectedPackages
+            initialSelectedPackages = effectiveSelectedPackages
         }
     }
     LaunchedEffect(showSystem) {
@@ -127,18 +149,24 @@ fun PerAppProxyScreen(
             pendingShowSystem = null
         }
     }
-    val stableSelectedPackages = initialSelectedPackages ?: selectedPackages
+    val stableSelectedPackages = initialSelectedPackages ?: effectiveSelectedPackages
 
-    LaunchedEffect(selectedPackages) {
+    LaunchedEffect(effectiveSelectedPackages) {
         viewModel.loadInstalledApps()
     }
 
-    val filteredApps = remember(apps, effectiveShowSystem, searchQuery, selectedPackages, stableSelectedPackages) {
+    val filteredApps = remember(
+        apps,
+        effectiveShowSystem,
+        searchQuery,
+        effectiveSelectedPackages,
+        stableSelectedPackages
+    ) {
         apps
             .asSequence()
             .filter { app ->
                 // Always show selected apps (even system apps) so they don't disappear
-                if (selectedPackages.contains(app.packageName)) return@filter true
+                if (effectiveSelectedPackages.contains(app.packageName)) return@filter true
                 if (!effectiveShowSystem && app.isSystem) return@filter false
                 true
             }
@@ -164,7 +192,7 @@ fun PerAppProxyScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.per_app_proxy_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = saveAndNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
@@ -259,21 +287,21 @@ fun PerAppProxyScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(filteredApps, key = { it.packageName }) { app ->
-                        val isChecked = selectedPackages.contains(app.packageName)
+                        val isChecked = effectiveSelectedPackages.contains(app.packageName)
                         val highlightStyle = SpanStyle(
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
                         )
                         val toggleSelection = {
+                            selectionDirty = true
                             if (initialSelectedPackages == null) {
-                                initialSelectedPackages = selectedPackages
+                                initialSelectedPackages = effectiveSelectedPackages
                             }
-                            val updated = if (!isChecked) {
-                                selectedPackages + app.packageName
+                            pendingSelectedPackages = if (!isChecked) {
+                                effectiveSelectedPackages + app.packageName
                             } else {
-                                selectedPackages - app.packageName
+                                effectiveSelectedPackages - app.packageName
                             }
-                            scope.launch { viewModel.setPerAppProxyPackages(updated) }
                         }
                         val appIcon = remember(app.packageName) {
                             runCatching { packageManager.getApplicationIcon(app.packageName) }.getOrNull()

@@ -65,6 +65,13 @@
             android:theme="@style/Theme.AeroBox.Translucent" />
 
         <activity
+            android:name=".VpnPermissionActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/Theme.AeroBox.Translucent" />
+
+        <activity
             android:name=".ui.scanner.AeroBoxQrCaptureActivity"
             android:exported="false"
             android:theme="@style/Theme.AeroBox.Scanner" />

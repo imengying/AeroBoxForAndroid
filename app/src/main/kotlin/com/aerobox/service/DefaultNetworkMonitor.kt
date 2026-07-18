@@ -89,10 +89,11 @@ object DefaultNetworkMonitor {
     }
 
     fun stop() {
-        if (!registered) return
         cancelPendingLossLog()
-        runCatching {
-            AeroBoxApplication.connectivity.unregisterNetworkCallback(networkCallback)
+        if (registered) {
+            runCatching {
+                AeroBoxApplication.connectivity.unregisterNetworkCallback(networkCallback)
+            }
         }
         registered = false
         defaultNetwork = null

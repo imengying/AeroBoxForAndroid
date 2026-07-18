@@ -111,9 +111,8 @@ class AeroBoxTileService : TileService() {
         val permissionIntent = VpnService.prepare(this)
         if (permissionIntent != null) {
             pendingAction = null
-            val launchIntent = Intent(this, com.aerobox.MainActivity::class.java).apply {
+            val launchIntent = Intent(this, com.aerobox.VpnPermissionActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                putExtra("action", "toggle_vpn")
             }
             startPermissionActivity(launchIntent)
             return

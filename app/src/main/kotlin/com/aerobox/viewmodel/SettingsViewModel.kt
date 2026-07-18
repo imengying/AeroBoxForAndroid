@@ -7,12 +7,14 @@ import com.aerobox.AeroBoxApplication
 import com.aerobox.BuildConfig
 import com.aerobox.R
 import com.aerobox.core.config.ConfigGenerator
+import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.data.model.CustomRuleSet
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.InstalledAppInfo
 import com.aerobox.data.model.RuleSetAction
 import com.aerobox.data.model.RuleSetFormat
 import com.aerobox.data.model.RoutingMode
+import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.isValidCustomRuleSetUrl
 import com.aerobox.data.repository.AppUpdateInfo
 import com.aerobox.data.repository.AppUpdateRepository
@@ -30,8 +32,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
@@ -40,6 +45,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val appUpdateRepository = AppUpdateRepository()
     private val vpnRepository = AeroBoxApplication.vpnRepository
     private val configResolver = VpnConfigResolver(appContext)
+    private val runtimeSettingsMutex = Mutex()
 
     private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
     val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps.asStateFlow()
@@ -136,44 +142,39 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     suspend fun setDnsServers(remoteDns: String, directDns: String) {
-        val normalizedRemoteDns = remoteDns.trim()
-        val normalizedDirectDns = directDns.trim()
-        validateAndPersistDnsSettings(
-            remoteDns = normalizedRemoteDns,
-            directDns = normalizedDirectDns
-        ) ?: return
-        refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appString(R.string.dns_setting_failed)
-        )
+        applyDnsSettings(remoteDns.trim(), directDns.trim())
     }
 
     suspend fun resetDnsServers() {
-        validateAndPersistDnsSettings(
+        applyDnsSettings(
             remoteDns = PreferenceManager.DEFAULT_REMOTE_DNS,
             directDns = PreferenceManager.DEFAULT_DIRECT_DNS
-        ) ?: return
-        refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appString(R.string.dns_setting_failed)
         )
     }
 
     suspend fun setPerAppProxyEnabled(enabled: Boolean) {
-        PreferenceManager.setPerAppProxyEnabled(appContext, enabled)
-        refreshActiveConnectionForRuntimeChange(
+        applyRuntimeSetting(
+            newValue = enabled,
+            readCurrent = { PreferenceManager.perAppProxyEnabledFlow(appContext).first() },
+            persist = { PreferenceManager.setPerAppProxyEnabled(appContext, it) },
             failurePrefix = appString(R.string.perapp_setting_failed)
         )
     }
 
     suspend fun setPerAppProxyMode(mode: String) {
-        PreferenceManager.setPerAppProxyMode(appContext, mode)
-        refreshActiveConnectionForRuntimeChange(
+        applyRuntimeSetting(
+            newValue = mode,
+            readCurrent = { PreferenceManager.perAppProxyModeFlow(appContext).first() },
+            persist = { PreferenceManager.setPerAppProxyMode(appContext, it) },
             failurePrefix = appString(R.string.perapp_setting_failed)
         )
     }
 
     suspend fun setPerAppProxyPackages(packages: Set<String>) {
-        PreferenceManager.setPerAppProxyPackages(appContext, packages)
-        refreshActiveConnectionForRuntimeChange(
+        applyRuntimeSetting(
+            newValue = packages,
+            readCurrent = { PreferenceManager.perAppProxyPackagesFlow(appContext).first() },
+            persist = { PreferenceManager.setPerAppProxyPackages(appContext, it) },
             failurePrefix = appString(R.string.perapp_setting_failed)
         )
     }
@@ -183,18 +184,28 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     suspend fun setEnableSocksInbound(enabled: Boolean) {
-        PreferenceManager.setEnableSocksInbound(appContext, enabled)
-        refreshActiveConnectionForInboundChange()
+        applyRuntimeSetting(
+            newValue = enabled,
+            readCurrent = { PreferenceManager.enableSocksInboundFlow(appContext).first() },
+            persist = { PreferenceManager.setEnableSocksInbound(appContext, it) },
+            failurePrefix = appString(R.string.inbound_setting_failed)
+        )
     }
 
     suspend fun setEnableHttpInbound(enabled: Boolean) {
-        PreferenceManager.setEnableHttpInbound(appContext, enabled)
-        refreshActiveConnectionForInboundChange()
+        applyRuntimeSetting(
+            newValue = enabled,
+            readCurrent = { PreferenceManager.enableHttpInboundFlow(appContext).first() },
+            persist = { PreferenceManager.setEnableHttpInbound(appContext, it) },
+            failurePrefix = appString(R.string.inbound_setting_failed)
+        )
     }
 
     suspend fun setIPv6Mode(mode: IPv6Mode) {
-        PreferenceManager.setIPv6Mode(appContext, mode)
-        refreshActiveConnectionForRuntimeChange(
+        applyRuntimeSetting(
+            newValue = mode,
+            readCurrent = { PreferenceManager.ipv6ModeFlow(appContext).first() },
+            persist = { PreferenceManager.setIPv6Mode(appContext, it) },
             failurePrefix = appString(R.string.ipv6_setting_failed)
         )
     }
@@ -204,36 +215,46 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     suspend fun setEnableGeoRules(enabled: Boolean) {
-        PreferenceManager.setEnableGeoRules(appContext, enabled)
-        refreshActiveConnectionForRuntimeChange(
+        applyRuntimeSetting(
+            newValue = enabled,
+            readCurrent = { PreferenceManager.enableGeoRulesFlow(appContext).first() },
+            persist = { PreferenceManager.setEnableGeoRules(appContext, it) },
             failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
 
     suspend fun setEnableGeoCnDomainRule(enabled: Boolean) {
-        PreferenceManager.setEnableGeoCnDomainRule(appContext, enabled)
-        refreshActiveConnectionForRuntimeChange(
+        applyRuntimeSetting(
+            newValue = enabled,
+            readCurrent = { PreferenceManager.enableGeoCnDomainRuleFlow(appContext).first() },
+            persist = { PreferenceManager.setEnableGeoCnDomainRule(appContext, it) },
             failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
 
     suspend fun setEnableGeoCnIpRule(enabled: Boolean) {
-        PreferenceManager.setEnableGeoCnIpRule(appContext, enabled)
-        refreshActiveConnectionForRuntimeChange(
+        applyRuntimeSetting(
+            newValue = enabled,
+            readCurrent = { PreferenceManager.enableGeoCnIpRuleFlow(appContext).first() },
+            persist = { PreferenceManager.setEnableGeoCnIpRule(appContext, it) },
             failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
 
     suspend fun setEnableGeoAdsBlock(enabled: Boolean) {
-        PreferenceManager.setEnableGeoAdsBlock(appContext, enabled)
-        refreshActiveConnectionForRuntimeChange(
+        applyRuntimeSetting(
+            newValue = enabled,
+            readCurrent = { PreferenceManager.enableGeoAdsBlockFlow(appContext).first() },
+            persist = { PreferenceManager.setEnableGeoAdsBlock(appContext, it) },
             failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
 
     suspend fun setEnableGeoBlockQuic(enabled: Boolean) {
-        PreferenceManager.setEnableGeoBlockQuic(appContext, enabled)
-        refreshActiveConnectionForRuntimeChange(
+        applyRuntimeSetting(
+            newValue = enabled,
+            readCurrent = { PreferenceManager.enableGeoBlockQuicFlow(appContext).first() },
+            persist = { PreferenceManager.setEnableGeoBlockQuic(appContext, it) },
             failurePrefix = appString(R.string.geo_setting_failed)
         )
     }
@@ -254,46 +275,62 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             return false
         }
 
-        val current = customRuleSets.value
-        val id = existingId?.takeIf { it > 0L } ?: generateRuleSetId(current)
-        val updatedRuleSet = CustomRuleSet(
-            id = id,
-            name = normalizedName,
-            url = normalizedUrl,
-            format = format,
-            action = action,
-            enabled = enabled
-        )
-        val updated = if (existingId != null && current.any { it.id == existingId }) {
-            current.map { if (it.id == existingId) updatedRuleSet else it }
-        } else {
-            current + updatedRuleSet
+        return runtimeSettingsMutex.withLock {
+            val activeNode = VpnStateManager.vpnState.value.currentNode
+            val current = PreferenceManager.customRuleSetsFlow(appContext).first()
+            val id = existingId?.takeIf { it > 0L } ?: generateRuleSetId(current)
+            val updatedRuleSet = CustomRuleSet(
+                id = id,
+                name = normalizedName,
+                url = normalizedUrl,
+                format = format,
+                action = action,
+                enabled = enabled
+            )
+            val updated = if (existingId != null && current.any { it.id == existingId }) {
+                current.map { if (it.id == existingId) updatedRuleSet else it }
+            } else {
+                current + updatedRuleSet
+            }
+            PreferenceManager.setCustomRuleSets(appContext, updated)
+            val applied = refreshActiveConnectionForRuntimeChange(
+                failurePrefix = appString(R.string.geo_setting_failed)
+            )
+            if (!applied) {
+                rollbackRuntimeChange(activeNode) {
+                    PreferenceManager.setCustomRuleSets(appContext, current)
+                }
+            }
+            applied
         }
-        PreferenceManager.setCustomRuleSets(appContext, updated)
-        refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appString(R.string.geo_setting_failed)
-        )
-        return true
     }
 
     suspend fun deleteCustomRuleSet(ruleSet: CustomRuleSet) {
-        PreferenceManager.setCustomRuleSets(
-            appContext,
-            customRuleSets.value.filterNot { it.id == ruleSet.id }
-        )
-        refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appString(R.string.geo_setting_failed)
-        )
+        runtimeSettingsMutex.withLock {
+            val activeNode = VpnStateManager.vpnState.value.currentNode
+            val current = PreferenceManager.customRuleSetsFlow(appContext).first()
+            val updated = current.filterNot { it.id == ruleSet.id }
+            PreferenceManager.setCustomRuleSets(appContext, updated)
+            if (!refreshActiveConnectionForRuntimeChange(appString(R.string.geo_setting_failed))) {
+                rollbackRuntimeChange(activeNode) {
+                    PreferenceManager.setCustomRuleSets(appContext, current)
+                }
+            }
+        }
     }
 
     suspend fun setCustomRuleSetEnabled(ruleSet: CustomRuleSet, enabled: Boolean) {
-        PreferenceManager.setCustomRuleSets(
-            appContext,
-            customRuleSets.value.map { if (it.id == ruleSet.id) it.copy(enabled = enabled) else it }
-        )
-        refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appString(R.string.geo_setting_failed)
-        )
+        runtimeSettingsMutex.withLock {
+            val activeNode = VpnStateManager.vpnState.value.currentNode
+            val current = PreferenceManager.customRuleSetsFlow(appContext).first()
+            val updated = current.map { if (it.id == ruleSet.id) it.copy(enabled = enabled) else it }
+            PreferenceManager.setCustomRuleSets(appContext, updated)
+            if (!refreshActiveConnectionForRuntimeChange(appString(R.string.geo_setting_failed))) {
+                rollbackRuntimeChange(activeNode) {
+                    PreferenceManager.setCustomRuleSets(appContext, current)
+                }
+            }
+        }
     }
 
     fun loadInstalledApps(forceRefresh: Boolean = false) {
@@ -344,12 +381,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _availableAppUpdate.value = null
     }
 
-    private suspend fun refreshActiveConnectionForInboundChange() {
-        refreshActiveConnectionForRuntimeChange(
-            failurePrefix = appString(R.string.inbound_setting_failed)
-        )
-    }
-
     private fun validateCustomRuleSetInput(name: String, url: String): String? {
         if (name.isBlank()) return appString(R.string.routing_custom_rule_name_empty)
         if (!isValidCustomRuleSetUrl(url)) {
@@ -367,7 +398,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         return candidate
     }
 
-    private suspend fun validateAndPersistDnsSettings(
+    private suspend fun validateDnsSettings(
         remoteDns: String,
         directDns: String
     ): PreferenceManager.VpnConfigPreferences? {
@@ -409,27 +440,89 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        PreferenceManager.setRemoteDns(appContext, remoteDns)
-        PreferenceManager.setDirectDns(appContext, directDns)
         return candidatePrefs
+    }
+
+    private suspend fun applyDnsSettings(remoteDns: String, directDns: String) {
+        runtimeSettingsMutex.withLock {
+            val activeNode = VpnStateManager.vpnState.value.currentNode
+            val currentPrefs = PreferenceManager.readVpnConfigPreferences(appContext)
+            validateDnsSettings(remoteDns, directDns) ?: return@withLock
+            if (currentPrefs.remoteDns == remoteDns && currentPrefs.directDns == directDns) {
+                return@withLock
+            }
+            PreferenceManager.setRemoteDns(appContext, remoteDns)
+            PreferenceManager.setDirectDns(appContext, directDns)
+            if (!refreshActiveConnectionForRuntimeChange(appString(R.string.dns_setting_failed))) {
+                rollbackRuntimeChange(activeNode) {
+                    PreferenceManager.setRemoteDns(appContext, currentPrefs.remoteDns)
+                    PreferenceManager.setDirectDns(appContext, currentPrefs.directDns)
+                }
+            }
+        }
+    }
+
+    private suspend fun <T> applyRuntimeSetting(
+        newValue: T,
+        readCurrent: suspend () -> T,
+        persist: suspend (T) -> Unit,
+        failurePrefix: String
+    ): Boolean {
+        return runtimeSettingsMutex.withLock {
+            val activeNode = VpnStateManager.vpnState.value.currentNode
+            val previousValue = readCurrent()
+            if (previousValue == newValue) return@withLock true
+            persist(newValue)
+            val applied = refreshActiveConnectionForRuntimeChange(failurePrefix)
+            if (!applied) {
+                rollbackRuntimeChange(activeNode) {
+                    persist(previousValue)
+                }
+            }
+            applied
+        }
+    }
+
+    private suspend fun rollbackRuntimeChange(
+        activeNode: ProxyNode?,
+        rollback: suspend () -> Unit
+    ) {
+        rollback()
+        if (activeNode == null || VpnStateManager.vpnState.value.isConnected) return
+
+        val restoreResult = vpnRepository.reloadActiveConnection(activeNode)
+        if (restoreResult !is VpnConnectionResult.Success) {
+            val details = when (restoreResult) {
+                is VpnConnectionResult.InvalidConfig -> restoreResult.error
+                is VpnConnectionResult.Failure -> restoreResult.throwable.message
+                VpnConnectionResult.NoNodeAvailable -> "current node unavailable"
+                is VpnConnectionResult.Success -> null
+            }
+            RuntimeLogBuffer.append(
+                "error",
+                "Failed to restore VPN after rolling back settings: ${details ?: "unknown error"}"
+            )
+        }
     }
 
     private suspend fun refreshActiveConnectionForRuntimeChange(
         failurePrefix: String
-    ) {
+    ): Boolean {
         val state = VpnStateManager.vpnState.value
-        val currentNode = state.currentNode ?: return
-        if (!state.isConnected) return
+        val currentNode = state.currentNode ?: return true
+        if (!state.isConnected) return true
 
-        when (val result = vpnRepository.reloadActiveConnection(currentNode)) {
+        return when (val result = vpnRepository.reloadActiveConnection(currentNode)) {
             is VpnConnectionResult.Success -> {
                 _uiMessage.tryEmit(appString(R.string.applying))
+                true
             }
 
             is VpnConnectionResult.InvalidConfig -> {
                 _uiMessage.tryEmit(
                     appString(R.string.setting_failed_with_error_format, failurePrefix, result.error)
                 )
+                false
             }
 
             is VpnConnectionResult.Failure -> {
@@ -439,6 +532,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         appString(R.string.setting_failed_with_error_format, failurePrefix, it)
                     } ?: failurePrefix
                 )
+                false
             }
 
             VpnConnectionResult.NoNodeAvailable -> {
@@ -449,6 +543,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                         appString(R.string.current_node_unavailable)
                     )
                 )
+                false
             }
         }
     }

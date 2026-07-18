@@ -22,7 +22,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import okhttp3.Call
 import okhttp3.Callback
@@ -81,10 +83,14 @@ class SubscriptionRepository(context: Context) {
     private val database = AeroBoxApplication.database
     private val subscriptionDao = database.subscriptionDao()
     private val proxyNodeDao = database.proxyNodeDao()
+    private val subscriptionMutationLocks = Array(SUBSCRIPTION_LOCK_COUNT) { Mutex() }
+    private val subscriptionRefreshLocks = Array(SUBSCRIPTION_LOCK_COUNT) { Mutex() }
 
     companion object {
         private const val NODE_MATCH_THRESHOLD = 50
         private const val MAX_CONCURRENT_SUBSCRIPTION_REFRESHES = 4
+        private const val MAX_REFRESH_SNAPSHOT_RETRIES = 3
+        private const val SUBSCRIPTION_LOCK_COUNT = 32
         private const val SUBSCRIPTION_USER_AGENT = "clash-verge/v1.3.8"
         // Hard cap on subscription response body size. Aligned with Clash YAML
         // codePointLimit so a malicious server cannot OOM the app by streaming
@@ -110,6 +116,19 @@ class SubscriptionRepository(context: Context) {
             Regex("""filename\s*=\s*"?([^";]+)"?""", RegexOption.IGNORE_CASE)
 
         internal val sharedClient get() = SharedHttpClient.base
+    }
+
+    private sealed interface RefreshCommitOutcome {
+        data class Retry(val subscription: Subscription) : RefreshCommitOutcome
+
+        data class Success(
+            val subscription: Subscription,
+            val existingNodes: List<ProxyNode>,
+            val persistedNodes: List<ProxyNode>,
+            val summary: SubscriptionUpdateSummary
+        ) : RefreshCommitOutcome
+
+        data object Deleted : RefreshCommitOutcome
     }
 
     private data class SubscriptionFetchResult(
@@ -271,22 +290,27 @@ class SubscriptionRepository(context: Context) {
         val selectedNode = selectedNodeId
             .takeIf { it > 0L }
             ?.let { proxyNodeDao.getNodeById(it) }
-        val shouldMoveSelection = !subscription.isLocalGroup() && selectedNode?.subscriptionId == subscription.id
         var replacementSelectedNodeId: Long? = null
+        var shouldMoveSelection = false
 
-        database.withTransaction {
-            if (subscription.isLocalGroup()) {
-                // Preserve user-imported nodes by moving them back to the default bucket.
-                proxyNodeDao.reassignBySubscription(
-                    fromSubscriptionId = subscription.id,
-                    targetSubscriptionId = 0L
-                )
-            } else {
-                proxyNodeDao.deleteBySubscription(subscription.id)
-            }
-            subscriptionDao.deleteById(subscription.id)
-            if (shouldMoveSelection) {
-                replacementSelectedNodeId = proxyNodeDao.getFirstNode()?.id ?: 0L
+        subscriptionMutationLock(subscription.id).withLock {
+            database.withTransaction {
+                val current = subscriptionDao.getById(subscription.id) ?: return@withTransaction
+                shouldMoveSelection = !current.isLocalGroup() &&
+                    selectedNode?.subscriptionId == current.id
+                if (current.isLocalGroup()) {
+                    // Preserve user-imported nodes by moving them back to the default bucket.
+                    proxyNodeDao.reassignBySubscription(
+                        fromSubscriptionId = current.id,
+                        targetSubscriptionId = 0L
+                    )
+                } else {
+                    proxyNodeDao.deleteBySubscription(current.id)
+                }
+                subscriptionDao.deleteById(current.id)
+                if (shouldMoveSelection) {
+                    replacementSelectedNodeId = proxyNodeDao.getFirstNode()?.id ?: 0L
+                }
             }
         }
         if (shouldMoveSelection) {
@@ -300,9 +324,7 @@ class SubscriptionRepository(context: Context) {
         val baseTimestamp = System.currentTimeMillis()
         database.withTransaction {
             orderedSubscriptions.forEachIndexed { index, subscription ->
-                subscriptionDao.update(
-                    subscription.copy(createdAt = baseTimestamp - index)
-                )
+                subscriptionDao.updateCreatedAt(subscription.id, baseTimestamp - index)
             }
         }
     }
@@ -323,32 +345,36 @@ class SubscriptionRepository(context: Context) {
         autoUpdate: Boolean,
         updateInterval: Long
     ) {
-        val wasLocal = subscription.isLocalGroup()
-        val trimmedUrl = url.trim()
-        // Local groups have no remote URL — preserve the empty marker so they
-        // never accidentally become refreshable subscriptions. For real
-        // subscriptions we require a valid HTTPS URL; if the caller passed an
-        // invalid one we keep the existing url to avoid breaking refresh.
-        val resolvedUrl = when {
-            wasLocal -> subscription.url
-            isValidRemoteSubscriptionUrl(trimmedUrl) -> trimmedUrl
-            else -> subscription.url
-        }
-        subscriptionDao.update(
-            subscription.copy(
+        subscriptionMutationLock(subscription.id).withLock {
+            val current = subscriptionDao.getById(subscription.id) ?: return@withLock
+            val wasLocal = current.isLocalGroup()
+            val trimmedUrl = url.trim()
+            // Local groups keep the empty URL marker. Invalid remote URLs leave
+            // the currently persisted URL untouched.
+            val resolvedUrl = when {
+                wasLocal -> current.url
+                isValidRemoteSubscriptionUrl(trimmedUrl) -> trimmedUrl
+                else -> current.url
+            }
+            subscriptionDao.updateDetails(
+                id = current.id,
                 name = name,
                 url = resolvedUrl,
                 autoUpdate = if (wasLocal) false else autoUpdate,
                 updateInterval = normalizeUpdateInterval(updateInterval)
             )
-        )
+        }
         SubscriptionUpdateScheduler.reconfigure(appContext)
     }
 
     suspend fun renameLocalGroup(subscription: Subscription, name: String) {
         val trimmed = name.trim()
-        if (!subscription.isLocalGroup() || trimmed.isBlank()) return
-        subscriptionDao.update(subscription.copy(name = trimmed))
+        if (trimmed.isBlank()) return
+        subscriptionMutationLock(subscription.id).withLock {
+            val current = subscriptionDao.getById(subscription.id) ?: return@withLock
+            if (!current.isLocalGroup()) return@withLock
+            subscriptionDao.updateName(current.id, trimmed)
+        }
     }
 
     suspend fun refreshAllSubscriptions(subscriptions: List<Subscription>): List<Result<SubscriptionUpdateResult>> {
@@ -474,27 +500,29 @@ class SubscriptionRepository(context: Context) {
         prepared: PreparedLocalImport,
         subscriptionId: Long
     ): SubscriptionImportResult {
-        val subscription = subscriptionDao.getById(subscriptionId)
-            ?: throw IllegalStateException(appContext.getString(R.string.error_target_group_not_found))
-        if (!subscription.isLocalGroup()) {
-            throw IllegalStateException(LOCAL_GROUP_TARGET_INVALID_ERROR)
-        }
+        return subscriptionMutationLock(subscriptionId).withLock {
+            val subscription = subscriptionDao.getById(subscriptionId)
+                ?: throw IllegalStateException(appContext.getString(R.string.error_target_group_not_found))
+            if (!subscription.isLocalGroup()) {
+                throw IllegalStateException(LOCAL_GROUP_TARGET_INVALID_ERROR)
+            }
 
-        val existingFingerprints = proxyNodeDao.getNodesBySubscription(subscription.id)
-            .asSequence()
-            .map { it.connectionFingerprint() }
-            .toSet()
-        val nodes = prepareNodesForLocalGroup(
-            prepared = prepared,
-            subscriptionId = subscription.id,
-            existingFingerprints = existingFingerprints
-        )
-        return persistLocalImportNodes(
-            subscriptionId = subscription.id,
-            subscriptionName = subscription.name,
-            nodes = nodes,
-            prepared = prepared
-        )
+            val existingFingerprints = proxyNodeDao.getNodesBySubscription(subscription.id)
+                .asSequence()
+                .map { it.connectionFingerprint() }
+                .toSet()
+            val nodes = prepareNodesForLocalGroup(
+                prepared = prepared,
+                subscriptionId = subscription.id,
+                existingFingerprints = existingFingerprints
+            )
+            persistLocalImportNodes(
+                subscriptionId = subscription.id,
+                subscriptionName = subscription.name,
+                nodes = nodes,
+                prepared = prepared
+            )
+        }
     }
 
     private suspend fun commitToNewLocalGroup(
@@ -745,57 +773,105 @@ class SubscriptionRepository(context: Context) {
     }
 
     private suspend fun updateSubscriptionInternal(subscription: Subscription): SubscriptionUpdateResult {
-        val prepared = prepareSubscriptionImport(subscription.url)
-        val updatedAt = System.currentTimeMillis()
-        val existingNodes = proxyNodeDao.getNodesBySubscription(subscription.id)
-        val selectedNodeId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
-        val stabilizedNodes = stabilizeSubscriptionNodes(
-            existingNodes = existingNodes,
-            freshNodes = prepared.nodes,
-            subscriptionId = subscription.id
-        )
-        val summary = calculateUpdateSummary(existingNodes, stabilizedNodes)
+        return subscriptionRefreshLock(subscription.id).withLock {
+            var snapshot = subscriptionMutationLock(subscription.id).withLock {
+                subscriptionDao.getById(subscription.id)
+            } ?: throw IllegalStateException("Subscription no longer exists")
 
-        val persistedNodes = database.withTransaction {
-            proxyNodeDao.deleteBySubscription(subscription.id)
-            proxyNodeDao.insertAll(stabilizedNodes)
-            subscriptionDao.update(
-                subscription.copy(
-                    url = prepared.resolvedUrl ?: subscription.url,
-                    updateTime = updatedAt,
-                    nodeCount = stabilizedNodes.size,
-                    trafficBytes = prepared.trafficBytes,
-                    expireTimestamp = prepared.expireTimestamp,
-                    updateInterval = prepared.resolvedUpdateInterval
-                        ?.takeIf { subscription.autoUpdate }
-                        ?: normalizeUpdateInterval(subscription.updateInterval)
-                )
-            )
-            proxyNodeDao.getNodesBySubscription(subscription.id)
+            repeat(MAX_REFRESH_SNAPSHOT_RETRIES) {
+                if (snapshot.isLocalGroup()) {
+                    throw IllegalStateException(appContext.getString(R.string.error_local_group_no_remote_refresh))
+                }
+
+                val prepared = prepareSubscriptionImport(snapshot.url)
+                val selectedNodeId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
+                val outcome = subscriptionMutationLock(snapshot.id).withLock {
+                    val committed = database.withTransaction {
+                        val current = subscriptionDao.getById(snapshot.id)
+                            ?: return@withTransaction RefreshCommitOutcome.Deleted
+                        if (current.url != snapshot.url) {
+                            return@withTransaction RefreshCommitOutcome.Retry(current)
+                        }
+
+                        val existingNodes = proxyNodeDao.getNodesBySubscription(current.id)
+                        val stabilizedNodes = stabilizeSubscriptionNodes(
+                            existingNodes = existingNodes,
+                            freshNodes = prepared.nodes,
+                            subscriptionId = current.id
+                        )
+                        val summary = calculateUpdateSummary(existingNodes, stabilizedNodes)
+                        proxyNodeDao.deleteBySubscription(current.id)
+                        proxyNodeDao.insertAll(stabilizedNodes)
+                        val updatedRows = subscriptionDao.updateRefreshState(
+                            id = current.id,
+                            url = prepared.resolvedUrl ?: current.url,
+                            updateTime = System.currentTimeMillis(),
+                            nodeCount = stabilizedNodes.size,
+                            trafficBytes = prepared.trafficBytes,
+                            expireTimestamp = prepared.expireTimestamp,
+                            updateInterval = prepared.resolvedUpdateInterval
+                                ?.takeIf { current.autoUpdate }
+                                ?: normalizeUpdateInterval(current.updateInterval)
+                        )
+                        if (updatedRows != 1) {
+                            throw IllegalStateException("Subscription disappeared during refresh commit")
+                        }
+                        RefreshCommitOutcome.Success(
+                            subscription = current,
+                            existingNodes = existingNodes,
+                            persistedNodes = proxyNodeDao.getNodesBySubscription(current.id),
+                            summary = summary
+                        )
+                    }
+                    if (committed is RefreshCommitOutcome.Success) {
+                        maybeUpdateSelectedNode(
+                            selectedNodeId = selectedNodeId,
+                            existingNodes = committed.existingNodes,
+                            refreshedNodes = committed.persistedNodes
+                        )
+                    }
+                    committed
+                }
+
+                when (outcome) {
+                    RefreshCommitOutcome.Deleted -> {
+                        throw IllegalStateException("Subscription was deleted during refresh")
+                    }
+
+                    is RefreshCommitOutcome.Retry -> {
+                        snapshot = outcome.subscription
+                    }
+
+                    is RefreshCommitOutcome.Success -> {
+                        logImportDiagnostics(
+                            action = "update",
+                            subscriptionName = outcome.subscription.name,
+                            diagnostics = prepared.diagnostics
+                        )
+                        return@withLock SubscriptionUpdateResult(
+                            subscriptionId = outcome.subscription.id,
+                            nodeCount = outcome.persistedNodes.size,
+                            trafficBytes = prepared.trafficBytes,
+                            expireTimestamp = prepared.expireTimestamp,
+                            summary = outcome.summary,
+                            metadataFromHeader = prepared.metadataFromHeader,
+                            diagnostics = prepared.diagnostics,
+                            insecureNodeCount = outcome.persistedNodes.count { it.allowInsecure }
+                        )
+                    }
+                }
+            }
+
+            throw IllegalStateException("Subscription changed repeatedly during refresh")
         }
+    }
 
-        maybeUpdateSelectedNode(
-            selectedNodeId = selectedNodeId,
-            existingNodes = existingNodes,
-            refreshedNodes = persistedNodes
-        )
+    private fun subscriptionMutationLock(subscriptionId: Long): Mutex {
+        return subscriptionMutationLocks[(subscriptionId and (SUBSCRIPTION_LOCK_COUNT - 1).toLong()).toInt()]
+    }
 
-        logImportDiagnostics(
-            action = "update",
-            subscriptionName = subscription.name,
-            diagnostics = prepared.diagnostics
-        )
-
-        return SubscriptionUpdateResult(
-            subscriptionId = subscription.id,
-            nodeCount = persistedNodes.size,
-            trafficBytes = prepared.trafficBytes,
-            expireTimestamp = prepared.expireTimestamp,
-            summary = summary,
-            metadataFromHeader = prepared.metadataFromHeader,
-            diagnostics = prepared.diagnostics,
-            insecureNodeCount = persistedNodes.count { it.allowInsecure }
-        )
+    private fun subscriptionRefreshLock(subscriptionId: Long): Mutex {
+        return subscriptionRefreshLocks[(subscriptionId and (SUBSCRIPTION_LOCK_COUNT - 1).toLong()).toInt()]
     }
 
     private suspend fun maybeUpdateSelectedNode(

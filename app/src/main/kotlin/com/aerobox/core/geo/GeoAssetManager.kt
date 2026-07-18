@@ -14,6 +14,8 @@ import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * Manages bundled and updated sing-box rule-set assets.
@@ -69,6 +71,7 @@ object GeoAssetManager {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .build()
+    private val assetUpdateLock = ReentrantLock()
 
     fun getGeoDir(context: Context): File {
         val dir = File(context.filesDir, "geo")
@@ -84,9 +87,9 @@ object GeoAssetManager {
     private fun getGeoSiteVersionFile(context: Context): File = File(getGeoDir(context), GEOSITE_VERSION_FILE)
 
     fun hasLocalFiles(context: Context): Boolean {
-        return getGeoIpFile(context).exists() &&
-            getGeoSiteFile(context).exists() &&
-            getGeoAdsFile(context).exists()
+        return isValidRuleSetFile(getGeoIpFile(context)) &&
+            isValidRuleSetFile(getGeoSiteFile(context)) &&
+            isValidRuleSetFile(getGeoAdsFile(context))
     }
 
     fun getGeoIpSize(context: Context): String = formatFileSize(context, getGeoIpFile(context))
@@ -97,8 +100,17 @@ object GeoAssetManager {
         context: Context,
         targets: GeoUpdateTargets = GeoUpdateTargets()
     ): GeoUpdateResult = withContext(Dispatchers.IO) {
+        assetUpdateLock.withLock {
+            updateAllLocked(context, targets)
+        }
+    }
+
+    private fun updateAllLocked(
+        context: Context,
+        targets: GeoUpdateTargets
+    ): GeoUpdateResult {
         if (!targets.hasAny) {
-            return@withContext GeoUpdateResult(geoIpOk = true, geoSiteCnOk = true, geoAdsOk = true)
+            return GeoUpdateResult(geoIpOk = true, geoSiteCnOk = true, geoAdsOk = true)
         }
 
         val ipOk = if (targets.geoIpCn) {
@@ -126,25 +138,32 @@ object GeoAssetManager {
                 writeVersionFile(getGeoSiteVersionFile(context), version)
             }
         }
-        GeoUpdateResult(geoIpOk = ipOk, geoSiteCnOk = cnOk, geoAdsOk = adsOk)
+        return GeoUpdateResult(geoIpOk = ipOk, geoSiteCnOk = cnOk, geoAdsOk = adsOk)
     }
 
     suspend fun ensureRuleSetAssets(context: Context): Boolean = withContext(Dispatchers.IO) {
-        ensureBundledAssets(context)
-        if (hasLocalFiles(context)) {
-            return@withContext true
-        }
+        assetUpdateLock.withLock {
+            ensureBundledAssetsLocked(context)
+            if (hasLocalFiles(context)) {
+                return@withLock true
+            }
 
-        val result = updateAll(context)
-        val available = result.allOk && hasLocalFiles(context)
-        if (!available) {
-            Log.w(TAG, RULE_SET_UNAVAILABLE_LOG_TAG)
+            val result = updateAllLocked(context, GeoUpdateTargets())
+            val available = result.allOk && hasLocalFiles(context)
+            if (!available) {
+                Log.w(TAG, RULE_SET_UNAVAILABLE_LOG_TAG)
+            }
+            available
         }
-        available
     }
 
-    @Synchronized
     fun ensureBundledAssets(context: Context) {
+        assetUpdateLock.withLock {
+            ensureBundledAssetsLocked(context)
+        }
+    }
+
+    private fun ensureBundledAssetsLocked(context: Context) {
         runCatching {
             ensureBundledAsset(
                 context = context,
@@ -179,14 +198,14 @@ object GeoAssetManager {
                     }
                 }
 
-                if (tmpFile.exists() && tmpFile.length() > 0) {
+                if (isValidRuleSetFile(tmpFile)) {
                     if (tmpFile.renameTo(target)) {
-                        true
+                        isValidRuleSetFile(target)
                     } else {
                         // renameTo can fail across filesystems; fall back to copy
                         tmpFile.copyTo(target, overwrite = true)
                         tmpFile.delete()
-                        target.exists() && target.length() > 0
+                        isValidRuleSetFile(target)
                     }
                 } else {
                     tmpFile.delete()
@@ -210,7 +229,7 @@ object GeoAssetManager {
         val localVersion = versionFile.takeIf { it.isFile }?.readText()?.trim().orEmpty()
 
         val shouldExtract = when {
-            !target.isFile -> true
+            !isValidRuleSetFile(target) -> true
             localVersion.isBlank() -> true
             else -> shouldReplaceByVersion(assetVersion, localVersion)
         }
@@ -221,7 +240,7 @@ object GeoAssetManager {
         tmpFile.delete()
 
         val extracted = extractBundledFile(context, fileName, tmpFile)
-        if (!extracted || tmpFile.length() <= 0L) {
+        if (!extracted || !isValidRuleSetFile(tmpFile)) {
             tmpFile.delete()
             return
         }
@@ -232,7 +251,23 @@ object GeoAssetManager {
             tmpFile.delete()
         }
 
+        if (!isValidRuleSetFile(target)) {
+            target.delete()
+            return
+        }
+
         writeVersionFile(versionFile, assetVersion)
+    }
+
+    private fun isValidRuleSetFile(file: File): Boolean {
+        if (!file.isFile || file.length() < 4L) return false
+        return runCatching {
+            file.inputStream().use { input ->
+                input.read() == 'S'.code &&
+                    input.read() == 'R'.code &&
+                    input.read() == 'S'.code
+            }
+        }.getOrDefault(false)
     }
 
     private fun extractBundledFile(context: Context, fileName: String, outputFile: File): Boolean {
