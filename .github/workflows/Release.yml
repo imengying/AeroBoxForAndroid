@@ -19,21 +19,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Prepare build logs
         run: mkdir -p build-logs
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v5.4.0
+        uses: actions/setup-java@v5.6.0
         with:
           distribution: temurin
           java-version: "25"
 
       - name: Set up Go
-        uses: actions/setup-go@v6.5.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: "1.26.5"
           cache: false
@@ -247,13 +247,35 @@ jobs:
             exit 1
           fi
 
+          PREVIOUS_TAG="$(
+            git tag --merged "${RELEASE_TAG}" --list 'v[0-9]*' --sort=-version:refname \
+              | awk -v current="${RELEASE_TAG}" '$0 != current && !found { print; found=1 }'
+          )"
+          if [ -n "${PREVIOUS_TAG}" ]; then
+            COMMIT_RANGE="${PREVIOUS_TAG}..${RELEASE_TAG}"
+          else
+            COMMIT_RANGE="${RELEASE_TAG}"
+          fi
+
+          NOTES_FILE="${RUNNER_TEMP}/release-notes.md"
+          echo "## 更新内容" > "${NOTES_FILE}"
+          while IFS=$'\t' read -r sha short_sha subject; do
+            subject="${subject#"${subject%%[![:space:]]*}"}"
+            subject="${subject%"${subject##*[![:space:]]}"}"
+            printf -- '- %s ([`%s`](https://github.com/%s/commit/%s))\n' \
+              "${subject}" "${short_sha}" "${GITHUB_REPOSITORY}" "${sha}" \
+              >> "${NOTES_FILE}"
+          done < <(git log "${COMMIT_RANGE}" --no-merges --format='%H%x09%h%x09%s')
+
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}"
+            gh release edit "${RELEASE_TAG}" \
+              --title "${RELEASE_TAG}" \
+              --notes-file "${NOTES_FILE}"
             gh release upload "${RELEASE_TAG}" "${APKS[@]}" --clobber
           else
             gh release create "${RELEASE_TAG}" "${APKS[@]}" \
               --title "${RELEASE_TAG}" \
-              --notes ""
+              --notes-file "${NOTES_FILE}"
           fi
 
       - name: Upload build logs
