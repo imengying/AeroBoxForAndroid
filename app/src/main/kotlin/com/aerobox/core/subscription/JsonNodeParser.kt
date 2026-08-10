@@ -59,6 +59,7 @@ internal object JsonNodeParser {
                 typeRaw.contains("vmess") -> ProxyType.VMESS
                 typeRaw.contains("vless") -> ProxyType.VLESS
                 typeRaw.contains("trojan") -> ProxyType.TROJAN
+                typeRaw == "anytls" -> ProxyType.ANYTLS
                 typeRaw.contains("hysteria2") || typeRaw == "hy2" -> ProxyType.HYSTERIA2
                 typeRaw.contains("tuic") -> ProxyType.TUIC
                 typeRaw.contains("naive") -> ProxyType.NAIVE
@@ -178,6 +179,7 @@ internal object JsonNodeParser {
                 network = enabledNetwork,
                 transportType = transportType,
                 tls = type == ProxyType.NAIVE
+                        || type == ProxyType.ANYTLS
                         || typeRaw == "https"
                         || obj.optBoolean("tls", false)
                         || tlsObject?.optBoolean("enabled", false) == true
@@ -296,10 +298,7 @@ internal object JsonNodeParser {
                         else -> null
                     }
                 ),
-                allowInsecure = obj.optBoolean("allowInsecure", false)
-                    || obj.optBoolean("allow_insecure", false)
-                    || tlsObject?.optBoolean("insecure", false) == true
-                    || UriNodeParser.parseBooleanField(obj.optString("allowInsecure")),
+                allowInsecure = UriNodeParser.jsonInsecureEnabled(obj, tlsObject),
                 plugin = obj.optString("plugin", "").ifBlank { null },
                 pluginOpts = UriNodeParser.firstNonBlank(
                     obj.optString("plugin_opts", "").ifBlank { null },

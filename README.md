@@ -28,6 +28,7 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 - VMess
 - VLESS
 - Trojan
+- AnyTLS
 - Hysteria 2
 - TUIC
 - SOCKS5

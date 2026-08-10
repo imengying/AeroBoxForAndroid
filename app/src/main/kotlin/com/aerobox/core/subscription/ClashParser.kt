@@ -76,6 +76,7 @@ object ClashParser {
             "vmess" -> ProxyType.VMESS
             "vless" -> ProxyType.VLESS
             "trojan" -> ProxyType.TROJAN
+            "anytls" -> ProxyType.ANYTLS
             "hysteria2", "hy2" -> ProxyType.HYSTERIA2
             "tuic" -> ProxyType.TUIC
             "naive", "naive+https", "naive+quic" -> ProxyType.NAIVE
@@ -116,7 +117,7 @@ object ClashParser {
         )
 
         val tls = when {
-            type == ProxyType.NAIVE -> true
+            type == ProxyType.NAIVE || type == ProxyType.ANYTLS -> true
             type == ProxyType.TROJAN || type == ProxyType.HYSTERIA2 || type == ProxyType.TUIC -> true
             typeStr == "https" -> true
             booleanValue(map, "tls") == true -> true
@@ -186,9 +187,7 @@ object ClashParser {
             if (transportType == "grpc") transportPath else null
         )
 
-        val insecure = booleanValue(map, "skip-cert-verify") == true
-                || booleanValue(map, "allow-insecure") == true
-                || booleanValue(map, "insecure") == true
+        val insecure = insecureEnabled(map)
 
         val fingerprint = firstNonBlank(
             stringValue(map, "fingerprint"),
@@ -535,6 +534,21 @@ object ClashParser {
 
     private fun isShadowTlsSsPlugin(map: Map<*, *>): Boolean {
         return stringValue(map, "plugin")?.equals("shadow-tls", ignoreCase = true) == true
+    }
+
+    private fun insecureEnabled(source: Any?): Boolean {
+        val keys = arrayOf(
+            "skip-cert-verify",
+            "skip_cert_verify",
+            "skipCertVerify",
+            "allow-insecure",
+            "allow_insecure",
+            "allowInsecure",
+            "insecure"
+        )
+        return keys.any { key ->
+            booleanValue(source, key) == true || booleanValue(source, "tls", key) == true
+        }
     }
 
     private fun value(source: Any?, vararg path: String): Any? {

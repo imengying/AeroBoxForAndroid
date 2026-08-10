@@ -11,6 +11,7 @@ enum class ProxyType {
     VMESS,
     VLESS,
     TROJAN,
+    ANYTLS,
     HYSTERIA2,
     TUIC,
     NAIVE,
@@ -18,6 +19,7 @@ enum class ProxyType {
     HTTP;
 
     fun displayName(): String {
+        if (this == ANYTLS) return "AnyTLS"
         return name
             .lowercase(Locale.ROOT)
             .split('_')

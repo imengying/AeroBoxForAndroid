@@ -80,6 +80,12 @@ internal object OutboundConfigBuilder {
                 enabledNetwork?.let { outbound.put("network", it) }
             }
 
+            ProxyType.ANYTLS -> {
+                outbound.put("type", "anytls")
+                node.password?.takeIf { it.isNotBlank() }?.let { outbound.put("password", it) }
+                outbound.put("tls", buildTlsObject(node, forceEnabled = true))
+            }
+
             ProxyType.HYSTERIA2 -> {
                 outbound.put("type", "hysteria2")
                 node.password?.takeIf { it.isNotBlank() }?.let { outbound.put("password", it) }
@@ -224,7 +230,10 @@ internal object OutboundConfigBuilder {
     private fun applyDialFields(outbound: JSONObject, node: ProxyNode) {
         node.bindInterface?.takeIf { it.isNotBlank() }?.let { outbound.put("bind_interface", it) }
         node.connectTimeout?.takeIf { it.isNotBlank() }?.let { outbound.put("connect_timeout", it) }
-        node.tcpFastOpen?.let { outbound.put("tcp_fast_open", it) }
+        // sing-box rejects AnyTLS with TFO because its handshake needs an established connection.
+        if (node.type != ProxyType.ANYTLS) {
+            node.tcpFastOpen?.let { outbound.put("tcp_fast_open", it) }
+        }
         node.tcpMultiPath?.let { outbound.put("tcp_multi_path", it) }
         node.udpFragment?.let { outbound.put("udp_fragment", it) }
         node.networkStrategy?.takeIf { it.isNotBlank() }?.let { outbound.put("network_strategy", it) }
@@ -283,6 +292,7 @@ internal object OutboundConfigBuilder {
             ProxyType.VMESS,
             ProxyType.VLESS,
             ProxyType.TROJAN -> true
+            ProxyType.ANYTLS,
             ProxyType.HYSTERIA2,
             ProxyType.TUIC,
             ProxyType.NAIVE,
@@ -362,9 +372,13 @@ internal object OutboundConfigBuilder {
         return headers.takeIf { it.length() > 0 }
     }
 
-    private fun buildTlsObject(node: ProxyNode, includeReality: Boolean = false): JSONObject {
+    private fun buildTlsObject(
+        node: ProxyNode,
+        includeReality: Boolean = false,
+        forceEnabled: Boolean = false
+    ): JSONObject {
         // Force TLS enabled when Reality is in use — Reality requires TLS.
-        val effectiveTls = node.tls || (includeReality && !node.publicKey.isNullOrBlank())
+        val effectiveTls = forceEnabled || node.tls || (includeReality && !node.publicKey.isNullOrBlank())
         val tls = JSONObject()
             .put("enabled", effectiveTls)
         val sniToUse = node.sni?.takeIf { it.isNotBlank() } ?: if (includeReality) node.server else null

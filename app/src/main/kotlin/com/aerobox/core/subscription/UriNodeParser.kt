@@ -20,6 +20,15 @@ internal object UriNodeParser {
     private val supportedTransportTypes = SubscriptionParser.supportedTransportTypes
     private val supportedEnabledNetworks = setOf("tcp", "udp")
     private val portPattern = Regex("""\d{1,5}""")
+    private val insecureOptionKeys = arrayOf(
+        "skip-cert-verify",
+        "skip_cert_verify",
+        "skipCertVerify",
+        "allow-insecure",
+        "allow_insecure",
+        "allowInsecure",
+        "insecure"
+    )
 
     internal fun parseUriList(content: String): NodeParseBatch {
         val nodes = mutableListOf<ProxyNode>()
@@ -49,6 +58,7 @@ internal object UriNodeParser {
                 uri.startsWith("vmess://", ignoreCase = true) -> "invalid_or_unsupported_vmess_uri"
                 uri.startsWith("vless://", ignoreCase = true) -> "invalid_or_unsupported_vless_uri"
                 uri.startsWith("trojan://", ignoreCase = true) -> "invalid_or_unsupported_trojan_uri"
+                uri.startsWith("anytls://", ignoreCase = true) -> "invalid_or_unsupported_anytls_uri"
                 uri.startsWith("hysteria2://", ignoreCase = true) || uri.startsWith("hy2://", ignoreCase = true) ->
                     "invalid_or_unsupported_hysteria2_uri"
                 uri.startsWith("tuic://", ignoreCase = true) -> "invalid_or_unsupported_tuic_uri"
@@ -66,6 +76,7 @@ internal object UriNodeParser {
                 uri.startsWith("vmess://", ignoreCase = true) -> parseVmessUri(uri)
                 uri.startsWith("vless://", ignoreCase = true) -> parseVlessUri(uri)
                 uri.startsWith("trojan://", ignoreCase = true) -> parseTrojanUri(uri)
+                uri.startsWith("anytls://", ignoreCase = true) -> parseAnyTlsUri(uri)
                 uri.startsWith("hysteria2://", ignoreCase = true) || uri.startsWith("hy2://", ignoreCase = true) -> parseHysteria2Uri(uri)
                 uri.startsWith("tuic://", ignoreCase = true) -> parseTuicUri(uri)
                 uri.startsWith("naive+https://", ignoreCase = true) ||
@@ -176,10 +187,7 @@ internal object UriNodeParser {
                 json.optString("packet-encoding").ifBlank { null },
                 json.optString("packet_encoding").ifBlank { null }
             ),
-            allowInsecure = parseBooleanField(
-                json.optString("allowInsecure"),
-                json.optString("allow_insecure")
-            )
+            allowInsecure = jsonInsecureEnabled(json)
         )
     }
 
@@ -316,6 +324,31 @@ internal object UriNodeParser {
             allowInsecure = parseBooleanField(
                 params["allowInsecure"],
                 params["insecure"]
+            )
+        )
+            .withUriTlsOptions(params)
+            .withUriSharedOptions(params)
+    }
+
+    internal fun parseAnyTlsUri(uri: String): ProxyNode? {
+        val parsed = uri.toUri()
+        val server = parsed.host ?: return null
+        val port = parsed.port.takeIf { it > 0 } ?: return null
+        val password = extractUserInfo(parsed)?.takeIf { it.isNotBlank() } ?: return null
+        val params = parseUriParams(parsed.query)
+
+        return ProxyNode(
+            name = decodeName(parsed.fragment ?: "AnyTLS"),
+            type = ProxyType.ANYTLS,
+            server = server,
+            port = port,
+            password = password,
+            tls = true,
+            sni = firstNonBlank(
+                params["sni"],
+                params["peer"],
+                params["server_name"],
+                params["servername"]
             )
         )
             .withUriTlsOptions(params)
@@ -566,15 +599,9 @@ internal object UriNodeParser {
                 "client-fingerprint",
                 "client_fingerprint"
             ) ?: fingerprint,
-            allowInsecure = uriBooleanParam(
-                params,
-                "allowInsecure",
-                "allow_insecure",
-                "allow-insecure",
-                "insecure",
-                "skip-cert-verify",
-                "skip_cert_verify"
-            ) ?: allowInsecure,
+            allowInsecure = allowInsecure || insecureOptionKeys.any { key ->
+                uriBooleanParam(params, key) == true
+            },
             tlsDisableSni = uriBooleanParam(params, "disable_sni", "disable-sni") ?: tlsDisableSni,
             tlsMinVersion = uriStringParam(params, "tls_min_version", "tls-min-version", "min_version", "min-version")
                 ?: tlsMinVersion,
@@ -792,10 +819,16 @@ internal object UriNodeParser {
         val source = obj ?: return null
         for (key in keys) {
             if (source.has(key)) {
-                return source.optBoolean(key)
+                return parseBooleanOrNull(jsonScalarString(source.opt(key)))
             }
         }
         return null
+    }
+
+    internal fun jsonInsecureEnabled(vararg sources: JSONObject?): Boolean {
+        return sources.any { source ->
+            insecureOptionKeys.any { key -> optBooleanField(source, key) == true }
+        }
     }
 
     internal fun tryBase64Decode(value: String): String {
