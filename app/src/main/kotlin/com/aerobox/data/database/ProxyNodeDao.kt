@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.aerobox.data.model.ProxyNode
 import kotlinx.coroutines.flow.Flow
 
@@ -21,6 +22,9 @@ interface ProxyNodeDao {
     @Query("SELECT * FROM proxy_nodes WHERE id = :id LIMIT 1")
     suspend fun getNodeById(id: Long): ProxyNode?
 
+    @Query("SELECT * FROM proxy_nodes WHERE id = :id LIMIT 1")
+    fun observeNodeById(id: Long): Flow<ProxyNode?>
+
     @Query("SELECT * FROM proxy_nodes ORDER BY subscriptionId ASC, createdAt ASC, id ASC LIMIT 1")
     suspend fun getFirstNode(): ProxyNode?
 
@@ -35,6 +39,9 @@ interface ProxyNodeDao {
 
     @Query("UPDATE proxy_nodes SET latency = :latency WHERE id = :id")
     suspend fun updateLatency(id: Long, latency: Int)
+
+    @Update
+    suspend fun update(node: ProxyNode): Int
 
     @Query("UPDATE proxy_nodes SET subscriptionId = :targetSubscriptionId WHERE subscriptionId = :fromSubscriptionId")
     suspend fun reassignBySubscription(fromSubscriptionId: Long, targetSubscriptionId: Long)

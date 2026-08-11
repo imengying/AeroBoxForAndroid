@@ -132,10 +132,6 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">No usable nodes parsed; check the subscription format</string>
     <string name="error_no_valid_nodes_hints_format">No usable nodes parsed. Possible reasons: %1$s</string>
-    <plurals name="warning_insecure_nodes_format">
-        <item quantity="one">Warning: %1$d node has TLS verification disabled, exposing it to MITM attacks</item>
-        <item quantity="other">Warning: %1$d nodes have TLS verification disabled, exposing them to MITM attacks</item>
-    </plurals>
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">Subscription content is not a supported sing-box, Clash, or node URL format</string>
@@ -336,4 +332,51 @@
 
     <!-- SubscriptionScreen -->
     <string name="subscription_loading">Loading subscriptions…</string>
+    <!-- NodeEditScreen -->
+    <string name="edit_node">Edit node</string>
+    <string name="node_edit_section_general">General</string>
+    <string name="node_edit_section_authentication">Authentication</string>
+    <string name="node_edit_section_transport">Transport</string>
+    <string name="node_edit_section_protocol_options">Protocol options</string>
+    <string name="node_edit_section_tls">TLS</string>
+    <string name="node_edit_name">Name</string>
+    <string name="node_edit_protocol">Protocol</string>
+    <string name="node_edit_server">Server</string>
+    <string name="node_edit_port">Port</string>
+    <string name="node_edit_required">Required</string>
+    <string name="node_edit_method">Encryption method</string>
+    <string name="node_edit_password">Password</string>
+    <string name="node_edit_username">Username</string>
+    <string name="node_edit_uuid">UUID</string>
+    <string name="node_edit_security">Security</string>
+    <string name="node_edit_alter_id">Alter ID</string>
+    <string name="node_edit_flow">Flow</string>
+    <string name="node_edit_packet_encoding">Packet encoding</string>
+    <string name="node_edit_plugin">Plugin</string>
+    <string name="node_edit_plugin_options">Plugin options</string>
+    <string name="node_edit_socks_version">SOCKS version</string>
+    <string name="node_edit_transport_type">Transport type</string>
+    <string name="node_edit_transport_none">None (TCP)</string>
+    <string name="node_edit_host">Host</string>
+    <string name="node_edit_path">Path</string>
+    <string name="node_edit_headers">Headers</string>
+    <string name="node_edit_grpc_service">gRPC service name</string>
+    <string name="node_edit_obfs_type">Obfuscation type</string>
+    <string name="node_edit_obfs_password">Obfuscation password</string>
+    <string name="node_edit_server_ports">Server ports</string>
+    <string name="node_edit_hop_interval">Port hopping interval</string>
+    <string name="node_edit_congestion_control">Congestion control</string>
+    <string name="node_edit_udp_relay_mode">UDP relay mode</string>
+    <string name="node_edit_heartbeat">Heartbeat interval</string>
+    <string name="node_edit_udp_over_stream">UDP over stream</string>
+    <string name="node_edit_zero_rtt">0-RTT handshake</string>
+    <string name="node_edit_naive_protocol">Naive protocol</string>
+    <string name="node_edit_extra_headers">Extra headers</string>
+    <string name="node_edit_tls_enabled">Enable TLS</string>
+    <string name="node_edit_sni">Server name (SNI)</string>
+    <string name="node_edit_allow_insecure">Skip certificate verification</string>
+    <string name="node_edit_alpn">ALPN</string>
+    <string name="node_edit_fingerprint">Client fingerprint</string>
+    <string name="node_edit_reality_public_key">Reality public key</string>
+    <string name="node_edit_reality_short_id">Reality short ID</string>
 </resources>

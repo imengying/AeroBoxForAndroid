@@ -33,6 +33,7 @@ import com.aerobox.ui.screens.GroupNodesScreen
 import com.aerobox.ui.screens.HomeScreen
 import com.aerobox.ui.screens.LicenseScreen
 import com.aerobox.ui.screens.LogScreen
+import com.aerobox.ui.screens.NodeEditScreen
 import com.aerobox.ui.screens.PerAppProxyScreen
 import com.aerobox.ui.screens.RoutingSettingsScreen
 import com.aerobox.ui.screens.SettingsScreen
@@ -48,6 +49,19 @@ private data class BottomNavItem(
     val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
     val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
     val label: Int
+)
+
+private val bottomNavItems = listOf(
+    BottomNavItem(
+        selectedIcon = Icons.Filled.Home,
+        unselectedIcon = Icons.Outlined.Home,
+        label = R.string.home
+    ),
+    BottomNavItem(
+        selectedIcon = Icons.Filled.Settings,
+        unselectedIcon = Icons.Outlined.Settings,
+        label = R.string.settings
+    )
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -143,6 +157,19 @@ fun AppNavigation(
                 val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
                 GroupNodesScreen(
                     subscriptionId = groupId,
+                    onEditNode = { nodeId ->
+                        navController.navigate("node_edit/$nodeId")
+                    },
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(
+                route = "node_edit/{nodeId}",
+                arguments = listOf(navArgument("nodeId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val nodeId = backStackEntry.arguments?.getLong("nodeId") ?: 0L
+                NodeEditScreen(
+                    nodeId = nodeId,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
@@ -179,27 +206,14 @@ private fun MainScreen(
     onNavigateToLog: () -> Unit,
     onNavigateToLicense: () -> Unit
 ) {
-    val items = listOf(
-        BottomNavItem(
-            selectedIcon = Icons.Filled.Home,
-            unselectedIcon = Icons.Outlined.Home,
-            label = R.string.home
-        ),
-        BottomNavItem(
-            selectedIcon = Icons.Filled.Settings,
-            unselectedIcon = Icons.Outlined.Settings,
-            label = R.string.settings
-        )
-    )
-
-    val pagerState = rememberPagerState(pageCount = { items.size })
+    val pagerState = rememberPagerState(pageCount = { bottomNavItems.size })
     val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         bottomBar = {
             NavigationBar {
-                items.forEachIndexed { index, item ->
+                bottomNavItems.forEachIndexed { index, item ->
                     val selected = pagerState.currentPage == index
                     NavigationBarItem(
                         selected = selected,

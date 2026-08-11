@@ -144,12 +144,6 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">Не удалось распарсить рабочие узлы; проверьте формат подписки</string>
     <string name="error_no_valid_nodes_hints_format">Не удалось распарсить рабочие узлы. Возможные причины: %1$s</string>
-    <plurals name="warning_insecure_nodes_format">
-        <item quantity="one">Внимание: у %1$d узла отключена проверка TLS-сертификата, есть риск MITM-атаки</item>
-        <item quantity="few">Внимание: у %1$d узлов отключена проверка TLS-сертификата, есть риск MITM-атаки</item>
-        <item quantity="many">Внимание: у %1$d узлов отключена проверка TLS-сертификата, есть риск MITM-атаки</item>
-        <item quantity="other">Внимание: у %1$d узлов отключена проверка TLS-сертификата, есть риск MITM-атаки</item>
-    </plurals>
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">Содержимое подписки не является поддерживаемым форматом sing-box, Clash или ссылок на узлы</string>
@@ -350,4 +344,51 @@
 
     <!-- SubscriptionScreen -->
     <string name="subscription_loading">Загрузка подписок…</string>
+    <!-- NodeEditScreen -->
+    <string name="edit_node">Изменить узел</string>
+    <string name="node_edit_section_general">Основные параметры</string>
+    <string name="node_edit_section_authentication">Аутентификация</string>
+    <string name="node_edit_section_transport">Транспорт</string>
+    <string name="node_edit_section_protocol_options">Параметры протокола</string>
+    <string name="node_edit_section_tls">TLS</string>
+    <string name="node_edit_name">Название</string>
+    <string name="node_edit_protocol">Протокол</string>
+    <string name="node_edit_server">Сервер</string>
+    <string name="node_edit_port">Порт</string>
+    <string name="node_edit_required">Обязательное поле</string>
+    <string name="node_edit_method">Метод шифрования</string>
+    <string name="node_edit_password">Пароль</string>
+    <string name="node_edit_username">Имя пользователя</string>
+    <string name="node_edit_uuid">UUID</string>
+    <string name="node_edit_security">Безопасность</string>
+    <string name="node_edit_alter_id">Alter ID</string>
+    <string name="node_edit_flow">Поток</string>
+    <string name="node_edit_packet_encoding">Кодирование пакетов</string>
+    <string name="node_edit_plugin">Плагин</string>
+    <string name="node_edit_plugin_options">Параметры плагина</string>
+    <string name="node_edit_socks_version">Версия SOCKS</string>
+    <string name="node_edit_transport_type">Тип транспорта</string>
+    <string name="node_edit_transport_none">Нет (TCP)</string>
+    <string name="node_edit_host">Хост</string>
+    <string name="node_edit_path">Путь</string>
+    <string name="node_edit_headers">Заголовки</string>
+    <string name="node_edit_grpc_service">Имя службы gRPC</string>
+    <string name="node_edit_obfs_type">Тип обфускации</string>
+    <string name="node_edit_obfs_password">Пароль обфускации</string>
+    <string name="node_edit_server_ports">Порты сервера</string>
+    <string name="node_edit_hop_interval">Интервал смены портов</string>
+    <string name="node_edit_congestion_control">Управление перегрузкой</string>
+    <string name="node_edit_udp_relay_mode">Режим ретрансляции UDP</string>
+    <string name="node_edit_heartbeat">Интервал пульса</string>
+    <string name="node_edit_udp_over_stream">UDP через поток</string>
+    <string name="node_edit_zero_rtt">Рукопожатие 0-RTT</string>
+    <string name="node_edit_naive_protocol">Протокол Naive</string>
+    <string name="node_edit_extra_headers">Дополнительные заголовки</string>
+    <string name="node_edit_tls_enabled">Включить TLS</string>
+    <string name="node_edit_sni">Имя сервера (SNI)</string>
+    <string name="node_edit_allow_insecure">Пропустить проверку сертификата</string>
+    <string name="node_edit_alpn">ALPN</string>
+    <string name="node_edit_fingerprint">Отпечаток клиента</string>
+    <string name="node_edit_reality_public_key">Открытый ключ Reality</string>
+    <string name="node_edit_reality_short_id">Короткий ID Reality</string>
 </resources>

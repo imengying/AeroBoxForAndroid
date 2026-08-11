@@ -132,10 +132,6 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">گره معتبری استخراج نشد؛ قالب اشتراک را بررسی کنید</string>
     <string name="error_no_valid_nodes_hints_format">گره معتبری استخراج نشد. دلایل احتمالی: %1$s</string>
-    <plurals name="warning_insecure_nodes_format">
-        <item quantity="one">هشدار: ‫%1$d‬ گره اعتبارسنجی گواهی TLS را غیرفعال کرده‌اند و در معرض حمله MITM قرار دارند</item>
-        <item quantity="other">هشدار: ‫%1$d‬ گره اعتبارسنجی گواهی TLS را غیرفعال کرده‌اند و در معرض حمله MITM قرار دارند</item>
-    </plurals>
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">محتوای اشتراک یکی از قالب‌های پشتیبانی‌شده sing-box، Clash یا لینک گره نیست</string>
@@ -336,4 +332,51 @@
 
     <!-- SubscriptionScreen -->
     <string name="subscription_loading">در حال بارگذاری اشتراک‌ها…</string>
+    <!-- NodeEditScreen -->
+    <string name="edit_node">ویرایش گره</string>
+    <string name="node_edit_section_general">عمومی</string>
+    <string name="node_edit_section_authentication">احراز هویت</string>
+    <string name="node_edit_section_transport">انتقال</string>
+    <string name="node_edit_section_protocol_options">گزینه‌های پروتکل</string>
+    <string name="node_edit_section_tls">TLS</string>
+    <string name="node_edit_name">نام</string>
+    <string name="node_edit_protocol">پروتکل</string>
+    <string name="node_edit_server">سرور</string>
+    <string name="node_edit_port">درگاه</string>
+    <string name="node_edit_required">الزامی</string>
+    <string name="node_edit_method">روش رمزنگاری</string>
+    <string name="node_edit_password">گذرواژه</string>
+    <string name="node_edit_username">نام کاربری</string>
+    <string name="node_edit_uuid">UUID</string>
+    <string name="node_edit_security">امنیت</string>
+    <string name="node_edit_alter_id">Alter ID</string>
+    <string name="node_edit_flow">جریان</string>
+    <string name="node_edit_packet_encoding">رمزگذاری بسته</string>
+    <string name="node_edit_plugin">افزونه</string>
+    <string name="node_edit_plugin_options">گزینه‌های افزونه</string>
+    <string name="node_edit_socks_version">نسخه SOCKS</string>
+    <string name="node_edit_transport_type">نوع انتقال</string>
+    <string name="node_edit_transport_none">بدون انتقال (TCP)</string>
+    <string name="node_edit_host">میزبان</string>
+    <string name="node_edit_path">مسیر</string>
+    <string name="node_edit_headers">سرآیندها</string>
+    <string name="node_edit_grpc_service">نام سرویس gRPC</string>
+    <string name="node_edit_obfs_type">نوع مبهم‌سازی</string>
+    <string name="node_edit_obfs_password">گذرواژه مبهم‌سازی</string>
+    <string name="node_edit_server_ports">درگاه‌های سرور</string>
+    <string name="node_edit_hop_interval">فاصله تغییر درگاه</string>
+    <string name="node_edit_congestion_control">کنترل ازدحام</string>
+    <string name="node_edit_udp_relay_mode">حالت رله UDP</string>
+    <string name="node_edit_heartbeat">فاصله ضربان</string>
+    <string name="node_edit_udp_over_stream">UDP روی جریان</string>
+    <string name="node_edit_zero_rtt">دست‌دهی 0-RTT</string>
+    <string name="node_edit_naive_protocol">پروتکل Naive</string>
+    <string name="node_edit_extra_headers">سرآیندهای اضافی</string>
+    <string name="node_edit_tls_enabled">فعال‌سازی TLS</string>
+    <string name="node_edit_sni">نام سرور (SNI)</string>
+    <string name="node_edit_allow_insecure">رد کردن بررسی گواهی</string>
+    <string name="node_edit_alpn">ALPN</string>
+    <string name="node_edit_fingerprint">اثر انگشت کلاینت</string>
+    <string name="node_edit_reality_public_key">کلید عمومی Reality</string>
+    <string name="node_edit_reality_short_id">شناسه کوتاه Reality</string>
 </resources>

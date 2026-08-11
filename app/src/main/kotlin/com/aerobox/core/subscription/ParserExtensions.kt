@@ -8,6 +8,16 @@ internal data class NodeParseBatch(
     val diagnostics: ParseDiagnostics = ParseDiagnostics()
 )
 
+internal val insecureOptionKeys = listOf(
+    "skip-cert-verify",
+    "skip_cert_verify",
+    "skipCertVerify",
+    "allow-insecure",
+    "allow_insecure",
+    "allowInsecure",
+    "insecure"
+)
+
 /**
  * Shared extension functions used by both [UriNodeParser] and [JsonNodeParser].
  */

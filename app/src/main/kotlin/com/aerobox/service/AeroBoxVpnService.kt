@@ -69,6 +69,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         const val NOTIFICATION_ID = 1001
         private const val TAG = "AeroBoxVpnService"
         private const val MAX_RECONNECT_ATTEMPTS = 10
+        private val TRAFFIC_OUTBOUND_TAGS = listOf("proxy", "direct")
         // Matches "INFO[0000] ", "ERROR[0001] ", etc.
         private val coreLogBracketRegex = Regex("""(?i)(FATAL|PANIC|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)\[\d{4}\]\s?""")
         // Matches "error: ", "warn: ", etc.
@@ -808,8 +809,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     private fun startSpeedTicker() {
         speedTickerJob?.cancel()
         speedTickerJob = serviceScope.launch speedTicker@{
-            val trackedOutbounds = listOf("proxy", "direct")
-            val initialStats = waitForOutboundStats(trackedOutbounds)
+            val initialStats = waitForOutboundStats()
                 ?: SingBoxNative.OutboundTrafficStats(0L, 0L)
             var prevUpload = initialStats.uploadBytes
             var prevDownload = initialStats.downloadBytes
@@ -820,7 +820,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 delay(1000)
                 val currentStats = SingBoxNative.queryV2RayOutboundStats(
                     apiAddress = ConfigGenerator.V2RAY_API_LISTEN,
-                    outboundTags = trackedOutbounds
+                    outboundTags = TRAFFIC_OUTBOUND_TAGS
                 )
                 if (currentStats == null) {
                     consecutiveStatsFailures++
@@ -871,13 +871,11 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         }
     }
 
-    private suspend fun waitForOutboundStats(
-        trackedOutbounds: List<String>
-    ): SingBoxNative.OutboundTrafficStats? {
+    private suspend fun waitForOutboundStats(): SingBoxNative.OutboundTrafficStats? {
         repeat(6) { attempt ->
             val stats = SingBoxNative.queryV2RayOutboundStats(
                 apiAddress = ConfigGenerator.V2RAY_API_LISTEN,
-                outboundTags = trackedOutbounds,
+                outboundTags = TRAFFIC_OUTBOUND_TAGS,
                 logErrors = attempt == 5
             )
             if (stats != null) return stats

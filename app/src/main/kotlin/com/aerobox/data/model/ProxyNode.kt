@@ -156,8 +156,8 @@ data class ProxyNode(
     val tcpKeepAliveInterval: String? = null
 )
 
-private val supportedEnabledNetworks = setOf("tcp", "udp")
-private val supportedTransportTypes = setOf("ws", "grpc", "http", "h2", "httpupgrade", "quic")
+internal val supportedProxyNetworks = setOf("tcp", "udp")
+internal val supportedProxyTransports = setOf("ws", "grpc", "http", "h2", "httpupgrade", "quic")
 
 private fun String?.normalizedProxyField(): String? {
     val normalized = this
@@ -175,11 +175,11 @@ private fun String?.normalizedProxyField(): String? {
 fun ProxyNode.effectiveEnabledNetwork(): String? {
     return network
         .normalizedProxyField()
-        ?.takeIf { it in supportedEnabledNetworks }
+        ?.takeIf { it in supportedProxyNetworks }
 }
 
 fun ProxyNode.effectiveTransportType(): String? {
     return transportType
         .normalizedProxyField()
-        ?.takeIf { it in supportedTransportTypes }
+        ?.takeIf { it in supportedProxyTransports }
 }

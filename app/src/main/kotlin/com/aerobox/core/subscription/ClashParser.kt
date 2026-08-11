@@ -121,7 +121,8 @@ object ClashParser {
             type == ProxyType.TROJAN || type == ProxyType.HYSTERIA2 || type == ProxyType.TUIC -> true
             typeStr == "https" -> true
             booleanValue(map, "tls") == true -> true
-            security?.lowercase() in listOf("tls", "reality") -> true
+            security.equals("tls", ignoreCase = true) ||
+                security.equals("reality", ignoreCase = true) -> true
             else -> false
         }
 
@@ -537,16 +538,7 @@ object ClashParser {
     }
 
     private fun insecureEnabled(source: Any?): Boolean {
-        val keys = arrayOf(
-            "skip-cert-verify",
-            "skip_cert_verify",
-            "skipCertVerify",
-            "allow-insecure",
-            "allow_insecure",
-            "allowInsecure",
-            "insecure"
-        )
-        return keys.any { key ->
+        return insecureOptionKeys.any { key ->
             booleanValue(source, key) == true || booleanValue(source, "tls", key) == true
         }
     }

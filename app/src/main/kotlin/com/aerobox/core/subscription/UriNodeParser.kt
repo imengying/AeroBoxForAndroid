@@ -5,6 +5,8 @@ import android.util.Base64
 import androidx.core.net.toUri
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
+import com.aerobox.data.model.supportedProxyNetworks
+import com.aerobox.data.model.supportedProxyTransports
 import org.json.JSONArray
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
@@ -17,17 +19,12 @@ import java.util.Locale
  */
 internal object UriNodeParser {
 
-    private val supportedTransportTypes = SubscriptionParser.supportedTransportTypes
-    private val supportedEnabledNetworks = setOf("tcp", "udp")
     private val portPattern = Regex("""\d{1,5}""")
-    private val insecureOptionKeys = arrayOf(
-        "skip-cert-verify",
-        "skip_cert_verify",
-        "skipCertVerify",
-        "allow-insecure",
-        "allow_insecure",
-        "allowInsecure",
-        "insecure"
+    private val base64DecodeFlags = intArrayOf(
+        Base64.DEFAULT,
+        Base64.NO_WRAP,
+        Base64.NO_WRAP or Base64.URL_SAFE,
+        Base64.URL_SAFE
     )
 
     internal fun parseUriList(content: String): NodeParseBatch {
@@ -708,7 +705,7 @@ internal object UriNodeParser {
 
     internal fun normalizeEnabledNetwork(value: String?): String? {
         val normalized = value?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
-        return normalized.takeIf { it in supportedEnabledNetworks }
+        return normalized.takeIf { it in supportedProxyNetworks }
     }
 
     internal fun resolveTransportType(
@@ -723,7 +720,7 @@ internal object UriNodeParser {
             normalizedNetwork
         }
         if (resolved == "tcp") return null
-        return resolved.takeIf { it in supportedTransportTypes }
+        return resolved.takeIf { it in supportedProxyTransports }
     }
 
     internal fun parseServerPort(raw: String): Pair<String, Int>? {
@@ -842,18 +839,11 @@ internal object UriNodeParser {
             add(sanitized.trimEnd('=').replace('-', '+').replace('_', '/'))
         }.distinct()
 
-        val flags = listOf(
-            Base64.DEFAULT,
-            Base64.NO_WRAP,
-            Base64.NO_WRAP or Base64.URL_SAFE,
-            Base64.URL_SAFE
-        )
-
         candidates.forEach { candidate ->
             if (candidate.isBlank()) return@forEach
             val padding = (4 - candidate.length % 4) % 4
             val adjusted = candidate + "=".repeat(padding)
-            flags.forEach { flag ->
+            base64DecodeFlags.forEach { flag ->
                 runCatching {
                     String(Base64.decode(adjusted, flag), StandardCharsets.UTF_8).trim()
                 }.getOrNull()?.let { return it }

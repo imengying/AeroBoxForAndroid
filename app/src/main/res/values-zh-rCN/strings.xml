@@ -126,9 +126,6 @@
     <!-- Parse / network / generic errors -->
     <string name="error_no_valid_nodes">未解析到可用节点，请检查订阅格式</string>
     <string name="error_no_valid_nodes_hints_format">未解析到可用节点。可能原因：%1$s</string>
-    <plurals name="warning_insecure_nodes_format">
-        <item quantity="other">注意：%1$d 个节点禁用了 TLS 证书校验，存在中间人攻击风险</item>
-    </plurals>
 
     <!-- Parse diagnostics hints -->
     <string name="diag_unsupported_subscription_content">订阅内容不是受支持的 sing-box、Clash 或节点链接格式</string>
@@ -329,4 +326,51 @@
 
     <!-- SubscriptionScreen -->
     <string name="subscription_loading">正在加载订阅…</string>
+    <!-- NodeEditScreen -->
+    <string name="edit_node">编辑节点</string>
+    <string name="node_edit_section_general">基本信息</string>
+    <string name="node_edit_section_authentication">身份认证</string>
+    <string name="node_edit_section_transport">传输层</string>
+    <string name="node_edit_section_protocol_options">协议选项</string>
+    <string name="node_edit_section_tls">TLS</string>
+    <string name="node_edit_name">名称</string>
+    <string name="node_edit_protocol">协议</string>
+    <string name="node_edit_server">服务器</string>
+    <string name="node_edit_port">端口</string>
+    <string name="node_edit_required">必填</string>
+    <string name="node_edit_method">加密方式</string>
+    <string name="node_edit_password">密码</string>
+    <string name="node_edit_username">用户名</string>
+    <string name="node_edit_uuid">UUID</string>
+    <string name="node_edit_security">安全类型</string>
+    <string name="node_edit_alter_id">Alter ID</string>
+    <string name="node_edit_flow">流控</string>
+    <string name="node_edit_packet_encoding">数据包编码</string>
+    <string name="node_edit_plugin">插件</string>
+    <string name="node_edit_plugin_options">插件选项</string>
+    <string name="node_edit_socks_version">SOCKS 版本</string>
+    <string name="node_edit_transport_type">传输类型</string>
+    <string name="node_edit_transport_none">无（TCP）</string>
+    <string name="node_edit_host">主机</string>
+    <string name="node_edit_path">路径</string>
+    <string name="node_edit_headers">请求头</string>
+    <string name="node_edit_grpc_service">gRPC 服务名称</string>
+    <string name="node_edit_obfs_type">混淆类型</string>
+    <string name="node_edit_obfs_password">混淆密码</string>
+    <string name="node_edit_server_ports">服务器端口</string>
+    <string name="node_edit_hop_interval">端口跳跃间隔</string>
+    <string name="node_edit_congestion_control">拥塞控制</string>
+    <string name="node_edit_udp_relay_mode">UDP 中继模式</string>
+    <string name="node_edit_heartbeat">心跳间隔</string>
+    <string name="node_edit_udp_over_stream">UDP over stream</string>
+    <string name="node_edit_zero_rtt">0-RTT 握手</string>
+    <string name="node_edit_naive_protocol">Naive 协议</string>
+    <string name="node_edit_extra_headers">附加请求头</string>
+    <string name="node_edit_tls_enabled">启用 TLS</string>
+    <string name="node_edit_sni">服务器名称（SNI）</string>
+    <string name="node_edit_allow_insecure">跳过证书验证</string>
+    <string name="node_edit_alpn">ALPN</string>
+    <string name="node_edit_fingerprint">客户端指纹</string>
+    <string name="node_edit_reality_public_key">Reality 公钥</string>
+    <string name="node_edit_reality_short_id">Reality Short ID</string>
 </resources>

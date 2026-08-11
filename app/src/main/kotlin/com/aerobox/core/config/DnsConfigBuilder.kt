@@ -16,6 +16,7 @@ import java.net.URI
  * package-private and called exclusively by the generator.
  */
 internal object DnsConfigBuilder {
+    private val supportedDnsTypes = setOf("https", "tls", "tcp", "udp", "quic")
 
     internal data class DnsServerSpec(
         val type: String,
@@ -213,7 +214,7 @@ internal object DnsConfigBuilder {
         if (spec.serverPort !in 1..65535) {
             throw LocalizedException.of(R.string.error_dns_port_invalid_format, label)
         }
-        if (spec.type !in setOf("https", "tls", "tcp", "udp", "quic")) {
+        if (spec.type !in supportedDnsTypes) {
             throw LocalizedException.of(R.string.error_dns_protocol_invalid_format, label)
         }
         if (!isValidDnsHostOrIp(spec.server)) {

@@ -18,6 +18,7 @@ import org.json.JSONObject
  */
 internal object OutboundConfigBuilder {
     private val hysteriaPortRangePattern = Regex("""^(\d{1,5})\s*-\s*(\d{1,5})$""")
+    private val supportedMuxProtocols = setOf("smux", "yamux", "h2mux")
 
     fun buildProxyOutbound(
         node: ProxyNode,
@@ -261,7 +262,7 @@ internal object OutboundConfigBuilder {
         node.muxProtocol
             ?.trim()
             ?.lowercase()
-            ?.takeIf { it in setOf("smux", "yamux", "h2mux") }
+            ?.takeIf { it in supportedMuxProtocols }
             ?.let { multiplex.put("protocol", it) }
         node.muxMaxConnections?.takeIf { it > 0 }?.let { multiplex.put("max_connections", it) }
         node.muxMinStreams?.takeIf { it > 0 }?.let { multiplex.put("min_streams", it) }
@@ -359,10 +360,14 @@ internal object OutboundConfigBuilder {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .forEach { entry ->
-                val separator = listOf(entry.indexOf(':'), entry.indexOf('='))
-                    .filter { it > 0 }
-                    .minOrNull()
-                    ?: return@forEach
+                val colon = entry.indexOf(':').takeIf { it > 0 }
+                val equals = entry.indexOf('=').takeIf { it > 0 }
+                val separator = when {
+                    colon != null && equals != null -> minOf(colon, equals)
+                    colon != null -> colon
+                    equals != null -> equals
+                    else -> return@forEach
+                }
                 val key = entry.substring(0, separator).trim()
                 val headerValue = entry.substring(separator + 1).trim()
                 if (key.isNotEmpty() && headerValue.isNotEmpty()) {

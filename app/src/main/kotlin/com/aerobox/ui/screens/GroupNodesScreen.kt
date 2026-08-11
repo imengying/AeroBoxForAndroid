@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun GroupNodesScreen(
     subscriptionId: Long,
+    onEditNode: (Long) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val isUngrouped = subscriptionId == 0L
@@ -149,6 +150,7 @@ fun GroupNodesScreen(
                 items(nodes, key = { it.id }) { node ->
                     NodeRow(
                         node = node,
+                        onEdit = { onEditNode(node.id) },
                         onDelete = { deleteNodeTarget = node }
                     )
                 }
@@ -254,9 +256,11 @@ fun GroupNodesScreen(
 @Composable
 private fun NodeRow(
     node: ProxyNode,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
+        onClick = onEdit,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
@@ -289,6 +293,12 @@ private fun NodeRow(
 
             Spacer(Modifier.width(8.dp))
 
+            IconButton(onClick = onEdit) {
+                Icon(
+                    Icons.Filled.Edit,
+                    contentDescription = stringResource(R.string.edit_node)
+                )
+            }
             IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Filled.Delete,

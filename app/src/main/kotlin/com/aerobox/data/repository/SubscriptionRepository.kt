@@ -10,6 +10,7 @@ import com.aerobox.core.errors.LocalizedException
 import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.subscription.ParseDiagnostics
 import com.aerobox.core.subscription.SubscriptionParser
+import com.aerobox.data.model.NodeLatencyState
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.model.connectionFingerprint
@@ -45,10 +46,7 @@ data class SubscriptionImportResult(
     val nodeCount: Int,
     val error: Throwable? = null,
     val metadataFromHeader: Boolean = false,
-    val diagnostics: ParseDiagnostics = ParseDiagnostics(),
-    // Number of imported nodes with TLS certificate verification disabled
-    // (allowInsecure / skip-cert-verify). Surfaces a security warning in the UI.
-    val insecureNodeCount: Int = 0
+    val diagnostics: ParseDiagnostics = ParseDiagnostics()
 )
 
 // Result of parsing inline content (local file / pasted text / single-node QR).
@@ -61,9 +59,7 @@ data class PreparedLocalImport(
     val expireTimestamp: Long,
     val metadataFromHeader: Boolean,
     val diagnostics: ParseDiagnostics
-) {
-    val insecureNodeCount: Int get() = nodes.count { it.allowInsecure }
-}
+)
 
 // Picker result used by local file / paste / single-node QR import flows.
 // Subscription-backed groups are not valid targets here (they are refreshed
@@ -185,16 +181,43 @@ class SubscriptionRepository(context: Context) {
     fun observeNodesInGroup(subscriptionId: Long) =
         proxyNodeDao.observeNodesBySubscription(subscriptionId)
 
-    suspend fun deleteNode(nodeId: Long) {
-        val node = proxyNodeDao.getNodeById(nodeId) ?: return
-        val selectedNodeId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
-        database.withTransaction {
-            proxyNodeDao.deleteById(nodeId)
-            if (node.subscriptionId > 0L) {
-                recomputeLocalGroupCount(node.subscriptionId)
-            }
+    fun observeNodeById(nodeId: Long) = proxyNodeDao.observeNodeById(nodeId)
+
+    suspend fun updateNode(node: ProxyNode): Boolean {
+        val existing = proxyNodeDao.getNodeById(node.id) ?: return false
+        return subscriptionMutationLock(existing.subscriptionId).withLock {
+            val latest = proxyNodeDao.getNodeById(node.id) ?: return@withLock false
+            val connectionChanged = latest.connectionFingerprint(includeName = false) !=
+                node.connectionFingerprint(includeName = false)
+            proxyNodeDao.update(
+                node.copy(
+                    id = latest.id,
+                    subscriptionId = latest.subscriptionId,
+                    latency = if (connectionChanged) {
+                        NodeLatencyState.UNTESTED
+                    } else {
+                        latest.latency
+                    },
+                    createdAt = latest.createdAt
+                )
+            ) > 0
         }
-        if (selectedNodeId == nodeId) {
+    }
+
+    suspend fun deleteNode(nodeId: Long) {
+        val initialNode = proxyNodeDao.getNodeById(nodeId) ?: return
+        val selectedNodeId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
+        val deleted = subscriptionMutationLock(initialNode.subscriptionId).withLock {
+            val node = proxyNodeDao.getNodeById(nodeId) ?: return@withLock false
+            database.withTransaction {
+                proxyNodeDao.deleteById(nodeId)
+                if (node.subscriptionId > 0L) {
+                    recomputeLocalGroupCount(node.subscriptionId)
+                }
+            }
+            true
+        }
+        if (deleted && selectedNodeId == nodeId) {
             PreferenceManager.setLastSelectedNodeId(appContext, 0L)
         }
     }
@@ -265,8 +288,7 @@ class SubscriptionRepository(context: Context) {
                 nodeCount = prepared.nodes.size,
                 error = null,
                 metadataFromHeader = prepared.metadataFromHeader,
-                diagnostics = prepared.diagnostics,
-                insecureNodeCount = prepared.nodes.count { it.allowInsecure }
+                diagnostics = prepared.diagnostics
             )
         }.getOrElse { error ->
             val diagnostics = (error as? NoValidNodesException)?.diagnostics ?: ParseDiagnostics()
@@ -561,8 +583,7 @@ class SubscriptionRepository(context: Context) {
             subscriptionId = subscriptionId,
             nodeCount = nodes.size,
             metadataFromHeader = prepared.metadataFromHeader,
-            diagnostics = prepared.diagnostics,
-            insecureNodeCount = nodes.count { it.allowInsecure }
+            diagnostics = prepared.diagnostics
         )
     }
 
@@ -634,8 +655,7 @@ class SubscriptionRepository(context: Context) {
             subscriptionId = subscriptionId,
             nodeCount = nodes.size,
             metadataFromHeader = prepared.metadataFromHeader,
-            diagnostics = prepared.diagnostics,
-            insecureNodeCount = nodes.count { it.allowInsecure }
+            diagnostics = prepared.diagnostics
         )
     }
 
@@ -855,8 +875,7 @@ class SubscriptionRepository(context: Context) {
                             expireTimestamp = prepared.expireTimestamp,
                             summary = outcome.summary,
                             metadataFromHeader = prepared.metadataFromHeader,
-                            diagnostics = prepared.diagnostics,
-                            insecureNodeCount = outcome.persistedNodes.count { it.allowInsecure }
+                            diagnostics = prepared.diagnostics
                         )
                     }
                 }

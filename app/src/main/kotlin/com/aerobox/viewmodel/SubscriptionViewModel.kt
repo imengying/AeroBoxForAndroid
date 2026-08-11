@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.aerobox.R
 import com.aerobox.AeroBoxApplication
 import com.aerobox.core.subscription.ParseDiagnostics
+import com.aerobox.core.subscription.insecureOptionKeys
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.model.isLocalGroup
 import com.aerobox.data.repository.ImportGroupTarget
@@ -58,6 +59,18 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         const val DEFAULT_CONFIG_ERROR = "Configuration error"
         const val DEFAULT_UNKNOWN_ERROR = "Unknown error"
         const val MAX_LOCAL_IMPORT_BYTES = 8L * 1024L * 1024L
+        private val HTTP_PROXY_QUERY_KEYS = insecureOptionKeys + setOf(
+            "uot",
+            "udp_over_tcp",
+            "udp-over-tcp",
+            "tcp_fast_open",
+            "tcp-fast-open",
+            "tfo",
+            "bind_interface",
+            "bind-interface",
+            "connect_timeout",
+            "connect-timeout"
+        )
     }
 
     private val appContext = application.applicationContext
@@ -210,7 +223,6 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             val updatedCount = successResults.sumOf { it.summary.updatedCount }
             val deletedCount = successResults.sumOf { it.summary.deletedCount }
             val metadataCount = successResults.count { it.metadataFromHeader }
-            val insecureCount = successResults.sumOf { it.insecureNodeCount }
             if (failCount == 0) {
                 _uiMessage.tryEmit(
                     buildString {
@@ -228,15 +240,6 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                                 appCountString(
                                     R.plurals.subscription_update_metadata_suffix,
                                     metadataCount
-                                )
-                            )
-                        }
-                        if (insecureCount > 0) {
-                            append('\n')
-                            append(
-                                appCountString(
-                                    R.plurals.warning_insecure_nodes_format,
-                                    insecureCount
                                 )
                             )
                         }
@@ -263,15 +266,6 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                                 appCountString(
                                     R.plurals.subscription_update_metadata_suffix,
                                     metadataCount
-                                )
-                            )
-                        }
-                        if (insecureCount > 0) {
-                            append('\n')
-                            append(
-                                appCountString(
-                                    R.plurals.warning_insecure_nodes_format,
-                                    insecureCount
                                 )
                             )
                         }
@@ -496,25 +490,9 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         val path = parsed.encodedPath.orEmpty()
         val hasNoPath = path.isBlank() || path == "/"
         if (hasNoPath && !parsed.fragment.isNullOrBlank()) return true
-        val proxyQueryKeys = setOf(
-            "allowInsecure",
-            "allow_insecure",
-            "insecure",
-            "skip-cert-verify",
-            "uot",
-            "udp_over_tcp",
-            "udp-over-tcp",
-            "tcp_fast_open",
-            "tcp-fast-open",
-            "tfo",
-            "bind_interface",
-            "bind-interface",
-            "connect_timeout",
-            "connect-timeout"
-        )
         return runCatching {
             parsed.queryParameterNames.any { key ->
-                proxyQueryKeys.any { it.equals(key, ignoreCase = true) }
+                HTTP_PROXY_QUERY_KEYS.any { it.equals(key, ignoreCase = true) }
             }
         }.getOrDefault(false)
     }
@@ -537,15 +515,6 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
                 append(successPrefix)
                 if (result.metadataFromHeader) {
                     append(appString(R.string.import_success_metadata_suffix))
-                }
-                if (result.insecureNodeCount > 0) {
-                    append('\n')
-                    append(
-                        appCountString(
-                            R.plurals.warning_insecure_nodes_format,
-                            result.insecureNodeCount
-                        )
-                    )
                 }
             }
         }
@@ -667,15 +636,6 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             }
             if (result.metadataFromHeader) {
                 append(appString(R.string.subscription_update_metadata_single_suffix))
-            }
-            if (result.insecureNodeCount > 0) {
-                append('\n')
-                append(
-                    appCountString(
-                        R.plurals.warning_insecure_nodes_format,
-                        result.insecureNodeCount
-                    )
-                )
             }
         }
     }

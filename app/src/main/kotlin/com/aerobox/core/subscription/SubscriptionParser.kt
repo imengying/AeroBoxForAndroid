@@ -69,7 +69,7 @@ internal fun parseUdpOverTcpValue(value: Any?): Pair<Boolean?, Int?> {
 
 object SubscriptionParser {
     private const val TAG = "SubscriptionParser"
-    internal val supportedTransportTypes = setOf("ws", "grpc", "http", "h2", "httpupgrade", "quic")
+    private val informationalSeparators = charArrayOf(':', '|', ';', ',')
 
     private val trafficInfoPrefixes = listOf(
         "剩余流量",
@@ -313,7 +313,7 @@ object SubscriptionParser {
             .trim()
             .trimStart { it.isWhitespace() || !it.isLetterOrDigit() }
 
-        listOf(':', '|', ';', ',').forEach { separator ->
+        informationalSeparators.forEach { separator ->
             val separatorIndex = normalizedName.indexOf(separator)
             if (separatorIndex > 0 && separatorIndex < normalizedName.lastIndex) {
                 val prefix = normalizedName.substring(0, separatorIndex).trim()
