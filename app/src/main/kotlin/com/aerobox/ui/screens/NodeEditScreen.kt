@@ -47,11 +47,12 @@ import com.aerobox.AeroBoxApplication
 import com.aerobox.R
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
+import com.aerobox.data.model.supportedProxyTransports
 import com.aerobox.ui.components.AppSnackbarHost
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
-private val transportOptions = listOf("", "ws", "grpc", "http", "h2", "httpupgrade", "quic")
+private val transportOptions = listOf("") + supportedProxyTransports
 private val naiveProtocolOptions = listOf("https", "quic")
 
 @Composable
@@ -61,16 +62,15 @@ fun NodeEditScreen(
 ) {
     val repository = AeroBoxApplication.subscriptionRepository
     var node by remember(nodeId) { mutableStateOf<ProxyNode?>(null) }
-    var observed by remember(nodeId) { mutableStateOf(false) }
 
     LaunchedEffect(nodeId) {
-        repository.observeNodeById(nodeId).collectLatest { current ->
-            node = current
-            observed = true
+        repository.observeNodeById(nodeId).collect { current ->
+            if (current == null) {
+                onNavigateBack()
+            } else {
+                node = current
+            }
         }
-    }
-    LaunchedEffect(observed, node) {
-        if (observed && node == null) onNavigateBack()
     }
 
     val currentNode = node
@@ -441,7 +441,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.transportFields(
     item {
         NodeDropdownField(
             value = transport,
-            options = (transportOptions + transport).distinct(),
+            options = if (transport in transportOptions) transportOptions else transportOptions + transport,
             label = R.string.node_edit_transport_type,
             emptyLabel = R.string.node_edit_transport_none,
             onValueChange = { onDraftChange(draft.copy(transportType = it.ifEmpty { null })) }

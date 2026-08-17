@@ -157,7 +157,7 @@ data class ProxyNode(
 )
 
 internal val supportedProxyNetworks = setOf("tcp", "udp")
-internal val supportedProxyTransports = setOf("ws", "grpc", "http", "h2", "httpupgrade", "quic")
+internal val supportedProxyTransports = listOf("ws", "grpc", "http", "h2", "httpupgrade", "quic")
 
 private fun String?.normalizedProxyField(): String? {
     val normalized = this

@@ -358,13 +358,7 @@ fun SubscriptionScreen(
                 items(orderedSubscriptions, key = { it.id }) { subscription ->
                     SubscriptionItem(
                         subscription = subscription,
-                        onOpen = {
-                            if (subscription.isLocalGroup()) {
-                                onNavigateToGroupNodes(subscription.id)
-                            } else {
-                                editTarget = subscription
-                            }
-                        },
+                        onOpen = { onNavigateToGroupNodes(subscription.id) },
                         onEdit = { editTarget = subscription },
                         onUpdate = { viewModel.updateSubscription(subscription) },
                         onDelete = { deleteTarget = subscription },

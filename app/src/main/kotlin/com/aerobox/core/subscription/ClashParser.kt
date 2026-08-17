@@ -94,7 +94,7 @@ object ClashParser {
             joinedValue(map, "mport")
         )
         val port: Int = intValue(map, "port")
-            ?: (if (type == ProxyType.HYSTERIA2) firstPortFromPortList(hysteriaServerPorts) else null)
+            ?: (if (type == ProxyType.HYSTERIA2) UriNodeParser.firstPortFromPortList(hysteriaServerPorts) else null)
             ?: (if (type == ProxyType.NAIVE) 443 else null)
             ?: return ProxyParseResult.Ignored("missing_clash_endpoint")
         val naiveProtocol = if (type == ProxyType.NAIVE) {
@@ -140,7 +140,7 @@ object ClashParser {
         val transportType = if (type == ProxyType.NAIVE && naiveProtocol == "quic") {
             "quic"
         } else {
-            resolveTransportType(network)
+            UriNodeParser.resolveTransportType(network)
         }
         if (network != null && network.lowercase() != "tcp" && transportType == null) {
             return ProxyParseResult.Ignored("unsupported_clash_transport")
@@ -596,9 +596,6 @@ object ClashParser {
         }
     }
 
-    private fun firstPortFromPortList(serverPorts: String?): Int? =
-        UriNodeParser.firstPortFromPortList(serverPorts)
-
     private fun booleanValue(source: Any?, vararg path: String): Boolean? {
         val resolved = value(source, *path) ?: return null
         return when (resolved) {
@@ -621,9 +618,6 @@ object ClashParser {
             else -> null
         }
     }
-
-    private fun resolveTransportType(rawNetwork: String?): String? =
-        UriNodeParser.resolveTransportType(rawNetwork)
 
     private fun firstNonBlank(vararg values: String?): String? =
         UriNodeParser.firstNonBlank(*values)

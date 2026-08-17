@@ -84,9 +84,7 @@ fun GroupNodesScreen(
     }
 
     val editableSubscription = subscription?.takeIf { !isUngrouped && it.isLocalGroup() }
-    val isEditableLocalGroup = editableSubscription != null
-    val ungroupedLabel = stringResource(R.string.group_ungrouped)
-    val groupName = if (isUngrouped) ungroupedLabel else subscription?.name.orEmpty()
+    val groupName = if (isUngrouped) stringResource(R.string.group_ungrouped) else subscription?.name.orEmpty()
 
     Scaffold(
         topBar = {
@@ -104,7 +102,7 @@ fun GroupNodesScreen(
                     }
                 },
                 actions = {
-                    if (isEditableLocalGroup) {
+                    if (editableSubscription != null) {
                         IconButton(onClick = { showRenameDialog = true }) {
                             Icon(
                                 Icons.Filled.Edit,
