@@ -162,14 +162,6 @@ object ConfigGenerator {
         return config.toString(2)
     }
 
-    // ── Public utility methods ──────────────────────────────────────
-
-    fun normalizedServerHost(server: String): String = normalizeOutboundServer(server)
-
-    fun isIpv6ServerLiteral(server: String): Boolean = isIpv6Literal(server)
-
-    fun isIpLiteralHost(host: String): Boolean = isIpLiteral(host)
-
     // ── Shared internal utilities ───────────────────────────────────
 
     internal fun normalizeOutboundServer(server: String): String {

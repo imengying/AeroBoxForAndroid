@@ -38,7 +38,6 @@ class AppUpdateRepository(
             return AppUpdateInfo(
                 currentVersion = currentVersion,
                 latestVersion = latestVersion,
-                latestTag = latestTag,
                 releaseUrl = releaseUrl,
                 isUpdateAvailable = comparison < 0
             )
@@ -64,7 +63,6 @@ class AppUpdateRepository(
             .substringBefore('-')
         if (normalized.isBlank()) return null
         val parts = normalized.split('.')
-        if (parts.isEmpty()) return null
         return parts.map { part ->
             part.toIntOrNull() ?: return null
         }
@@ -80,7 +78,6 @@ class AppUpdateRepository(
 data class AppUpdateInfo(
     val currentVersion: String,
     val latestVersion: String,
-    val latestTag: String,
     val releaseUrl: String,
     val isUpdateAvailable: Boolean
 )

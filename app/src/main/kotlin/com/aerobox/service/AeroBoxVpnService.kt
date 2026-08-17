@@ -10,7 +10,6 @@ import android.net.IpPrefix
 import android.net.Network
 import android.net.VpnService
 import android.os.Build
-import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.util.Log
@@ -41,7 +40,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -74,8 +72,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         private val coreLogBracketRegex = Regex("""(?i)(FATAL|PANIC|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)\[\d{4}\]\s?""")
         // Matches "error: ", "warn: ", etc.
         private val coreLogColonRegex = Regex("""(?i)(fatal|panic|error|warn(?:ing)?|info|debug|trace):\s?""")
-
-        val isServiceActive: StateFlow<Boolean> = VpnStateManager.serviceActive
 
         @Volatile
         private var activeServiceReference: WeakReference<AeroBoxVpnService>? = null
@@ -207,8 +203,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             }
         }
     }
-
-    override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {

@@ -344,8 +344,7 @@ object SubscriptionParser {
             .trim()
             .trim(' ', ':', '|', ';', ',', '-', '_', '/', '\\', '(', ')', '[', ']', '【', '】', '。', '.', '!', '！')
 
-        return permanentValidityValuePattern.matches(normalizedValue) ||
-            permanentValidityValuePattern.containsMatchIn(normalizedValue)
+        return permanentValidityValuePattern.matches(normalizedValue)
     }
 
     private fun parseTrafficBytes(value: String): Long? {

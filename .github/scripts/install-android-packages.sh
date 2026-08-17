@@ -14,5 +14,5 @@ fi
   set +o pipefail
   yes | "${SDKMANAGER}" --licenses >/dev/null
 )
-"${SDKMANAGER}" "platforms;android-37.0" "build-tools;37.0.0" "ndk;${ANDROID_NDK_VERSION}"
+"${SDKMANAGER}" "platforms;android-37.1" "build-tools;37.0.0" "ndk;${ANDROID_NDK_VERSION}"
 echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "${GITHUB_ENV}"

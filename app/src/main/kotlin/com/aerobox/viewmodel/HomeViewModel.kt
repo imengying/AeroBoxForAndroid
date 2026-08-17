@@ -83,7 +83,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val vpnState: StateFlow<VpnState> = VpnStateManager.vpnState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VpnState())
 
-    val isServiceActive: StateFlow<Boolean> = VpnStateManager.serviceActive
+    private val isServiceActive: StateFlow<Boolean> = VpnStateManager.serviceActive
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val isConnecting: StateFlow<Boolean> = combine(isServiceActive, vpnState) { serviceActive, state ->
@@ -104,7 +104,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         .map { it.toTrafficStats() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrafficStats())
 
-    val allNodes: StateFlow<List<ProxyNode>> = nodeDao.getAllNodes()
+    private val allNodes: StateFlow<List<ProxyNode>> = nodeDao.getAllNodes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _nodeLatencyOverrides = MutableStateFlow<Map<Long, Int>>(emptyMap())

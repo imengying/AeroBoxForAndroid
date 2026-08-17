@@ -16,10 +16,10 @@ object NodeAddressFamilyResolver {
     suspend fun isIpv6Only(node: ProxyNode): Boolean = isIpv6Only(node.server)
 
     suspend fun isIpv6Only(server: String): Boolean {
-        val host = ConfigGenerator.normalizedServerHost(server)
+        val host = ConfigGenerator.normalizeOutboundServer(server)
         if (host.isBlank()) return false
-        if (ConfigGenerator.isIpv6ServerLiteral(server)) return true
-        if (ConfigGenerator.isIpLiteralHost(host)) return false
+        if (ConfigGenerator.isIpv6Literal(server)) return true
+        if (ConfigGenerator.isIpLiteral(host)) return false
 
         val addresses = withTimeoutOrNull(LOOKUP_TIMEOUT_MS) {
             resolveAddresses(host)

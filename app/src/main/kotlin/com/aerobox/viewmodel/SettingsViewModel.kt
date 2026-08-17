@@ -62,9 +62,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _availableAppUpdate = MutableStateFlow<AppUpdateInfo?>(null)
     val availableAppUpdate: StateFlow<AppUpdateInfo?> = _availableAppUpdate.asStateFlow()
 
-    val darkMode: StateFlow<String> = PreferenceManager.darkModeFlow(appContext)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "system")
-
     val languageTag: StateFlow<String> = PreferenceManager.languageTagFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppLocaleManager.SYSTEM_LANGUAGE_TAG)
 

@@ -18,7 +18,7 @@ UPSTREAM_HASHES = {
     "experimental/libbox/fdroid_mirrors.go": "5a069edecf0766ab35d7dea57ca99dfe3c5307875304179f2767d57a11ca4ed3",
     "experimental/libbox/http.go": "157657c37e10257088b40a7ce4918ebfab1516df5446d396595a619ea655a7c1",
     "experimental/libbox/pprof.go": "8be57f35cedebcff7e325133ce162c2b602162e606362c4f42a1c4c6a12dd3d1",
-    "experimental/libbox/profile_import.go": "0ed4698d7dfd428dc3bd65bacec88a56b414892f46ee4e09d76e5e8f2a881254",
+    "experimental/libbox/profile_import.go": "df883b526a5f63c799d6713b90fa7d61927164788333bf603e423c0a9ba3c135",
     "experimental/libbox/remote_profile.go": "63b30392f33b8cd0d6787105d64a3787446aeefbe24cbb506756131d94d2f895",
     "experimental/libbox/semver.go": "bb023f05f9fbd0ef05802e5006f755880ca2cfb00c8694bca9e585fa1c75c277",
     "experimental/libbox/semver_test.go": "dd0901f2b0ddfc7a4564d067c16f53dc90e11157a810ce2658940fb8de13f9d2",

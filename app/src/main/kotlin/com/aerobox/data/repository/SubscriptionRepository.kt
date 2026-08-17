@@ -110,8 +110,6 @@ class SubscriptionRepository(context: Context) {
             Regex("""filename\*\s*=\s*UTF-8''([^;]+)""", RegexOption.IGNORE_CASE)
         private val CONTENT_DISPOSITION_FILENAME_REGEX =
             Regex("""filename\s*=\s*"?([^";]+)"?""", RegexOption.IGNORE_CASE)
-
-        internal val sharedClient get() = SharedHttpClient.base
     }
 
     private sealed interface RefreshCommitOutcome {
@@ -727,7 +725,7 @@ class SubscriptionRepository(context: Context) {
                 .header("Accept-Encoding", "identity")
                 .header("Connection", "keep-alive")
                 .build()
-            val call = sharedClient.newCall(request)
+            val call = SharedHttpClient.base.newCall(request)
             cont.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
@@ -870,12 +868,8 @@ class SubscriptionRepository(context: Context) {
                         )
                         return@withLock SubscriptionUpdateResult(
                             subscriptionId = outcome.subscription.id,
-                            nodeCount = outcome.persistedNodes.size,
-                            trafficBytes = prepared.trafficBytes,
-                            expireTimestamp = prepared.expireTimestamp,
                             summary = outcome.summary,
-                            metadataFromHeader = prepared.metadataFromHeader,
-                            diagnostics = prepared.diagnostics
+                            metadataFromHeader = prepared.metadataFromHeader
                         )
                     }
                 }
@@ -1008,7 +1002,6 @@ class SubscriptionRepository(context: Context) {
         val matchedIds = mutableSetOf<Long>()
         var addedCount = 0
         var updatedCount = 0
-        var unchangedCount = 0
 
         refreshedNodes.forEach { node ->
             val existingNode = node.id.takeIf { it > 0L }?.let { existingById[it] }
@@ -1016,9 +1009,7 @@ class SubscriptionRepository(context: Context) {
                 addedCount++
             } else {
                 matchedIds += existingNode.id
-                if (existingNode.connectionFingerprint() == node.connectionFingerprint()) {
-                    unchangedCount++
-                } else {
+                if (existingNode.connectionFingerprint() != node.connectionFingerprint()) {
                     updatedCount++
                 }
             }
@@ -1028,8 +1019,7 @@ class SubscriptionRepository(context: Context) {
         return SubscriptionUpdateSummary(
             addedCount = addedCount,
             updatedCount = updatedCount,
-            deletedCount = deletedCount,
-            unchangedCount = unchangedCount
+            deletedCount = deletedCount
         )
     }
 
