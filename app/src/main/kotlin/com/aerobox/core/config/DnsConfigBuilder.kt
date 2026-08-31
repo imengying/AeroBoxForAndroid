@@ -59,7 +59,6 @@ internal object DnsConfigBuilder {
             return JSONObject()
                 .put("servers", JSONArray().put(directServer).put(localResolverServer).put(bootstrapServer))
                 .put("final", ConfigGenerator.DNS_DIRECT_TAG)
-                .put("independent_cache", true)
                 .put("strategy", ipv6Mode.domainStrategy())
         }
 
@@ -85,7 +84,6 @@ internal object DnsConfigBuilder {
         val dns = JSONObject()
             .put("servers", servers)
             .put("final", ConfigGenerator.DNS_REMOTE_TAG)
-            .put("independent_cache", true)
             .put("strategy", if (nodeIsIpv6Only) "prefer_ipv6" else ipv6Mode.domainStrategy())
 
         val dnsRules = JSONArray()

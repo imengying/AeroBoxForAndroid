@@ -89,6 +89,7 @@ internal object OutboundConfigBuilder {
 
             ProxyType.HYSTERIA2 -> {
                 outbound.put("type", "hysteria2")
+                outbound.put("disable_chrome_parrot", true)
                 node.password?.takeIf { it.isNotBlank() }?.let { outbound.put("password", it) }
                 outbound.put("tls", buildTlsObject(node))
                 enabledNetwork?.let { outbound.put("network", it) }

@@ -118,7 +118,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-core")
     // material-icons-extended remains removed to avoid pulling the full icon set
 
-    implementation("androidx.navigation:navigation-compose:2.9.8")
+    implementation("androidx.navigation:navigation-compose:2.10.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 
@@ -131,7 +131,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:5.5.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
-    implementation("org.yaml:snakeyaml:2.6")
+    implementation("org.yaml:snakeyaml:2.7")
     implementation("org.tukaani:xz:1.12")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 

@@ -16,7 +16,6 @@ import java.net.Inet6Address
 import java.net.InetSocketAddress
 import java.net.InterfaceAddress
 import java.net.NetworkInterface
-import java.security.KeyStore
 import io.nekohasekai.libbox.NetworkInterface as LibboxNetworkInterface
 
 /**
@@ -130,35 +129,6 @@ interface PlatformInterfaceWrapper : PlatformInterface {
     override fun readWIFIState(): WIFIState? = null
 
     override fun localDNSTransport(): LocalDNSTransport? = LocalResolverTransport
-
-    override fun systemCertificates(): StringIterator {
-        // Wrap the whole walk: KeyStore.load / aliases / getCertificate may
-        // each throw KeyStoreException / CertificateEncodingException, and
-        // libbox calls this from a JNI thread where an unhandled exception
-        // would surface as a Go panic.
-        val certificates = runCatching {
-            val keyStore = KeyStore.getInstance("AndroidCAStore")
-            keyStore.load(null, null)
-            buildList {
-                val aliases = keyStore.aliases()
-                while (aliases.hasMoreElements()) {
-                    val cert = runCatching {
-                        keyStore.getCertificate(aliases.nextElement())
-                    }.getOrNull() ?: continue
-                    val encoded = runCatching { cert.encoded }.getOrNull() ?: continue
-                    add(
-                        "-----BEGIN CERTIFICATE-----\n" +
-                                android.util.Base64.encodeToString(
-                                    encoded,
-                                    android.util.Base64.NO_WRAP
-                                ) +
-                                "\n-----END CERTIFICATE-----"
-                    )
-                }
-            }
-        }.getOrDefault(emptyList())
-        return StringArray(certificates.iterator())
-    }
 
     // ── Iterator helpers ──
 
