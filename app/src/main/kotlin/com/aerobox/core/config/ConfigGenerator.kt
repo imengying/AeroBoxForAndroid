@@ -64,7 +64,7 @@ object ConfigGenerator {
         config.put(
             "log",
             JSONObject()
-                .put("level", "info")
+                .put("level", "error")
                 .put("timestamp", true)
         )
 

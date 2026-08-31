@@ -61,7 +61,9 @@ internal object OutboundConfigBuilder {
                 node.globalPadding?.let { outbound.put("global_padding", it) }
                 node.authenticatedLength?.let { outbound.put("authenticated_length", it) }
                 node.packetEncoding?.takeIf { it.isNotBlank() }?.let { outbound.put("packet_encoding", it) }
-                outbound.put("tls", buildTlsObject(node))
+                if (node.tls) {
+                    outbound.put("tls", buildTlsObject(node))
+                }
                 enabledNetwork?.let { outbound.put("network", it) }
             }
 
@@ -70,7 +72,9 @@ internal object OutboundConfigBuilder {
                 node.uuid?.takeIf { it.isNotBlank() }?.let { outbound.put("uuid", it) }
                 node.flow?.takeIf { it.isNotBlank() }?.let { outbound.put("flow", it) }
                 node.packetEncoding?.takeIf { it.isNotBlank() }?.let { outbound.put("packet_encoding", it) }
-                outbound.put("tls", buildTlsObject(node, includeReality = true))
+                if (node.tls || !node.publicKey.isNullOrBlank()) {
+                    outbound.put("tls", buildTlsObject(node, includeReality = true))
+                }
                 enabledNetwork?.let { outbound.put("network", it) }
             }
 
@@ -84,7 +88,7 @@ internal object OutboundConfigBuilder {
             ProxyType.ANYTLS -> {
                 outbound.put("type", "anytls")
                 node.password?.takeIf { it.isNotBlank() }?.let { outbound.put("password", it) }
-                outbound.put("tls", buildTlsObject(node, forceEnabled = true))
+                outbound.put("tls", buildTlsObject(node))
             }
 
             ProxyType.HYSTERIA2 -> {
@@ -380,13 +384,10 @@ internal object OutboundConfigBuilder {
 
     private fun buildTlsObject(
         node: ProxyNode,
-        includeReality: Boolean = false,
-        forceEnabled: Boolean = false
+        includeReality: Boolean = false
     ): JSONObject {
-        // Force TLS enabled when Reality is in use — Reality requires TLS.
-        val effectiveTls = forceEnabled || node.tls || (includeReality && !node.publicKey.isNullOrBlank())
         val tls = JSONObject()
-            .put("enabled", effectiveTls)
+            .put("enabled", true)
         val sniToUse = node.sni?.takeIf { it.isNotBlank() } ?: if (includeReality) node.server else null
         sniToUse?.let { tls.put("server_name", it) }
         applyCommonTlsFields(tls, node)

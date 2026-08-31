@@ -12,7 +12,9 @@ import (
 	"github.com/sagernet/sing-box/common/urltest"
 	"github.com/sagernet/sing-box/experimental/v2rayapi"
 	"github.com/sagernet/sing-box/option"
+	tun "github.com/sagernet/sing-tun"
 	E "github.com/sagernet/sing/common/exceptions"
+	"github.com/sagernet/sing/common/logger"
 	"github.com/sagernet/sing/service"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -32,25 +34,42 @@ type urlTestPlatformInterface struct {
 }
 
 func (i *urlTestPlatformInterface) UsePlatformAutoDetectInterfaceControl() bool {
-	return true
+	return i.platformInterface != nil
 }
 
 func (i *urlTestPlatformInterface) AutoDetectInterfaceControl(fd int) error {
+	if i.platformInterface == nil {
+		return nil
+	}
 	return i.platformInterface.AutoDetectInterfaceControl(int32(fd))
 }
 
 func (i *urlTestPlatformInterface) UsePlatformDefaultInterfaceMonitor() bool {
-	return false
+	return true
+}
+
+func (i *urlTestPlatformInterface) CreateDefaultInterfaceMonitor(logger logger.Logger) tun.DefaultInterfaceMonitor {
+	return &urlTestInterfaceMonitor{}
+}
+
+type urlTestInterfaceMonitor struct {
+	interfaceMonitorStub
+}
+
+func (m *urlTestInterfaceMonitor) Start() error {
+	return nil
+}
+
+func (m *urlTestInterfaceMonitor) Close() error {
+	return nil
 }
 
 func urlTestOutbound(configContent string, outboundTag string, testURL string, timeout int32, platformInterface PlatformInterface) (int32, error) {
 	ctx := baseContext(platformInterface)
-	if platformInterface != nil {
-		ctx = service.ContextWith[adapter.PlatformInterface](ctx, &urlTestPlatformInterface{
-			platformInterfaceStub: &platformInterfaceStub{},
-			platformInterface:     platformInterface,
-		})
-	}
+	ctx = service.ContextWith[adapter.PlatformInterface](ctx, &urlTestPlatformInterface{
+		platformInterfaceStub: &platformInterfaceStub{},
+		platformInterface:     platformInterface,
+	})
 	options, err := parseConfig(ctx, configContent)
 	if err != nil {
 		return 0, E.Cause(err, "parse config")
