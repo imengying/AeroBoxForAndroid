@@ -23,12 +23,12 @@ UPSTREAM_HASHES = {
     "experimental/libbox/remote_profile.go": "63b30392f33b8cd0d6787105d64a3787446aeefbe24cbb506756131d94d2f895",
     "experimental/libbox/semver.go": "dbcf34248eb9ad06fae1f5fca667045fcb1b0e4f5ea0de37dc5c62ddb7eb49b6",
     "experimental/libbox/semver_test.go": "dd0901f2b0ddfc7a4564d067c16f53dc90e11157a810ce2658940fb8de13f9d2",
-    "experimental/libbox/platform.go": "4724c0385a23574f622d4127afce40d7a1451a4fed35c7e60756f80691c32fe4",
+    "experimental/libbox/platform.go": "b25817582c554d713f49d23267850d79893620862f55ffbc538e887422b6ea9e",
     "experimental/libbox/service.go": "6539b080a3db16ec4ba6150c1e445e8b2da57434be07a0b4de44d1bd97687c04",
     "experimental/libbox/config.go": "0f140bfa9897231be300263040c65f87c23167f31ca38dbc0a00c1fa8008d304",
-    "experimental/libbox/command_server.go": "34f67c9516299f59b2c71b1ba33bed467c92fbfb2a9b762ca02616acc44597f0",
-    "experimental/libbox/setup.go": "6a852e89d23a230365be515918cfe43696b0850a6f8472f73aeed24b059ff180",
-    "experimental/libbox/monitor.go": "03d2891e80cea4a8681c7c25602ea896c3fa577a18c934a6722528b70f930508",
+    "experimental/libbox/command_server.go": "7c1bdad02ee81c397e56eb326994a2a75c435531afaeaf643d7c971446be344d",
+    "experimental/libbox/setup.go": "688a3286ab733f2a94aa05a5259460519c86fe627b9126475f05cd67c5ee0512",
+    "experimental/libbox/monitor.go": "cfbfe1e35ecebc375f35b3a44d165ec78c3c157228b3ed6c315a31f45cdf4c2f",
     "experimental/libbox/bridge_service_darwin.go": "74aeb9334cef49f231dc743c8e0eb021db65cf5fa7d0d2d927c0c5a40f6835cf",
     "experimental/libbox/bridge_service_linux.go": "615814c3ed53d0cbfa411c51c54e7fab040e8dba56d72b932f02a06f040ccb7c",
     "experimental/libbox/bridge_stub.go": "7bb780f47fadcbd57dd4ea0409294b42bc0011e8ea49fbed135add1eddae01bd",
@@ -55,8 +55,8 @@ UPSTREAM_HASHES = {
     "experimental/libbox/neighbor_stub.go": "0f4b407df01d1c754335e340ff4c87539e38df60893c5cdbb8f51b08398174bc",
     "experimental/libbox/neighbor_unix.go": "9cda1d0d694bca72be0f345f7a9e8cee3bcc2e7b36735ca00803c8d7b9d0c73c",
     "experimental/libbox/networkquality.go": "6dc6e3b4baf8c03aeee235788abd9732fcb436ff2df9aad919628bc84cbf8588",
-    "experimental/libbox/oom_report.go": "4d733d19ddd76ed33193403530e8e3cafe2bbab3d18af4163830d0234ff69ec1",
-    "experimental/libbox/power_report.go": "9b290831a753569c490d75272ca4c1a618026612ca4a2f8c69508313fea5f6a0",
+    "experimental/libbox/oom_report.go": "619ff7c12181600c721f65356a37f294c40e54b7933b58970b9329d0f9fbf581",
+    "experimental/libbox/power_report.go": "52098d7c65096aa5b66e5c8adb0cc016ba597f095164f0f5fdbaf2ec1bff334f",
     "experimental/libbox/report.go": "b15bc07557f644afe2a903c136760441e75acc0956d448e8b656b0f4aadfff23",
     "experimental/libbox/ssh_shell.go": "67a29a74f2da51306625bf34891a21d89e0408729be732d2be4a91b54c6ae829",
     "experimental/libbox/stun.go": "f46eebc255678de7653126229d2b24378566d31a6e32c200ff097ab6cf1cb570",
@@ -263,6 +263,20 @@ def patch_monitor() -> None:
     remove_once(path, '\t"github.com/sagernet/sing-box/service/powerreport"\n')
     remove_once(
         path,
+        "func (m *platformDefaultInterfaceMonitor) UpdateNetworkPath(networkPath string) {\n"
+        "\tm.logger.Debug(\"updated network path: \", networkPath)\n"
+        "\tif m.powerManager == nil {\n"
+        "\t\treturn\n"
+        "\t}\n"
+        "\trecorder := m.powerManager.Recorder()\n"
+        "\tif recorder == nil {\n"
+        "\t\treturn\n"
+        "\t}\n"
+        "\trecorder.UpdateNetworkPath(networkPath)\n"
+        "}\n\n",
+    )
+    remove_once(
+        path,
         "\tvar recorder *powerreport.Recorder\n"
         "\tif m.powerManager != nil {\n"
         "\t\trecorder = m.powerManager.Recorder()\n"
@@ -290,6 +304,7 @@ def patch_command_server() -> None:
     remove_once(path, '\t"github.com/sagernet/sing-box/service/oomkiller"\n')
     remove_once(path, '\t"github.com/sagernet/sing-box/service/powerreport"\n')
     remove_once(path, "\tpowerManager      *powerreport.Manager\n")
+    remove_once(path, "\toomRecorder       *oomkiller.Recorder\n")
     remove_once(path, "\tTriggerNativeCrash() error\n")
     remove_once(path, "\tConnectSSHAgent() (int32, error)\n")
     remove_once(
@@ -307,12 +322,14 @@ def patch_command_server() -> None:
     )
     replace_once(
         path,
-        "\treporter := &oomReporter{startedService: server.StartedService}\n"
-        "\tservice.MustRegister[oomkiller.OOMReporter](ctx, reporter)\n"
+        "\toomRecorder := oomkiller.NewRecorder(OOMRecorderOptions(server.StartedService))\n"
+        "\tservice.MustRegister[*oomkiller.Recorder](ctx, oomRecorder)\n"
+        "\toomRecorder.Start()\n"
+        "\tserver.oomRecorder = oomRecorder\n"
         "\tserver.managedService = daemon.NewManagedService(daemon.ManagedServiceOptions{\n"
         "\t\tHandler:     (*platformHandler)(server),\n"
         "\t\tDebug:       sDebug,\n"
-        "\t\tOOMReporter: reporter,\n"
+        "\t\tOOMRecorder: oomRecorder,\n"
         "\t})\n"
         "\tif sPowerReportEnabled {\n"
         "\t\terr := powerManager.Start(PowerReportOptions(server.StartedService))\n"
@@ -326,6 +343,7 @@ def patch_command_server() -> None:
         "\t})\n",
     )
     remove_once(path, "\ts.powerManager.Close()\n")
+    remove_once(path, "\ts.oomRecorder.Close()\n")
     remove_once(
         path,
         "\tsaveConfigSnapshot(configContent)\n"

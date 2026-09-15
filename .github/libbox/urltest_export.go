@@ -34,13 +34,10 @@ type urlTestPlatformInterface struct {
 }
 
 func (i *urlTestPlatformInterface) UsePlatformAutoDetectInterfaceControl() bool {
-	return i.platformInterface != nil
+	return true
 }
 
 func (i *urlTestPlatformInterface) AutoDetectInterfaceControl(fd int) error {
-	if i.platformInterface == nil {
-		return nil
-	}
 	return i.platformInterface.AutoDetectInterfaceControl(int32(fd))
 }
 
@@ -52,6 +49,7 @@ func (i *urlTestPlatformInterface) CreateDefaultInterfaceMonitor(logger logger.L
 	return &urlTestInterfaceMonitor{}
 }
 
+// Socket protection must not start an Android netlink monitor or replace the VPN monitor.
 type urlTestInterfaceMonitor struct {
 	interfaceMonitorStub
 }
@@ -66,10 +64,12 @@ func (m *urlTestInterfaceMonitor) Close() error {
 
 func urlTestOutbound(configContent string, outboundTag string, testURL string, timeout int32, platformInterface PlatformInterface) (int32, error) {
 	ctx := baseContext(platformInterface)
-	ctx = service.ContextWith[adapter.PlatformInterface](ctx, &urlTestPlatformInterface{
-		platformInterfaceStub: &platformInterfaceStub{},
-		platformInterface:     platformInterface,
-	})
+	if platformInterface != nil {
+		ctx = service.ContextWith[adapter.PlatformInterface](ctx, &urlTestPlatformInterface{
+			platformInterfaceStub: &platformInterfaceStub{},
+			platformInterface:     platformInterface,
+		})
+	}
 	options, err := parseConfig(ctx, configContent)
 	if err != nil {
 		return 0, E.Cause(err, "parse config")
@@ -85,6 +85,8 @@ func urlTestOutbound(configContent string, outboundTag string, testURL string, t
 		options.Route = &option.RouteOptions{}
 	}
 	options.Route.Final = outboundTag
+	// The core installs the platform socket protector only with auto-detection enabled.
+	options.Route.AutoDetectInterface = platformInterface != nil
 
 	instance, err := box.New(box.Options{
 		Context: ctx,
