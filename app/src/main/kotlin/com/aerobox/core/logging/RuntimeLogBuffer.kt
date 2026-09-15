@@ -14,6 +14,9 @@ data class RuntimeLogEntry(
 
 object RuntimeLogBuffer {
     private const val MAX_LINES = 500
+    private val coreLevelRegex = Regex(
+        """(?i)^(FATAL|PANIC|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)(?:\[\d+\]|:|\s|$)\s*"""
+    )
     private val uuidRegex = Regex(
         """\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"""
     )
@@ -34,16 +37,30 @@ object RuntimeLogBuffer {
     val lines: StateFlow<List<RuntimeLogEntry>> = _lines.asStateFlow()
 
     fun append(level: String, message: String) {
+        val normalizedLevel = level.trim().lowercase()
+        if (normalizedLevel != "error" && normalizedLevel != "fatal" && normalizedLevel != "panic") return
+
         val normalizedMessage = sanitize(message.trim())
         if (normalizedMessage.isEmpty()) return
 
         val entry = RuntimeLogEntry(
             timestamp = System.currentTimeMillis(),
-            level = level.ifBlank { "info" },
+            level = "error",
             message = normalizedMessage
         )
         _lines.update { current ->
             (current + entry).takeLast(MAX_LINES)
+        }
+    }
+
+    fun appendCore(message: String) {
+        val trimmed = message.trimStart()
+        val prefix = coreLevelRegex.find(trimmed)
+        // libbox also forwards service failures as plain, unprefixed error messages.
+        if (prefix == null) {
+            append("error", trimmed)
+        } else {
+            append(prefix.groupValues[1], trimmed.substring(prefix.value.length))
         }
     }
 

@@ -68,10 +68,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         private const val TAG = "AeroBoxVpnService"
         private const val MAX_RECONNECT_ATTEMPTS = 10
         private val TRAFFIC_OUTBOUND_TAGS = listOf("proxy", "direct")
-        // Matches "INFO[0000] ", "ERROR[0001] ", etc.
-        private val coreLogBracketRegex = Regex("""(?i)(FATAL|PANIC|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)\[\d{4}\]\s?""")
-        // Matches "error: ", "warn: ", etc.
-        private val coreLogColonRegex = Regex("""(?i)(fatal|panic|error|warn(?:ing)?|info|debug|trace):\s?""")
 
         @Volatile
         private var activeServiceReference: WeakReference<AeroBoxVpnService>? = null
@@ -123,38 +119,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     private fun nodeSummary(node: ProxyNode?): String {
         val type = node?.type?.name ?: "UNKNOWN"
         return "${nodeDisplayName(node)} [$type]"
-    }
-
-    /**
-     * Parse sing-box core log level from message prefix.
-     * Formats: "INFO[0000] ...", "ERROR ...", "info: ...", plain text, etc.
-     */
-    private fun parseCoreLogLevel(message: String): Pair<String, String> {
-        val trimmed = message.trimStart()
-        // "FATAL[0000] msg", "ERROR[0001] msg", "WARN[0002] msg", "INFO[0003] msg", "DEBUG[0004] msg"
-        val bracketMatch = coreLogBracketRegex.matchAt(trimmed, 0)
-        if (bracketMatch != null) {
-            val tag = bracketMatch.groupValues[1].uppercase()
-            val body = trimmed.substring(bracketMatch.range.last + 1).trimStart()
-            return mapCoreLevel(tag) to body
-        }
-        // "error: msg", "warn: msg", etc.
-        val colonMatch = coreLogColonRegex.matchAt(trimmed, 0)
-        if (colonMatch != null) {
-            val tag = colonMatch.groupValues[1].uppercase()
-            val body = trimmed.substring(colonMatch.range.last + 1).trimStart()
-            return mapCoreLevel(tag) to body
-        }
-        return "debug" to trimmed
-    }
-
-    private fun mapCoreLevel(tag: String): String = when (tag) {
-        "FATAL", "PANIC" -> "error"
-        "ERROR" -> "error"
-        "WARN", "WARNING" -> "warn"
-        "INFO" -> "info"
-        "DEBUG", "TRACE" -> "debug"
-        else -> "debug"
     }
 
     private fun logInfo(message: String) {
@@ -467,8 +431,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
 
     override fun writeDebugMessage(message: String) {
-        val (level, body) = parseCoreLogLevel(message)
-        RuntimeLogBuffer.append(level, body)
+        RuntimeLogBuffer.appendCore(message)
     }
 
     override fun sendNotification(notification: io.nekohasekai.libbox.Notification) {

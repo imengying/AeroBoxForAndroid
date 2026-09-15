@@ -7,6 +7,7 @@ TEMPLATE_ROOT = Path(__file__).resolve().parent.parent / "libbox"
 DISABLED_BUILD_TAG = "//go:build aerobox_disabled_libbox_feature\n\n"
 
 UPSTREAM_HASHES = {
+    "log/observable.go": "49f1b8a85f256e605aef4cb23033374a8f83d8f05704d84c7e818af52a80e850",
     "include/registry.go": "cbc7bc06391fe555828782df7bc1ce0844e446a82647448739dbb3e8e3eef19e",
     "include/quic.go": "a757f7fb9de40dd1d0da8b89d8605f7fe0eece9359e4c68ff8865a7ff7addc35",
     "experimental/libbox/build_info.go": "6d17d97083202147a1611344f724122e42a94cbda600d555cd57f895ef001a0a",
@@ -379,6 +380,28 @@ def patch_command_server() -> None:
     )
 
 
+def patch_platform_logging() -> None:
+    path = "log/observable.go"
+    verify_upstream_file(path)
+    # Platform callbacks feed the app log, so honor the configured level there too.
+    replace_once(
+        path,
+        "\tplatformWriters := l.loadPlatformWriters()\n"
+        "\tif level > l.level && len(platformWriters) == 0 && !l.needObservable {\n",
+        "\tif level > l.level && !l.needObservable {\n",
+    )
+    replace_once(
+        path,
+        "\tif len(platformWriters) > 0 {\n",
+        "\tif level <= f.level && len(platformWriters) > 0 {\n",
+    )
+    replace_once(
+        path,
+        "\t\t\tDisableLineBreak: true,\n",
+        "\t\t\tDisableLineBreak: true,\n\t\t\tDisableColors:    true,\n",
+    )
+
+
 def main() -> None:
     for path in DISABLED_LIBBOX_FILES:
         disable_verified_go_file(path)
@@ -391,6 +414,7 @@ def main() -> None:
     patch_config()
     patch_monitor()
     patch_command_server()
+    patch_platform_logging()
 
 
 if __name__ == "__main__":
