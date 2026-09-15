@@ -15,10 +15,16 @@ for disabled_tag in tailscale wireguard ssh; do
   fi
 done
 
+# Keep gomobile's child processes on the selected Go toolchain.
+GO_ROOT="$(go env GOROOT)"
+export GOBIN="${RUNNER_TEMP}/gomobile-bin"
+export PATH="${GO_ROOT}/bin:${GOBIN}:${PATH}"
+echo "Go executable: $(command -v go)"
+go version
+
 # Install gomobile / gobind (same version as SFA official)
 go install github.com/sagernet/gomobile/cmd/gomobile@"${GOMOBILE_VERSION}"
 go install github.com/sagernet/gomobile/cmd/gobind@"${GOMOBILE_VERSION}"
-export PATH="$(go env GOPATH)/bin:${PATH}"
 
 # Clone sing-box source at the resolved stable tag
 git clone --depth 1 --branch "${SING_BOX_VERSION}" \
@@ -44,7 +50,7 @@ cp "${GITHUB_WORKSPACE}/.github/libbox/urltest_export.go" experimental/libbox/ur
 gofmt -w experimental/libbox/urltest_export.go
 
 mkdir -p "${GITHUB_WORKSPACE}/app/build/libbox"
-gomobile bind \
+"${GOBIN}/gomobile" bind \
   -o "${GITHUB_WORKSPACE}/app/build/libbox/libbox.aar" \
   -target android \
   -androidapi 31 \
