@@ -64,7 +64,3 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 GPL-3.0-or-later
 
 See [LICENSE](./LICENSE).
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=imengying/AeroBoxForAndroid&type=Date)](https://www.star-history.com/#imengying/AeroBoxForAndroid&Date)
