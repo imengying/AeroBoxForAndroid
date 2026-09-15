@@ -193,13 +193,13 @@ internal object UriNodeParser {
         val userInfo = extractUserInfo(parsed) ?: return null
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
-        val params = parseUriParams(parsed.query)
+        val params = parseUriParams(parsed.encodedQuery)
         val rawTransport = firstNonBlank(params["type"], params["network"])
         val transportType = resolveTransportType(rawTransport)
         if (rawTransport != null && rawTransport.lowercase() != "tcp" && transportType == null) return null
 
         return ProxyNode(
-            name = decodeName(parsed.fragment ?: "VLESS"),
+            name = parsed.fragment ?: "VLESS",
             type = ProxyType.VLESS,
             server = server,
             port = port,
@@ -243,7 +243,7 @@ internal object UriNodeParser {
         val parsed = uri.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
-        val params = parseUriParams(parsed.query)
+        val params = parseUriParams(parsed.encodedQuery)
         val rawTransport = firstNonBlank(params["type"], params["network"])
         val transportType = resolveTransportType(rawTransport)
         if (rawTransport != null && rawTransport.lowercase() != "tcp" && transportType == null) return null
@@ -252,7 +252,7 @@ internal object UriNodeParser {
         val isReality = security == "reality"
 
         return ProxyNode(
-            name = decodeName(parsed.fragment ?: "Trojan"),
+            name = parsed.fragment ?: "Trojan",
             type = ProxyType.TROJAN,
             server = server,
             port = port,
@@ -294,10 +294,10 @@ internal object UriNodeParser {
         val parsed = normalized.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
-        val params = parseUriParams(parsed.query)
+        val params = parseUriParams(parsed.encodedQuery)
 
         return ProxyNode(
-            name = decodeName(parsed.fragment ?: "Hysteria2"),
+            name = parsed.fragment ?: "Hysteria2",
             type = ProxyType.HYSTERIA2,
             server = server,
             port = port,
@@ -332,10 +332,10 @@ internal object UriNodeParser {
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
         val password = extractUserInfo(parsed)?.takeIf { it.isNotBlank() } ?: return null
-        val params = parseUriParams(parsed.query)
+        val params = parseUriParams(parsed.encodedQuery)
 
         return ProxyNode(
-            name = decodeName(parsed.fragment ?: "AnyTLS"),
+            name = parsed.fragment ?: "AnyTLS",
             type = ProxyType.ANYTLS,
             server = server,
             port = port,
@@ -356,14 +356,14 @@ internal object UriNodeParser {
         val parsed = uri.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
-        val params = parseUriParams(parsed.query)
+        val params = parseUriParams(parsed.encodedQuery)
 
         val userInfo = extractUserInfo(parsed).orEmpty()
         val uuid = userInfo.substringBefore(':', userInfo)
         val password = userInfo.substringAfter(':', "")
 
         return ProxyNode(
-            name = decodeName(parsed.fragment ?: "TUIC"),
+            name = parsed.fragment ?: "TUIC",
             type = ProxyType.TUIC,
             server = server,
             port = port,
@@ -401,7 +401,7 @@ internal object UriNodeParser {
         val parsed = uri.toUri()
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: 443
-        val params = parseUriParams(parsed.query)
+        val params = parseUriParams(parsed.encodedQuery)
         val protocol = resolveNaiveProtocol(
             parsed.scheme,
             params["protocol"],
@@ -413,7 +413,7 @@ internal object UriNodeParser {
         val password = userInfo?.substringAfter(':', "")?.ifBlank { null }
 
         return ProxyNode(
-            name = decodeName(parsed.fragment ?: "Naive"),
+            name = parsed.fragment ?: "Naive",
             type = ProxyType.NAIVE,
             server = server,
             port = port,
@@ -480,7 +480,7 @@ internal object UriNodeParser {
         val password = userInfo?.substringAfter(':', "")?.ifBlank { null }
 
         return ProxyNode(
-            name = decodeName(parsed.fragment ?: "SOCKS5"),
+            name = parsed.fragment ?: "SOCKS5",
             type = ProxyType.SOCKS,
             server = server,
             port = port,
@@ -488,7 +488,7 @@ internal object UriNodeParser {
             password = password,
             socksVersion = "5",
             udpOverTcpEnabled = parseBooleanOrNull(parsed.getQueryParameter("uot"))
-        ).withUriSharedOptions(parseUriParams(parsed.query))
+        ).withUriSharedOptions(parseUriParams(parsed.encodedQuery))
     }
 
     internal fun parseHttpProxyUri(uri: String): ProxyNode? {
@@ -496,14 +496,14 @@ internal object UriNodeParser {
         val server = parsed.host ?: return null
         val port = parsed.port.takeIf { it > 0 } ?: return null
         val path = parsed.path.orEmpty()
-        val params = parseUriParams(parsed.query)
+        val params = parseUriParams(parsed.encodedQuery)
         val userInfo = extractUserInfo(parsed)
         val username = userInfo?.substringBefore(':', userInfo)
         val password = userInfo?.substringAfter(':', "")?.ifBlank { null }
         val useTls = uri.startsWith("https://", ignoreCase = true)
 
         return ProxyNode(
-            name = decodeName(parsed.fragment ?: "HTTP"),
+            name = parsed.fragment ?: "HTTP",
             type = ProxyType.HTTP,
             server = server,
             port = port,

@@ -16,6 +16,7 @@ object ExternalImportParser {
         "vless",
         "ss",
         "trojan",
+        "anytls",
         "hysteria2",
         "hy2",
         "tuic",

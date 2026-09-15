@@ -1,6 +1,6 @@
 buildscript {
-    val kotlinVersion = "2.4.10"
-    val kspVersion = "2.3.11"
+    val kotlinVersion = "2.4.20"
+    val kspVersion = "2.3.12"
 
     repositories {
         google()
@@ -17,7 +17,7 @@ buildscript {
 }
 
 plugins {
-    id("com.android.application") version "9.3.1" apply false
-    id("org.jetbrains.kotlin.plugin.compose") version "2.4.10" apply false
-    id("com.google.devtools.ksp") version "2.3.11" apply false
+    id("com.android.application") version "9.4.0" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.20" apply false
+    id("com.google.devtools.ksp") version "2.3.12" apply false
 }
