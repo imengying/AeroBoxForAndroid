@@ -142,16 +142,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         return "${nodeDisplayName(node)} [$type]"
     }
 
-    private fun logInfo(message: String) {
-        Log.i(TAG, message)
-        RuntimeLogBuffer.append("info", message)
-    }
-
-    private fun logWarn(message: String) {
-        Log.w(TAG, message)
-        RuntimeLogBuffer.append("warn", message)
-    }
-
     private fun logError(message: String, throwable: Throwable? = null) {
         if (throwable != null) {
             Log.e(TAG, message, throwable)
@@ -165,7 +155,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         } else {
             message
         }
-        RuntimeLogBuffer.append("error", fullMessage)
+        RuntimeLogBuffer.appendError(fullMessage)
     }
 
     private fun Throwable.rootCauseMessage(): String? {
@@ -195,10 +185,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 val config = intent.getStringExtra(EXTRA_CONFIG)?.takeIf { it.isNotBlank() }
                 val nodeId = intent.getLongExtra(EXTRA_NODE_ID, -1L).takeIf { it > 0L }
                 val operationId = intent.getLongExtra(EXTRA_OPERATION_ID, 0L)
-                when (intent.action) {
-                    ACTION_SWITCH -> RuntimeLogBuffer.append("info", "Switching node: reloading service")
-                    ACTION_RELOAD -> RuntimeLogBuffer.append("info", "Reloading service with current settings")
-                }
                 startVpn(config, nodeId, operationId, resetReconnectAttempts = true)
             }
             ACTION_STOP -> {
@@ -271,10 +257,11 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             if (resetReconnectAttempts) reconnectAttempts = 0
             VpnStateManager.updateServiceActive(true)
             try {
+                SingBoxNative.awaitReady()
                 refreshNotificationLanguage()
                 // Re-establish foreground state after an earlier queued stop or instance cleanup.
                 startForeground(NOTIFICATION_ID, buildNotification(connected = false))
-                logInfo("Starting sing-box service")
+                Log.i(TAG, "Starting sing-box service")
 
                 val startRequest = prepareStartRequest(
                     providedConfig = providedConfig,
@@ -285,7 +272,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                     cachedConnectedNode = startRequest.node
                     lastNodeId = startRequest.node.id
                 }
-                logInfo("Prepared start request for ${nodeSummary(startRequest.node)}")
+                Log.i(TAG, "Prepared start request for ${nodeSummary(startRequest.node)}")
                 notificationManager.notify(NOTIFICATION_ID, buildNotification(connected = false))
 
                 if (!receiverRegistered) {
@@ -299,8 +286,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                     receiverRegistered = true
                 }
 
-                DefaultNetworkMonitor.setNetworkChangedCallback(::updateUnderlyingNetwork)
-                DefaultNetworkMonitor.start()
+                DefaultNetworkMonitor.start(::updateUnderlyingNetwork)
 
                 val server = commandServer ?: CommandServer(this@AeroBoxVpnService, this@AeroBoxVpnService).also {
                     commandServer = it
@@ -310,10 +296,10 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 val overrides = buildOverrideOptions()
                 stopSpeedTicker()
                 currentCoroutineContext().ensureActive()
-                logInfo("Invoking startOrReloadService for ${nodeSummary(startRequest.node)}")
+                Log.i(TAG, "Invoking startOrReloadService for ${nodeSummary(startRequest.node)}")
                 server.startOrReloadService(startRequest.config, overrides)
                 currentCoroutineContext().ensureActive()
-                logInfo("startOrReloadService returned for ${nodeSummary(startRequest.node)}")
+                Log.i(TAG, "startOrReloadService returned for ${nodeSummary(startRequest.node)}")
                 reconnectAttempts = 0
                 VpnStateManager.updateConnectionState(true, startRequest.node)
                 notificationManager.notify(NOTIFICATION_ID, buildNotification(connected = true))
@@ -353,7 +339,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         )
         if (node == null) {
             val error = "No node available"
-            logWarn(error)
+            Log.w(TAG, error)
             throw NonRetryableStartException(error)
         }
 
@@ -361,7 +347,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         // Configs supplied by VpnRepository have already passed the native check.
         val configError = if (providedConfig == null) configResolver.validateConfig(config) else null
         if (configError != null) {
-            logWarn("Config validation failed for ${nodeSummary(node)}: $configError")
+            Log.w(TAG, "Config validation failed for ${nodeSummary(node)}: $configError")
             throw NonRetryableStartException(configError)
         }
 
@@ -396,7 +382,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
 
     private suspend fun stopService(reason: String) {
-        logInfo(reason)
+        Log.i(TAG, reason)
         reconnectJob?.cancel()
         reconnectJob = null
         releaseRuntimeResources(stopping = true)
@@ -440,7 +426,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     override fun serviceStop() {
         val message = if (userRequestedStop) "Service stopped" else "Service stopped unexpectedly"
-        if (userRequestedStop) logInfo(message) else logWarn(message)
+        if (userRequestedStop) Log.i(TAG, message) else Log.w(TAG, message)
         if (!userRequestedStop) {
             val revision = requestRevision
             launchLifecycleOperation {
@@ -456,7 +442,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     }
 
     override fun serviceReload() {
-        logInfo("Service reloaded")
+        Log.i(TAG, "Service reloaded")
         launchLifecycleOperation {
             if (userRequestedStop || destroyed) return@launchLifecycleOperation
             val currentNode = resolveCurrentNode()
@@ -489,21 +475,13 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     override fun sendNotification(notification: io.nekohasekai.libbox.Notification) {
         Log.i(TAG, "libbox notification: ${notification.title} - ${notification.body}")
-        val content = buildString {
-            if (notification.title.isNotBlank()) append(notification.title)
-            if (notification.body.isNotBlank()) {
-                if (isNotEmpty()) append(" - ")
-                append(notification.body)
-            }
-        }.ifBlank { "libbox notification" }
-        RuntimeLogBuffer.append("info", content)
     }
 
     // ─── PlatformInterfaceWrapper overrides ───
 
     override fun autoDetectInterfaceControl(fd: Int) {
         if (!protect(fd)) {
-            RuntimeLogBuffer.append("warn", "protect(fd) failed")
+            Log.w(TAG, "protect(fd) failed")
         }
     }
 
@@ -528,11 +506,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         DefaultNetworkMonitor.defaultNetwork?.let { network ->
             runCatching {
                 builder.setUnderlyingNetworks(arrayOf(network))
-            }.onFailure {
-                RuntimeLogBuffer.append(
-                    "debug",
-                    "Builder setUnderlyingNetworks skipped: ${it.message ?: it}"
-                )
             }
         }
 
@@ -600,7 +573,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             runCatching { vpnInterface?.close() }
             vpnInterface = pfd
         }
-        logInfo("VPN interface established for ${nodeSummary(cachedConnectedNode)}")
+        Log.i(TAG, "VPN interface established for ${nodeSummary(cachedConnectedNode)}")
         updateUnderlyingNetwork(DefaultNetworkMonitor.defaultNetwork)
         return pfd.fd
     }
@@ -608,11 +581,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     private fun updateUnderlyingNetwork(network: Network?) {
         runCatching {
             setUnderlyingNetworks(network?.let { arrayOf(it) })
-        }.onFailure {
-            RuntimeLogBuffer.append(
-                "debug",
-                "setUnderlyingNetworks skipped: ${it.message ?: it}"
-            )
         }
     }
 
@@ -779,7 +747,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                     consecutiveStatsFailures++
                     if (consecutiveStatsFailures >= 5) {
                         val error = "Core health check failed: traffic API unavailable"
-                        logWarn(error)
+                        Log.w(TAG, error)
                         launchLifecycleOperation {
                             if (!userRequestedStop && !destroyed && runtimeRevision == revision &&
                                 requestRevision == revision && VpnStateManager.serviceActive.value
@@ -911,7 +879,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             val backoffMs = 1000L * (1L shl (reconnectAttempts - 1).coerceAtMost(5))
             val message = "Auto-reconnect attempt $reconnectAttempts in ${backoffMs}ms after: $lastError"
             Log.i(TAG, message)
-            RuntimeLogBuffer.append("warn", message)
             delay(backoffMs)
 
             withContext(Dispatchers.Main.immediate) {

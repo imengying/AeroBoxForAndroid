@@ -6,12 +6,8 @@ import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.ComponentActivity
-import com.aerobox.data.model.TrafficStats
-import com.aerobox.data.model.VpnState
 import java.util.Locale
 import kotlin.math.max
-
-fun VpnState.toTrafficStats(): TrafficStats = traffic
 
 fun Long.formatDuration(): String {
     if (this <= 0L) return "00:00:00"

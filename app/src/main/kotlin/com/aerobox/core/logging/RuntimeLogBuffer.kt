@@ -8,7 +8,6 @@ import java.net.URI
 
 data class RuntimeLogEntry(
     val timestamp: Long,
-    val level: String,
     val message: String
 )
 
@@ -36,16 +35,12 @@ object RuntimeLogBuffer {
     private val _lines = MutableStateFlow<List<RuntimeLogEntry>>(emptyList())
     val lines: StateFlow<List<RuntimeLogEntry>> = _lines.asStateFlow()
 
-    fun append(level: String, message: String) {
-        val normalizedLevel = level.trim().lowercase()
-        if (normalizedLevel != "error" && normalizedLevel != "fatal" && normalizedLevel != "panic") return
-
+    fun appendError(message: String) {
         val normalizedMessage = sanitize(message.trim())
         if (normalizedMessage.isEmpty()) return
 
         val entry = RuntimeLogEntry(
             timestamp = System.currentTimeMillis(),
-            level = "error",
             message = normalizedMessage
         )
         _lines.update { current ->
@@ -58,9 +53,11 @@ object RuntimeLogBuffer {
         val prefix = coreLevelRegex.find(trimmed)
         // libbox also forwards service failures as plain, unprefixed error messages.
         if (prefix == null) {
-            append("error", trimmed)
+            appendError(trimmed)
         } else {
-            append(prefix.groupValues[1], trimmed.substring(prefix.value.length))
+            when (prefix.groupValues[1].lowercase()) {
+                "error", "fatal", "panic" -> appendError(trimmed.substring(prefix.value.length))
+            }
         }
     }
 

@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.net.toUri
 import com.aerobox.R
+import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.ui.components.AppDialog
 import com.aerobox.ui.components.AppSnackbarHost
@@ -84,6 +85,7 @@ fun SettingsScreen(
     val autoReconnect by viewModel.autoReconnect.collectAsStateWithLifecycle()
     val isCheckingAppUpdate by viewModel.isCheckingAppUpdate.collectAsStateWithLifecycle()
     val availableAppUpdate by viewModel.availableAppUpdate.collectAsStateWithLifecycle()
+    val coreVersion by SingBoxNative.version.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -348,7 +350,7 @@ fun SettingsScreen(
                 enabled = !isCheckingAppUpdate,
                 icon = { Icon(Icons.Filled.Info, contentDescription = null) },
                 title = stringResource(R.string.version),
-                supporting = "${com.aerobox.BuildConfig.VERSION_NAME} (sing-box ${com.aerobox.core.native.SingBoxNative.getVersion()})",
+                supporting = "${com.aerobox.BuildConfig.VERSION_NAME} (sing-box $coreVersion)",
                 trailing = {
                     if (isCheckingAppUpdate) {
                         CircularProgressIndicator(

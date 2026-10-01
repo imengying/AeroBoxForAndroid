@@ -53,13 +53,12 @@ class VpnConfigResolver(private val context: Context) {
     suspend fun buildConfig(node: ProxyNode): String {
         val nodeName = node.name.ifBlank { "unnamed node" }
         Log.i(TAG, "Generating config for $nodeName [${node.type.name}]")
-        RuntimeLogBuffer.append("info", "Generating config for $nodeName [${node.type.name}]")
         val prefs = PreferenceManager.readVpnConfigPreferences(context)
         if (prefs.enableGeoRules) {
             if (!GeoAssetManager.ensureRuleSetAssets(context)) {
                 val msg = context.getString(R.string.error_rule_set_unavailable)
                 Log.e(TAG, msg)
-                RuntimeLogBuffer.append("error", msg)
+                RuntimeLogBuffer.appendError(msg)
                 throw LocalizedException.of(R.string.error_rule_set_unavailable)
             }
         } else {
@@ -114,12 +113,12 @@ class VpnConfigResolver(private val context: Context) {
         return config
     }
 
-    suspend fun validateConfig(config: String): String? = withContext(Dispatchers.IO) {
+    suspend fun validateConfig(config: String): String? {
         val error = SingBoxNative.checkConfig(config)
         if (error != null) {
             Log.e(TAG, "Config check failed: $error")
-            RuntimeLogBuffer.append("error", "Config check failed: $error")
+            RuntimeLogBuffer.appendError("Config check failed: $error")
         }
-        error
+        return error
     }
 }

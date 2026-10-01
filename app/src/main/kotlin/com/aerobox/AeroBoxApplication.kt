@@ -8,6 +8,7 @@ import android.net.ConnectivityManager
 import androidx.room.Room
 import com.aerobox.data.database.AppDatabase
 import com.aerobox.core.geo.GeoAssetManager
+import com.aerobox.core.logging.CrashDiagnostics
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.repository.SubscriptionRepository
 import com.aerobox.data.repository.VpnRepository
@@ -25,11 +26,10 @@ class AeroBoxApplication : Application() {
         super.onCreate()
         _appInstance = this
 
-        // Ensure singleton initialization
-        database
+        CrashDiagnostics.install(this, applicationScope)
         VpnStateManager.resetTrafficSession()
         createNotificationChannel()
-        SingBoxNative.setup(this)
+        SingBoxNative.initialize(this, applicationScope)
 
         applicationScope.launch(Dispatchers.IO) {
             GeoAssetManager.ensureBundledAssets(this@AeroBoxApplication)

@@ -35,9 +35,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 // the user's notification shade with a transient AeroBox
                 // notification on every boot.
                 val hasAnyNode = AeroBoxApplication.database.proxyNodeDao()
-                    .getAllNodes()
-                    .first()
-                    .isNotEmpty()
+                    .getFirstNode() != null
                 if (!hasAnyNode) {
                     Log.w(TAG, "Auto-connect skipped: no node configured")
                     return@launch

@@ -2,10 +2,19 @@ package com.aerobox.core.native
 
 import android.content.Context
 import android.util.Log
+import com.aerobox.core.logging.CrashDiagnostics
 import com.aerobox.core.logging.RuntimeLogBuffer
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.PlatformInterface
 import io.nekohasekai.libbox.SetupOptions
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
 /**
  * Wrapper around gomobile-generated libbox Java bindings.
@@ -18,77 +27,70 @@ object SingBoxNative {
     private const val TAG = "SingBoxNative"
     @Volatile
     private var initialized = false
+    @Volatile
+    private var initialization: Deferred<Unit>? = null
+    private val _version = MutableStateFlow("...")
+    val version = _version.asStateFlow()
 
     data class OutboundTrafficStats(
         val uploadBytes: Long,
         val downloadBytes: Long
     )
 
-    /**
-     * Initialize libbox with app paths. Must be called once at startup.
-     */
-    fun setup(context: Context) {
-        if (initialized) return
-        try {
-            val options = SetupOptions().apply {
-                basePath = context.filesDir.absolutePath
-                workingPath = context.getDir("singbox", Context.MODE_PRIVATE).absolutePath
-                tempPath = context.cacheDir.absolutePath
-                debug = true
-                logMaxLines = 300
+    @Synchronized
+    fun initialize(context: Context, scope: CoroutineScope) {
+        if (initialization != null) return
+        val appContext = context.applicationContext
+        initialization = scope.async(Dispatchers.IO) {
+            try {
+                CrashDiagnostics.setCoreVersion("initializing")
+                val options = SetupOptions().apply {
+                    basePath = appContext.filesDir.absolutePath
+                    workingPath = appContext.getDir("singbox", Context.MODE_PRIVATE).absolutePath
+                    tempPath = appContext.cacheDir.absolutePath
+                    debug = true
+                    logMaxLines = 300
+                }
+                Libbox.setup(options)
+                _version.value = Libbox.version()
+                CrashDiagnostics.setCoreVersion(_version.value)
+                initialized = true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _version.value = "unavailable"
+                RuntimeLogBuffer.appendError("libbox initialization failed: ${error.message ?: error}")
+                throw IllegalStateException("libbox initialization failed", error)
             }
-            Libbox.setup(options)
-            initialized = true
-            Log.i(TAG, "libbox ${Libbox.version()} setup completed")
-        } catch (e: Exception) {
-            Log.w(TAG, "libbox setup failed: ${e.message}")
         }
+    }
+
+    suspend fun awaitReady() {
+        checkNotNull(initialization) { "libbox initialization has not been scheduled" }.await()
     }
 
     /**
      * Validate a sing-box JSON config. Returns null on success, error message on failure.
      */
-    fun checkConfig(configContent: String): String? {
-        if (!initialized) {
-            val msg = "libbox not initialized — cannot validate config"
-            Log.e(TAG, msg)
-            return msg
-        }
-        return try {
+    suspend fun checkConfig(configContent: String): String? = withContext(Dispatchers.IO) {
+        awaitReady()
+        try {
             Libbox.checkConfig(configContent)
             null // success
         } catch (e: Exception) {
-            val msg = e.message ?: "unknown error"
-            Log.w(TAG, "checkConfig failed: $msg")
-            msg
+            e.message ?: "unknown error"
         }
     }
 
-    /**
-     * Get the sing-box version string.
-     */
-    fun getVersion(): String {
-        if (!initialized) return "unknown (not initialized)"
-        return try {
-            Libbox.version()
-        } catch (e: Exception) {
-            "unknown"
-        }
-    }
-
-    fun urlTestOutbound(
+    suspend fun urlTestOutbound(
         configContent: String,
         outboundTag: String = "proxy",
         testUrl: String = "http://cp.cloudflare.com/",
         timeoutMs: Int = 3000,
         platformInterface: PlatformInterface? = null
-    ): Int {
-        if (!initialized) {
-            Log.e(TAG, "libbox not initialized — cannot run URL test")
-            RuntimeLogBuffer.append("error", "libbox not initialized — cannot run URL test")
-            return -1
-        }
-        return try {
+    ): Int = withContext(Dispatchers.IO) {
+        awaitReady()
+        try {
             if (platformInterface != null) {
                 Libbox.urlTestOutboundWithPlatform(
                     configContent,
@@ -103,7 +105,7 @@ object SingBoxNative {
         } catch (e: Exception) {
             val msg = e.message ?: "unknown error"
             Log.w(TAG, "urlTestOutbound failed: $msg")
-            RuntimeLogBuffer.append("error", "urlTestOutbound failed: $msg")
+            RuntimeLogBuffer.appendError("urlTestOutbound failed: $msg")
             -1
         }
     }
@@ -131,7 +133,7 @@ object SingBoxNative {
             val msg = e.message ?: "unknown error"
             if (logErrors) {
                 Log.w(TAG, "queryV2RayOutboundStats failed: $msg")
-                RuntimeLogBuffer.append("error", "queryV2RayOutboundStats failed: $msg")
+                RuntimeLogBuffer.appendError("queryV2RayOutboundStats failed: $msg")
             }
             null
         }

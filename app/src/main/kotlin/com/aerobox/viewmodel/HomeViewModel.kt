@@ -28,7 +28,6 @@ import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.NetworkUtils
 import com.aerobox.utils.PreferenceManager
 import com.aerobox.utils.formatDuration
-import com.aerobox.utils.toTrafficStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -84,10 +83,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppLocaleManager.SYSTEM_LANGUAGE_TAG)
 
     val vpnState: StateFlow<VpnState> = VpnStateManager.vpnState
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), VpnState())
 
     private val isServiceActive: StateFlow<Boolean> = VpnStateManager.serviceActive
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val isConnecting: StateFlow<Boolean> = combine(isServiceActive, vpnState) { serviceActive, state ->
         serviceActive && !state.isConnected
@@ -104,7 +101,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     val trafficStats: StateFlow<TrafficStats> = vpnState
-        .map { it.toTrafficStats() }
+        .map { it.traffic }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrafficStats())
 
     private val allNodes: StateFlow<List<ProxyNode>> = nodeDao.getAllNodes()

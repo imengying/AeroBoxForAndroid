@@ -1,15 +1,18 @@
 package com.aerobox.service
 
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import android.util.Log
 import com.aerobox.AeroBoxApplication
-import com.aerobox.core.logging.RuntimeLogBuffer
 import io.nekohasekai.libbox.InterfaceUpdateListener
+import kotlinx.coroutines.android.asCoroutineDispatcher
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.net.NetworkInterface
 
 /**
@@ -21,123 +24,119 @@ import java.net.NetworkInterface
 object DefaultNetworkMonitor {
 
     private const val TAG = "DefaultNetworkMonitor"
-    private const val LOSS_LOG_DELAY_MS = 1500L
 
     @Volatile
     var defaultNetwork: Network? = null
         private set
 
-    @Volatile
+    // All state except the published network is confined to this process-lifetime thread.
+    private val callbackHandler by lazy {
+        Handler(HandlerThread("aerobox-network").apply { start() }.looper)
+    }
+    private val callbackDispatcher by lazy { callbackHandler.asCoroutineDispatcher() }
     private var listener: InterfaceUpdateListener? = null
-    @Volatile
     private var networkChangedCallback: ((Network?) -> Unit)? = null
-    @Volatile
-    private var registered = false
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var pendingLossLog: Runnable? = null
+    private var registeredCallback: ConnectivityManager.NetworkCallback? = null
+    private var linkProperties: LinkProperties? = null
 
     private val networkRequest: NetworkRequest = NetworkRequest.Builder()
         .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
         .build()
 
-    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+    private class NetworkCallback : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            cancelPendingLossLog()
+            if (registeredCallback !== this) return
             defaultNetwork = network
+            linkProperties = null
             networkChangedCallback?.invoke(network)
-            notifyInterfaceUpdate(network)
+            // Android sends capabilities and link properties immediately after onAvailable.
         }
 
         override fun onCapabilitiesChanged(
             network: Network,
             capabilities: NetworkCapabilities
         ) {
-            if (network == defaultNetwork) {
-                cancelPendingLossLog()
-                networkChangedCallback?.invoke(network)
-                notifyInterfaceUpdate(network)
+            if (registeredCallback === this && network == defaultNetwork) {
+                notifyInterfaceUpdate()
+            }
+        }
+
+        override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) {
+            if (registeredCallback === this && network == defaultNetwork) {
+                linkProperties = properties
+                notifyInterfaceUpdate()
             }
         }
 
         override fun onLost(network: Network) {
-            if (network == defaultNetwork) {
+            if (registeredCallback === this && network == defaultNetwork) {
                 defaultNetwork = null
-                scheduleLossLog(network)
+                linkProperties = null
                 networkChangedCallback?.invoke(null)
-                listener?.runCatching {
-                    updateDefaultInterface("", -1, false, false)
-                }
+                notifyInterfaceUpdate()
             }
         }
     }
 
-    fun start() {
-        if (registered) return
-        val cm = AeroBoxApplication.connectivity
-        try {
-            cm.registerBestMatchingNetworkCallback(
-                networkRequest, networkCallback, mainHandler
-            )
-            registered = true
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to register network callback", e)
+    suspend fun start(onNetworkChanged: (Network?) -> Unit) = withContext(callbackDispatcher) {
+        if (registeredCallback == null) {
+            val cm = AeroBoxApplication.connectivity
+            val callback = NetworkCallback()
+            cm.registerBestMatchingNetworkCallback(networkRequest, callback, callbackHandler)
+            registeredCallback = callback
+            defaultNetwork = cm.activeNetwork?.takeIf { network ->
+                cm.getNetworkCapabilities(network)
+                    ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) == true
+            }
+            linkProperties = defaultNetwork?.let(cm::getLinkProperties)
         }
-        defaultNetwork = cm.activeNetwork
-        networkChangedCallback?.invoke(defaultNetwork)
-        defaultNetwork?.let { notifyInterfaceUpdate(it) }
+        networkChangedCallback = onNetworkChanged
+        onNetworkChanged(defaultNetwork)
     }
 
-    fun stop() {
-        cancelPendingLossLog()
-        if (registered) {
-            runCatching {
-                AeroBoxApplication.connectivity.unregisterNetworkCallback(networkCallback)
-            }
-        }
-        registered = false
+    suspend fun stop() = withContext(callbackDispatcher) {
+        val callback = registeredCallback
+        // Invalidate queued callbacks before unregistering; a new start gets its own instance.
+        registeredCallback = null
         defaultNetwork = null
+        linkProperties = null
         listener = null
         networkChangedCallback = null
+        if (callback != null) {
+            runCatching {
+                AeroBoxApplication.connectivity.unregisterNetworkCallback(callback)
+            }.onFailure {
+                Log.w(TAG, "Failed to unregister network callback", it)
+            }
+        }
+        Unit
     }
 
     fun setListener(listener: InterfaceUpdateListener?) {
-        this.listener = listener
-        if (listener != null) {
-            defaultNetwork?.let { notifyInterfaceUpdate(it) }
+        if (listener == null) {
+            // Core shutdown may hold locks needed by an in-flight network update.
+            callbackHandler.post { this.listener = null }
+            return
+        }
+        // Called by native startup on IO. Publish the initial interface before startup continues.
+        runBlocking(callbackDispatcher.immediate) {
+            if (registeredCallback == null) return@runBlocking
+            this@DefaultNetworkMonitor.listener = listener
+            notifyInterfaceUpdate()
         }
     }
 
-    fun setNetworkChangedCallback(callback: ((Network?) -> Unit)?) {
-        networkChangedCallback = callback
-        callback?.invoke(defaultNetwork)
-    }
-
-    private fun cancelPendingLossLog() {
-        pendingLossLog?.let(mainHandler::removeCallbacks)
-        pendingLossLog = null
-    }
-
-    private fun scheduleLossLog(network: Network) {
-        cancelPendingLossLog()
-        val logTask = Runnable {
-            if (defaultNetwork == null) {
-                RuntimeLogBuffer.append("info", "Default network lost: $network")
-            }
-            pendingLossLog = null
-        }
-        pendingLossLog = logTask
-        mainHandler.postDelayed(logTask, LOSS_LOG_DELAY_MS)
-    }
-
-    private fun notifyInterfaceUpdate(network: Network) {
+    private fun notifyInterfaceUpdate() {
         val listener = listener ?: return
-        val cm = AeroBoxApplication.connectivity
-        val linkProperties = cm.getLinkProperties(network) ?: return
-        val interfaceName = linkProperties.interfaceName ?: return
+        val interfaceName = if (defaultNetwork != null) {
+            linkProperties?.interfaceName ?: return
+        } else {
+            ""
+        }
 
         val interfaceIndex = try {
-            NetworkInterface.getByName(interfaceName)?.index ?: -1
+            if (interfaceName.isEmpty()) -1 else NetworkInterface.getByName(interfaceName)?.index ?: -1
         } catch (_: Exception) {
             -1
         }
@@ -147,7 +146,6 @@ object DefaultNetworkMonitor {
             listener.updateDefaultInterface(interfaceName, interfaceIndex, false, false)
         }.onFailure {
             Log.w(TAG, "updateDefaultInterface failed", it)
-            RuntimeLogBuffer.append("warn", "updateDefaultInterface failed: ${it.message ?: it}")
         }
     }
 }

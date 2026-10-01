@@ -7,7 +7,6 @@ import androidx.room.withTransaction
 import com.aerobox.AeroBoxApplication
 import com.aerobox.R
 import com.aerobox.core.errors.LocalizedException
-import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.subscription.ParseDiagnostics
 import com.aerobox.core.subscription.SubscriptionParser
 import com.aerobox.data.model.NodeLatencyState
@@ -284,11 +283,6 @@ class SubscriptionRepository(context: Context) {
                 insertedId
             }
             SubscriptionUpdateScheduler.reconfigure(appContext)
-            logImportDiagnostics(
-                action = "import",
-                subscriptionName = effectiveName,
-                diagnostics = prepared.diagnostics
-            )
             SubscriptionImportResult(
                 subscriptionId = subscriptionId,
                 nodeCount = prepared.nodes.size,
@@ -298,11 +292,6 @@ class SubscriptionRepository(context: Context) {
             )
         }.getOrElse { error ->
             val diagnostics = (error as? NoValidNodesException)?.diagnostics ?: ParseDiagnostics()
-            logImportDiagnostics(
-                action = "import",
-                subscriptionName = name,
-                diagnostics = diagnostics
-            )
             SubscriptionImportResult(
                 subscriptionId = 0,
                 nodeCount = 0,
@@ -527,7 +516,6 @@ class SubscriptionRepository(context: Context) {
         )
         return persistLocalImportNodes(
             subscriptionId = 0L,
-            subscriptionName = prepared.resolvedName.orEmpty(),
             nodes = nodes,
             prepared = prepared
         )
@@ -555,7 +543,6 @@ class SubscriptionRepository(context: Context) {
             )
             persistLocalImportNodes(
                 subscriptionId = subscription.id,
-                subscriptionName = subscription.name,
                 nodes = nodes,
                 prepared = prepared
             )
@@ -571,7 +558,6 @@ class SubscriptionRepository(context: Context) {
         if (prepared.nodes.isEmpty()) {
             return persistLocalImportNodes(
                 subscriptionId = 0L,
-                subscriptionName = trimmedName,
                 nodes = emptyList(),
                 prepared = prepared
             )
@@ -589,11 +575,6 @@ class SubscriptionRepository(context: Context) {
             insertedId to preparedNodes
         }
 
-        logImportDiagnostics(
-            action = "import",
-            subscriptionName = trimmedName.ifBlank { "inline-import" },
-            diagnostics = prepared.diagnostics
-        )
         return SubscriptionImportResult(
             subscriptionId = subscriptionId,
             nodeCount = nodes.size,
@@ -636,16 +617,10 @@ class SubscriptionRepository(context: Context) {
 
     private suspend fun persistLocalImportNodes(
         subscriptionId: Long,
-        subscriptionName: String,
         nodes: List<ProxyNode>,
         prepared: PreparedLocalImport
     ): SubscriptionImportResult {
         if (nodes.isEmpty()) {
-            logImportDiagnostics(
-                action = "import",
-                subscriptionName = subscriptionName.ifBlank { "inline-import" },
-                diagnostics = prepared.diagnostics
-            )
             return SubscriptionImportResult(
                 subscriptionId = subscriptionId,
                 nodeCount = 0,
@@ -661,11 +636,6 @@ class SubscriptionRepository(context: Context) {
                 recomputeLocalGroupCount(subscriptionId)
             }
         }
-        logImportDiagnostics(
-            action = "import",
-            subscriptionName = subscriptionName.ifBlank { "inline-import" },
-            diagnostics = prepared.diagnostics
-        )
         return SubscriptionImportResult(
             subscriptionId = subscriptionId,
             nodeCount = nodes.size,
@@ -885,11 +855,6 @@ class SubscriptionRepository(context: Context) {
                     }
 
                     is RefreshCommitOutcome.Success -> {
-                        logImportDiagnostics(
-                            action = "update",
-                            subscriptionName = outcome.subscription.name,
-                            diagnostics = prepared.diagnostics
-                        )
                         return@withLock SubscriptionUpdateResult(
                             subscriptionId = outcome.subscription.id,
                             summary = outcome.summary,
@@ -1147,21 +1112,6 @@ class SubscriptionRepository(context: Context) {
 
     private fun normalizeUpdateInterval(interval: Long): Long {
         return interval.coerceAtLeast(MIN_UPDATE_INTERVAL_MS)
-    }
-
-    private fun logImportDiagnostics(
-        action: String,
-        subscriptionName: String,
-        diagnostics: ParseDiagnostics
-    ) {
-        if (diagnostics.ignoredEntryCount <= 0) return
-        val summary = diagnostics.reasonCounts.entries
-            .sortedByDescending { it.value }
-            .joinToString(", ") { (reason, count) -> "$reason=$count" }
-        RuntimeLogBuffer.append(
-            "warn",
-            "Subscription $action ignored ${diagnostics.ignoredEntryCount} entries for ${subscriptionName.ifBlank { "unnamed" }}: $summary"
-        )
     }
 
 }

@@ -467,8 +467,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 VpnConnectionResult.NoNodeAvailable -> "current node unavailable"
                 is VpnConnectionResult.Success -> null
             }
-            RuntimeLogBuffer.append(
-                "error",
+            RuntimeLogBuffer.appendError(
                 "Failed to restore VPN after rolling back settings: ${details ?: "unknown error"}"
             )
         }

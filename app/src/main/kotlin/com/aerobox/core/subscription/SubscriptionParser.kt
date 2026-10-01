@@ -20,14 +20,12 @@ data class ParsedSubscription(
 )
 
 data class ParseDiagnostics(
-    val ignoredEntryCount: Int = 0,
     val reasonCounts: Map<String, Int> = emptyMap()
 ) {
     fun withIgnored(reason: String, count: Int = 1): ParseDiagnostics {
         if (count <= 0) return this
         val normalized = reason.trim().ifEmpty { "unknown_reason" }
         return copy(
-            ignoredEntryCount = ignoredEntryCount + count,
             reasonCounts = reasonCounts + (normalized to ((reasonCounts[normalized] ?: 0) + count))
         )
     }

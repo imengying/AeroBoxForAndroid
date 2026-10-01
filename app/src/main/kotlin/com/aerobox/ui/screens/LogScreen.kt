@@ -42,11 +42,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aerobox.R
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.icons.AppIcons
+import com.aerobox.core.logging.CrashDiagnostics
 import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.logging.RuntimeLogEntry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,7 +57,11 @@ fun LogScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val logLines by RuntimeLogBuffer.lines.collectAsStateWithLifecycle()
+    val runtimeLines by RuntimeLogBuffer.lines.collectAsStateWithLifecycle()
+    val crashLines by CrashDiagnostics.entries.collectAsStateWithLifecycle()
+    val logLines = remember(runtimeLines, crashLines) {
+        (crashLines + runtimeLines).sortedBy { it.timestamp }
+    }
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -96,7 +102,18 @@ fun LogScreen(
                     ) {
                         Icon(AppIcons.ContentCopy, contentDescription = stringResource(R.string.log_action_copy_all))
                     }
-                    IconButton(onClick = { RuntimeLogBuffer.clear() }) {
+                    IconButton(onClick = {
+                        scope.launch {
+                            try {
+                                CrashDiagnostics.clear()
+                                RuntimeLogBuffer.clear()
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Exception) {
+                                RuntimeLogBuffer.appendError("Failed to clear crash summaries: ${error.message ?: error}")
+                            }
+                        }
+                    }) {
                         Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.log_action_clear))
                     }
                 },
@@ -137,13 +154,6 @@ fun LogScreen(
 
 @Composable
 private fun LogEntryRow(entry: RuntimeLogEntry) {
-    val levelColor = when (entry.level.lowercase()) {
-        "error", "fatal" -> MaterialTheme.colorScheme.error
-        "warn", "warning" -> MaterialTheme.colorScheme.tertiary
-        "info" -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
     val timeFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val time = remember(entry.timestamp) { timeFormat.format(Date(entry.timestamp)) }
 
@@ -153,13 +163,13 @@ private fun LogEntryRow(entry: RuntimeLogEntry) {
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Text(
-            text = "$time [${entry.level}] ${entry.message}",
+            text = "$time [error] ${entry.message}",
             style = MaterialTheme.typography.bodySmall.copy(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp,
                 lineHeight = 16.sp
             ),
-            color = levelColor,
+            color = MaterialTheme.colorScheme.error,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
         )
     }
@@ -167,9 +177,10 @@ private fun LogEntryRow(entry: RuntimeLogEntry) {
 
 private fun copyAllLogEntries(context: Context, entries: List<RuntimeLogEntry>) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
     // Keep the same order as the current UI: oldest at top, newest at bottom.
     val text = entries.joinToString(separator = "\n") { entry ->
-        "${copyTimestamp(entry.timestamp)} [${entry.level}] ${entry.message}"
+        "${timeFormat.format(Date(entry.timestamp))} [error] ${entry.message}"
     }
     clipboard.setPrimaryClip(
         ClipData.newPlainText(
@@ -177,16 +188,4 @@ private fun copyAllLogEntries(context: Context, entries: List<RuntimeLogEntry>) 
             text
         )
     )
-}
-
-private fun copyTimestamp(timestamp: Long): String {
-    val formatter = COPY_TIME_FORMAT.get()
-        ?: SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
-    return formatter.format(Date(timestamp))
-}
-
-private val COPY_TIME_FORMAT = object : ThreadLocal<SimpleDateFormat>() {
-    override fun initialValue(): SimpleDateFormat {
-        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
-    }
 }

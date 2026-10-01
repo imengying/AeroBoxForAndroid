@@ -2,10 +2,10 @@ package com.aerobox.data.repository
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.aerobox.AeroBoxApplication
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.errors.LocalizedException
-import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.network.NodeAddressFamilyResolver
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.IPv6Mode
@@ -17,7 +17,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,6 +32,7 @@ sealed interface VpnConnectionResult {
 
 class VpnRepository(private val context: Context) {
     companion object {
+        private const val TAG = "VpnRepository"
         private val backgroundRefreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private val dueRefreshRunning = AtomicBoolean(false)
     }
@@ -60,10 +60,6 @@ class VpnRepository(private val context: Context) {
             val currentIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(currentNode)
             val targetIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(node)
             if (currentIsIpv6Only != targetIsIpv6Only) {
-                RuntimeLogBuffer.append(
-                    "info",
-                    "Switching across FakeIP mode boundary, performing full VPN restart"
-                )
                 stopVpn()
                 waitForServiceStop()
                 return launchNodeAction(node) { config, resolvedNode ->
@@ -114,47 +110,13 @@ class VpnRepository(private val context: Context) {
                 if (triggerSubscriptionId !in updatedSubscriptionIds) return@launch
                 if (!VpnStateManager.serviceActive.value) return@launch
                 val activeNode = VpnStateManager.vpnState.value.currentNode
-                if (activeNode?.id != triggerNode.id) {
-                    RuntimeLogBuffer.append(
-                        "info",
-                        "Due subscription refreshed in background, active node changed; skipping reload"
-                    )
-                    return@launch
-                }
+                if (activeNode?.id != triggerNode.id) return@launch
 
-                RuntimeLogBuffer.append(
-                    "info",
-                    "Due subscription refreshed in background, reloading active connection"
-                )
-
-                when (val reloadResult = reloadActiveConnection(triggerNode)) {
-                    is VpnConnectionResult.Success -> Unit
-                    VpnConnectionResult.NoNodeAvailable -> {
-                        RuntimeLogBuffer.append(
-                            "warn",
-                            "Background subscription refresh finished but no replacement node was available"
-                        )
-                    }
-                    is VpnConnectionResult.InvalidConfig -> {
-                        RuntimeLogBuffer.append(
-                            "warn",
-                            "Background subscription refresh reload failed: ${reloadResult.error}"
-                        )
-                    }
-                    is VpnConnectionResult.Failure -> {
-                        RuntimeLogBuffer.append(
-                            "warn",
-                            "Background subscription refresh reload failed: ${reloadResult.throwable.message ?: reloadResult.throwable}"
-                        )
-                    }
-                }
+                reloadActiveConnection(triggerNode)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                RuntimeLogBuffer.append(
-                    "warn",
-                    "Background subscription refresh failed: ${error.message ?: error}"
-                )
+                Log.w(TAG, "Background subscription refresh failed", error)
             } finally {
                 dueRefreshRunning.set(false)
             }
@@ -198,7 +160,6 @@ class VpnRepository(private val context: Context) {
     }
 
     fun stopVpn() {
-        RuntimeLogBuffer.append("info", "Sending ACTION_STOP to VPN service")
         val intent = Intent(context, AeroBoxVpnService::class.java).apply {
             action = AeroBoxVpnService.ACTION_STOP
         }
@@ -207,11 +168,9 @@ class VpnRepository(private val context: Context) {
 
     private suspend fun waitForServiceStop(timeoutMs: Long = 5_000L) {
         withTimeoutOrNull(timeoutMs) {
-            while (VpnStateManager.serviceActive.value) {
-                delay(100)
-            }
-        } ?: RuntimeLogBuffer.append(
-            "warn",
+            VpnStateManager.serviceActive.first { !it }
+        } ?: Log.w(
+            TAG,
             "Timed out waiting for VPN service to stop before restart"
         )
     }
