@@ -20,11 +20,11 @@ import com.aerobox.data.repository.AppUpdateInfo
 import com.aerobox.data.repository.AppUpdateRepository
 import com.aerobox.data.repository.AppListRepository
 import com.aerobox.data.repository.VpnConnectionResult
-import com.aerobox.data.repository.VpnConfigResolver
 import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -44,7 +44,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val appListRepository = AppListRepository(appContext)
     private val appUpdateRepository = AppUpdateRepository()
     private val vpnRepository = AeroBoxApplication.vpnRepository
-    private val configResolver = VpnConfigResolver(appContext)
     private val runtimeSettingsMutex = Mutex()
 
     private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
@@ -395,59 +394,32 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         return candidate
     }
 
-    private suspend fun validateDnsSettings(
+    private fun validateDnsSettings(
         remoteDns: String,
-        directDns: String
-    ): PreferenceManager.VpnConfigPreferences? {
-        val currentPrefs = PreferenceManager.readVpnConfigPreferences(appContext)
-        val candidatePrefs = currentPrefs.copy(
-            remoteDns = remoteDns,
-            directDns = directDns
-        )
-
+        directDns: String,
+        ipv6Mode: IPv6Mode
+    ): Boolean {
         val syntaxError = ConfigGenerator.validateDnsSettings(
             context = AppLocaleManager.localizedContext(appContext, languageTag.value),
             remoteDns = remoteDns,
             directDns = directDns,
-            ipv6Mode = currentPrefs.ipv6Mode
+            ipv6Mode = ipv6Mode
         )
         if (syntaxError != null) {
             _uiMessage.tryEmit(appString(R.string.dns_invalid_format, syntaxError))
-            return null
+            return false
         }
-
-        val state = VpnStateManager.vpnState.value
-        val currentNode = state.currentNode
-        if (state.isConnected && currentNode != null) {
-            val candidateConfig = runCatching {
-                configResolver.buildConfig(
-                    node = currentNode,
-                    preferencesOverride = candidatePrefs
-                )
-            }.getOrElse { error ->
-                val message = error.message?.takeIf { it.isNotBlank() }
-                    ?: appString(R.string.config_generation_failed)
-                _uiMessage.tryEmit(appString(R.string.dns_invalid_format, message))
-                return null
-            }
-            val configError = configResolver.validateConfig(candidateConfig)
-            if (configError != null) {
-                _uiMessage.tryEmit(appString(R.string.dns_invalid_format, configError))
-                return null
-            }
-        }
-
-        return candidatePrefs
+        return true
     }
 
     private suspend fun applyDnsSettings(remoteDns: String, directDns: String) {
         runtimeSettingsMutex.withLock {
             val activeNode = VpnStateManager.vpnState.value.currentNode
             val currentPrefs = PreferenceManager.readVpnConfigPreferences(appContext)
-            validateDnsSettings(remoteDns, directDns) ?: return@withLock
             if (currentPrefs.remoteDns == remoteDns && currentPrefs.directDns == directDns) {
                 return@withLock
             }
+            if (!validateDnsSettings(remoteDns, directDns, currentPrefs.ipv6Mode)) return@withLock
             PreferenceManager.setRemoteDns(appContext, remoteDns)
             PreferenceManager.setDirectDns(appContext, directDns)
             if (!refreshActiveConnectionForRuntimeChange(appString(R.string.dns_setting_failed))) {
@@ -523,6 +495,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
 
             is VpnConnectionResult.Failure -> {
+                // Keep the saved preference for the next connection; never undo a user stop.
+                if (result.throwable is CancellationException) return true
                 val details = result.throwable.message?.takeIf { it.isNotBlank() }
                 _uiMessage.tryEmit(
                     details?.let {

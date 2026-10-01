@@ -356,6 +356,7 @@
     <string name="node_edit_server">Сервер</string>
     <string name="node_edit_port">Порт</string>
     <string name="node_edit_required">Обязательное поле</string>
+    <string name="node_edit_conflict">Узел изменился. Вернитесь назад и откройте его заново для редактирования.</string>
     <string name="node_edit_method">Метод шифрования</string>
     <string name="node_edit_password">Пароль</string>
     <string name="node_edit_username">Имя пользователя</string>

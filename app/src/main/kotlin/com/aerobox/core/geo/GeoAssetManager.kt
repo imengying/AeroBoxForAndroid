@@ -66,6 +66,8 @@ object GeoAssetManager {
     private const val GEOSITE_ADS_FILE = "geosite-category-ads-all.srs"
     private const val GEOIP_VERSION_FILE = "geoip.version.txt"
     private const val GEOSITE_VERSION_FILE = "geosite.version.txt"
+    private const val GEOSITE_CN_VERSION_FILE = "geosite-cn.version.txt"
+    private const val GEOSITE_ADS_VERSION_FILE = "geosite-category-ads-all.version.txt"
 
     private val client = SharedHttpClient.base.newBuilder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -84,7 +86,8 @@ object GeoAssetManager {
     fun getGeoAdsFile(context: Context): File = File(getGeoDir(context), GEOSITE_ADS_FILE)
 
     private fun getGeoIpVersionFile(context: Context): File = File(getGeoDir(context), GEOIP_VERSION_FILE)
-    private fun getGeoSiteVersionFile(context: Context): File = File(getGeoDir(context), GEOSITE_VERSION_FILE)
+    private fun getGeoSiteVersionFile(context: Context): File = File(getGeoDir(context), GEOSITE_CN_VERSION_FILE)
+    private fun getGeoAdsVersionFile(context: Context): File = File(getGeoDir(context), GEOSITE_ADS_VERSION_FILE)
 
     fun hasLocalFiles(context: Context): Boolean {
         return isValidRuleSetFile(getGeoIpFile(context)) &&
@@ -133,9 +136,10 @@ object GeoAssetManager {
         } else {
             true
         }
-        if ((targets.geoSiteCn || targets.geoAds) && (!targets.geoSiteCn || cnOk) && (!targets.geoAds || adsOk)) {
+        if ((targets.geoSiteCn && cnOk) || (targets.geoAds && adsOk)) {
             fetchLatestReleaseTag(GEOSITE_REPO)?.let { version ->
-                writeVersionFile(getGeoSiteVersionFile(context), version)
+                if (targets.geoSiteCn && cnOk) writeVersionFile(getGeoSiteVersionFile(context), version)
+                if (targets.geoAds && adsOk) writeVersionFile(getGeoAdsVersionFile(context), version)
             }
         }
         return GeoUpdateResult(geoIpOk = ipOk, geoSiteCnOk = cnOk, geoAdsOk = adsOk)
@@ -173,13 +177,18 @@ object GeoAssetManager {
             ensureBundledAsset(
                 context = context,
                 fileName = GEOSITE_CN_FILE,
-                versionFileName = GEOSITE_VERSION_FILE
+                versionFileName = GEOSITE_CN_VERSION_FILE,
+                assetVersionFileName = GEOSITE_VERSION_FILE
             )
             ensureBundledAsset(
                 context = context,
                 fileName = GEOSITE_ADS_FILE,
-                versionFileName = GEOSITE_VERSION_FILE
+                versionFileName = GEOSITE_ADS_VERSION_FILE,
+                assetVersionFileName = GEOSITE_VERSION_FILE
             )
+            if (getGeoSiteVersionFile(context).isFile && getGeoAdsVersionFile(context).isFile) {
+                File(getGeoDir(context), GEOSITE_VERSION_FILE).delete()
+            }
         }.onFailure { e ->
             Log.w(TAG, "ensureBundledAssets failed: ${e.message}")
         }
@@ -220,12 +229,14 @@ object GeoAssetManager {
     private fun ensureBundledAsset(
         context: Context,
         fileName: String,
-        versionFileName: String
+        versionFileName: String,
+        assetVersionFileName: String = versionFileName
     ) {
         val target = File(getGeoDir(context), fileName)
         val versionFile = File(getGeoDir(context), versionFileName)
 
-        val assetVersion = readAssetText(context, ASSET_PREFIX + versionFileName) ?: return
+        val assetVersion = readAssetText(context, ASSET_PREFIX + assetVersionFileName) ?: return
+        // The legacy shared geosite version cannot identify either file reliably.
         val localVersion = versionFile.takeIf { it.isFile }?.readText()?.trim().orEmpty()
 
         val shouldExtract = when {

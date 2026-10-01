@@ -136,27 +136,40 @@ fun ProxyNode.connectionFingerprint(includeName: Boolean = true): String {
     return encodeIdentityParts(parts)
 }
 
-private fun ProxyNode.normalizedName(): String = name.normalizedTokenValue()
-
-fun ProxyNode.normalizedDisplayName(): String = normalizedName()
-
-private fun ProxyNode.hasSameEndpoint(other: ProxyNode): Boolean {
-    return server.normalizedServerValue() == other.server.normalizedServerValue() &&
-        port == other.port
-}
-
-fun ProxyNode.matchScore(other: ProxyNode): Int {
-    if (type != other.type) return Int.MIN_VALUE
-
-    var score = 20
-    if (connectionFingerprint(includeName = false) == other.connectionFingerprint(includeName = false)) {
-        score += 100
+internal class ProxyNodeMatcher(nodes: List<ProxyNode>) {
+    private class Candidate(val node: ProxyNode) {
+        val name = node.type to node.name.normalizedTokenValue()
+        val fingerprint = node.connectionFingerprint(includeName = false)
+        val endpoint = Triple(node.type, node.server.normalizedServerValue(), node.port)
     }
-    if (normalizedName().isNotEmpty() && normalizedName() == other.normalizedName()) {
-        score += 40
+
+    private val candidates = nodes.map(::Candidate)
+    private val byName = candidates.groupBy { it.name }.mapValues { it.value.toMutableSet() }
+    private val byFingerprint = candidates.groupBy { it.fingerprint }.mapValues { it.value.toMutableSet() }
+    private val byEndpoint = candidates.groupBy { it.endpoint }.mapValues { it.value.toMutableSet() }
+    private val byNameAndEndpoint = candidates.groupBy { it.name to it.endpoint }
+        .mapValues { it.value.toMutableSet() }
+
+    fun takeBestMatch(node: ProxyNode): ProxyNode? {
+        val name = node.name.normalizedTokenValue()
+        val nameKey = node.type to name
+        val endpointKey = Triple(node.type, node.server.normalizedServerValue(), node.port)
+        val named = byName[nameKey]?.takeIf { name.isNotEmpty() }
+        val exact = byFingerprint[node.connectionFingerprint(includeName = false)]
+        val namedEndpoint = byNameAndEndpoint[nameKey to endpointKey]?.takeIf { name.isNotEmpty() }
+        val endpoint = byEndpoint[endpointKey]
+        // Preserve the original priority and insertion-order tie breaking.
+        val matched = named?.singleOrNull()
+            ?: exact?.firstOrNull()
+            ?: namedEndpoint?.firstOrNull()
+            ?: named?.firstOrNull()
+            ?: endpoint?.firstOrNull()
+            ?: return null
+
+        byName[matched.name]?.remove(matched)
+        byFingerprint[matched.fingerprint]?.remove(matched)
+        byEndpoint[matched.endpoint]?.remove(matched)
+        byNameAndEndpoint[matched.name to matched.endpoint]?.remove(matched)
+        return matched.node
     }
-    if (hasSameEndpoint(other)) {
-        score += 30
-    }
-    return score
 }

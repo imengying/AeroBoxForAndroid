@@ -26,9 +26,8 @@ class VpnConfigResolver(private val context: Context) {
 
     suspend fun resolveSelectedNode(): ProxyNode? {
         val selectedId = PreferenceManager.lastSelectedNodeIdFlow(context).first()
-        val allNodes = nodeDao.getAllNodes().first()
-        allNodes.firstOrNull { it.id == selectedId }?.let { return it }
-        val fallbackNode = allNodes.firstOrNull() ?: return null
+        if (selectedId > 0L) nodeDao.getNodeById(selectedId)?.let { return it }
+        val fallbackNode = nodeDao.getFirstNode() ?: return null
         if (fallbackNode.id > 0L) {
             PreferenceManager.setLastSelectedNodeId(context, fallbackNode.id)
         }
@@ -51,14 +50,11 @@ class VpnConfigResolver(private val context: Context) {
         return if (fallbackToSelected) resolveSelectedNode() else null
     }
 
-    suspend fun buildConfig(
-        node: ProxyNode,
-        preferencesOverride: PreferenceManager.VpnConfigPreferences? = null
-    ): String {
+    suspend fun buildConfig(node: ProxyNode): String {
         val nodeName = node.name.ifBlank { "unnamed node" }
         Log.i(TAG, "Generating config for $nodeName [${node.type.name}]")
         RuntimeLogBuffer.append("info", "Generating config for $nodeName [${node.type.name}]")
-        val prefs = preferencesOverride ?: PreferenceManager.readVpnConfigPreferences(context)
+        val prefs = PreferenceManager.readVpnConfigPreferences(context)
         if (prefs.enableGeoRules) {
             if (!GeoAssetManager.ensureRuleSetAssets(context)) {
                 val msg = context.getString(R.string.error_rule_set_unavailable)
@@ -118,12 +114,12 @@ class VpnConfigResolver(private val context: Context) {
         return config
     }
 
-    fun validateConfig(config: String): String? {
+    suspend fun validateConfig(config: String): String? = withContext(Dispatchers.IO) {
         val error = SingBoxNative.checkConfig(config)
         if (error != null) {
             Log.e(TAG, "Config check failed: $error")
             RuntimeLogBuffer.append("error", "Config check failed: $error")
         }
-        return error
+        error
     }
 }

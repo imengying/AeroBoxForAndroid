@@ -1,6 +1,7 @@
 package com.aerobox.data.database
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -22,6 +23,9 @@ interface ProxyNodeDao {
     @Query("SELECT * FROM proxy_nodes WHERE id = :id LIMIT 1")
     suspend fun getNodeById(id: Long): ProxyNode?
 
+    @Query("SELECT * FROM proxy_nodes WHERE id IN (:ids)")
+    suspend fun getNodesByIds(ids: List<Long>): List<ProxyNode>
+
     @Query("SELECT * FROM proxy_nodes WHERE id = :id LIMIT 1")
     fun observeNodeById(id: Long): Flow<ProxyNode?>
 
@@ -42,6 +46,12 @@ interface ProxyNodeDao {
 
     @Update
     suspend fun update(node: ProxyNode): Int
+
+    @Update
+    suspend fun updateAll(nodes: List<ProxyNode>)
+
+    @Delete
+    suspend fun deleteAll(nodes: List<ProxyNode>)
 
     @Query("UPDATE proxy_nodes SET subscriptionId = :targetSubscriptionId WHERE subscriptionId = :fromSubscriptionId")
     suspend fun reassignBySubscription(fromSubscriptionId: Long, targetSubscriptionId: Long)

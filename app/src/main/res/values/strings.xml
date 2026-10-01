@@ -344,6 +344,7 @@
     <string name="node_edit_server">Server</string>
     <string name="node_edit_port">Port</string>
     <string name="node_edit_required">Required</string>
+    <string name="node_edit_conflict">This node has changed. Go back and reopen it before editing.</string>
     <string name="node_edit_method">Encryption method</string>
     <string name="node_edit_password">Password</string>
     <string name="node_edit_username">Username</string>

@@ -12,11 +12,10 @@ import com.aerobox.core.subscription.ParseDiagnostics
 import com.aerobox.core.subscription.SubscriptionParser
 import com.aerobox.data.model.NodeLatencyState
 import com.aerobox.data.model.ProxyNode
+import com.aerobox.data.model.ProxyNodeMatcher
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.model.connectionFingerprint
 import com.aerobox.data.model.isLocalGroup
-import com.aerobox.data.model.matchScore
-import com.aerobox.data.model.normalizedDisplayName
 import com.aerobox.utils.PreferenceManager
 import com.aerobox.work.SubscriptionUpdateScheduler
 import kotlinx.coroutines.async
@@ -48,6 +47,8 @@ data class SubscriptionImportResult(
     val metadataFromHeader: Boolean = false,
     val diagnostics: ParseDiagnostics = ParseDiagnostics()
 )
+
+enum class NodeUpdateResult { SAVED, NOT_FOUND, CONFLICT }
 
 // Result of parsing inline content (local file / pasted text / single-node QR).
 // Nodes are not yet assigned to a group — callers pair this with an
@@ -83,10 +84,10 @@ class SubscriptionRepository(context: Context) {
     private val subscriptionRefreshLocks = Array(SUBSCRIPTION_LOCK_COUNT) { Mutex() }
 
     companion object {
-        private const val NODE_MATCH_THRESHOLD = 50
         private const val MAX_CONCURRENT_SUBSCRIPTION_REFRESHES = 4
         private const val MAX_REFRESH_SNAPSHOT_RETRIES = 3
         private const val SUBSCRIPTION_LOCK_COUNT = 32
+        private const val NODE_QUERY_BATCH_SIZE = 500
         private const val SUBSCRIPTION_USER_AGENT = "clash-verge/v1.3.8"
         // Hard cap on subscription response body size. Aligned with Clash YAML
         // codePointLimit so a malicious server cannot OOM the app by streaming
@@ -127,8 +128,7 @@ class SubscriptionRepository(context: Context) {
 
     private data class SubscriptionFetchResult(
         val content: String,
-        val headers: Headers,
-        val resolvedUrl: String
+        val headers: Headers
     )
 
     private data class PreparedSubscriptionImport(
@@ -181,24 +181,32 @@ class SubscriptionRepository(context: Context) {
 
     fun observeNodeById(nodeId: Long) = proxyNodeDao.observeNodeById(nodeId)
 
-    suspend fun updateNode(node: ProxyNode): Boolean {
-        val existing = proxyNodeDao.getNodeById(node.id) ?: return false
+    suspend fun updateNode(node: ProxyNode, original: ProxyNode): NodeUpdateResult {
+        require(node.id == original.id)
+        val existing = proxyNodeDao.getNodeById(node.id) ?: return NodeUpdateResult.NOT_FOUND
         return subscriptionMutationLock(existing.subscriptionId).withLock {
-            val latest = proxyNodeDao.getNodeById(node.id) ?: return@withLock false
-            val connectionChanged = latest.connectionFingerprint(includeName = false) !=
-                node.connectionFingerprint(includeName = false)
-            proxyNodeDao.update(
-                node.copy(
-                    id = latest.id,
+            database.withTransaction {
+                val latest = proxyNodeDao.getNodeById(node.id)
+                    ?: return@withTransaction NodeUpdateResult.NOT_FOUND
+                // Sorting, group moves and latency updates do not invalidate an edit.
+                if (latest.copy(
+                        subscriptionId = original.subscriptionId,
+                        latency = original.latency,
+                        createdAt = original.createdAt
+                    ) != original
+                ) {
+                    return@withTransaction NodeUpdateResult.CONFLICT
+                }
+                val connectionChanged = latest.connectionFingerprint(includeName = false) !=
+                    node.connectionFingerprint(includeName = false)
+                val updated = node.copy(
                     subscriptionId = latest.subscriptionId,
-                    latency = if (connectionChanged) {
-                        NodeLatencyState.UNTESTED
-                    } else {
-                        latest.latency
-                    },
+                    latency = if (connectionChanged) NodeLatencyState.UNTESTED else latest.latency,
                     createdAt = latest.createdAt
                 )
-            ) > 0
+                if (updated != latest) proxyNodeDao.update(updated)
+                NodeUpdateResult.SAVED
+            }
         }
     }
 
@@ -437,15 +445,24 @@ class SubscriptionRepository(context: Context) {
         }
     }
 
-    suspend fun updateNodeLatency(nodeId: Long, latency: Int) {
-        proxyNodeDao.updateLatency(nodeId, latency)
+    suspend fun updateNodeLatency(node: ProxyNode, latency: Int) {
+        updateNodeLatencies(listOf(node), mapOf(node.id to latency))
     }
 
-    suspend fun updateNodeLatencies(latencies: Map<Long, Int>) {
+    suspend fun updateNodeLatencies(testedNodes: List<ProxyNode>, latencies: Map<Long, Int>) {
         if (latencies.isEmpty()) return
         database.withTransaction {
-            latencies.forEach { (nodeId, latency) ->
-                proxyNodeDao.updateLatency(nodeId, latency)
+            val currentNodes = latencies.keys.chunked(NODE_QUERY_BATCH_SIZE)
+                .flatMap { proxyNodeDao.getNodesByIds(it) }
+                .associateBy { it.id }
+            for (tested in testedNodes) {
+                val latency = latencies[tested.id] ?: continue
+                val current = currentNodes[tested.id] ?: continue
+                if (current.latency != latency &&
+                    current.connectionFingerprint(includeName = false) == tested.connectionFingerprint(includeName = false)
+                ) {
+                    proxyNodeDao.updateLatency(current.id, latency)
+                }
             }
         }
     }
@@ -455,7 +472,7 @@ class SubscriptionRepository(context: Context) {
         if (node.subscriptionId <= 0L) return null
 
         val subscriptionNodes = proxyNodeDao.getNodesBySubscription(node.subscriptionId)
-        return findBestMatchingNode(node, subscriptionNodes)
+        return ProxyNodeMatcher(subscriptionNodes).takeBestMatch(node)
     }
 
     // Parse inline content without touching the database. Pair the result with
@@ -671,7 +688,7 @@ class SubscriptionRepository(context: Context) {
         val fetchResult = fetchSubscription(trimmedUrl)
         val metadata = parseImportMetadata(
             source = fetchResult.content,
-            sourceUrl = fetchResult.resolvedUrl.ifBlank { trimmedUrl },
+            sourceUrl = trimmedUrl,
             headers = fetchResult.headers
         )
         val parsed = SubscriptionParser.parseSubscriptionContent(metadata.sanitizedContent)
@@ -737,8 +754,7 @@ class SubscriptionRepository(context: Context) {
                             }
                             SubscriptionFetchResult(
                                 content = readBoundedBody(it.body, MAX_SUBSCRIPTION_BYTES),
-                                headers = it.headers,
-                                resolvedUrl = it.request.url.toString()
+                                headers = it.headers
                             )
                         }
                         if (!cont.isActive) return
@@ -818,8 +834,14 @@ class SubscriptionRepository(context: Context) {
                             subscriptionId = current.id
                         )
                         val summary = calculateUpdateSummary(existingNodes, stabilizedNodes)
-                        proxyNodeDao.deleteBySubscription(current.id)
-                        proxyNodeDao.insertAll(stabilizedNodes)
+                        val existingById = existingNodes.associateBy { it.id }
+                        val retainedIds = stabilizedNodes.mapTo(mutableSetOf()) { it.id }
+                        val removed = existingNodes.filter { it.id !in retainedIds }
+                        val added = stabilizedNodes.filter { it.id == 0L }
+                        val changed = stabilizedNodes.filter { it.id > 0L && it != existingById[it.id] }
+                        if (removed.isNotEmpty()) proxyNodeDao.deleteAll(removed)
+                        if (changed.isNotEmpty()) proxyNodeDao.updateAll(changed)
+                        if (added.isNotEmpty()) proxyNodeDao.insertAll(added)
                         val updatedRows = subscriptionDao.updateRefreshState(
                             id = current.id,
                             url = prepared.resolvedUrl ?: current.url,
@@ -837,7 +859,9 @@ class SubscriptionRepository(context: Context) {
                         RefreshCommitOutcome.Success(
                             subscription = current,
                             existingNodes = existingNodes,
-                            persistedNodes = proxyNodeDao.getNodesBySubscription(current.id),
+                            persistedNodes = if (added.isEmpty()) stabilizedNodes else {
+                                proxyNodeDao.getNodesBySubscription(current.id)
+                            },
                             summary = summary
                         )
                     }
@@ -894,7 +918,7 @@ class SubscriptionRepository(context: Context) {
     ) {
         val previouslySelected = existingNodes.firstOrNull { it.id == selectedNodeId } ?: return
         val replacement = refreshedNodes.firstOrNull { it.id == selectedNodeId }
-            ?: findBestMatchingNode(previouslySelected, refreshedNodes)
+            ?: ProxyNodeMatcher(refreshedNodes).takeBestMatch(previouslySelected)
             ?: return
         if (replacement.id != selectedNodeId) {
             PreferenceManager.setLastSelectedNodeId(appContext, replacement.id)
@@ -906,15 +930,27 @@ class SubscriptionRepository(context: Context) {
         freshNodes: List<ProxyNode>,
         subscriptionId: Long
     ): List<ProxyNode> {
-        val remainingExisting = existingNodes.toMutableList()
-        val baseTimestamp = System.currentTimeMillis()
+        val matcher = ProxyNodeMatcher(existingNodes)
+        var previousOrder = (existingNodes.firstOrNull()?.createdAt ?: System.currentTimeMillis()) - 1L
         return freshNodes.mapIndexed { index, freshNode ->
-            val matchedNode = takeBestMatchingNode(freshNode, remainingExisting)
+            val matchedNode = matcher.takeBestMatch(freshNode)
+            val order = maxOf(
+                existingNodes.getOrNull(index)?.createdAt ?: previousOrder + 1L,
+                previousOrder + 1L
+            )
+            previousOrder = order
+            val latency = if (matchedNode != null &&
+                matchedNode.connectionFingerprint(includeName = false) == freshNode.connectionFingerprint(includeName = false)
+            ) {
+                matchedNode.latency
+            } else {
+                NodeLatencyState.UNTESTED
+            }
             freshNode.copy(
                 id = matchedNode?.id ?: 0L,
                 subscriptionId = subscriptionId,
-                latency = matchedNode?.latency ?: freshNode.latency,
-                createdAt = baseTimestamp + index
+                latency = latency,
+                createdAt = order
             )
         }
     }
@@ -929,68 +965,6 @@ class SubscriptionRepository(context: Context) {
                 subscriptionId = subscriptionId,
                 createdAt = baseTimestamp + index
             )
-        }
-    }
-
-    private fun takeBestMatchingNode(
-        targetNode: ProxyNode,
-        remainingExisting: MutableList<ProxyNode>
-    ): ProxyNode? {
-        takeUniqueNameMatch(targetNode, remainingExisting)?.let { return it }
-
-        val exactMatchIndex = remainingExisting.indexOfFirst {
-            it.connectionFingerprint(includeName = false) == targetNode.connectionFingerprint(includeName = false)
-        }
-        if (exactMatchIndex >= 0) {
-            return remainingExisting.removeAt(exactMatchIndex)
-        }
-
-        val bestMatch = remainingExisting
-            .withIndex()
-            .map { indexedValue ->
-                indexedValue.index to targetNode.matchScore(indexedValue.value)
-            }
-            .filter { (_, score) -> score >= NODE_MATCH_THRESHOLD }
-            .maxWithOrNull(compareBy<Pair<Int, Int>>({ it.second }, { -it.first }))
-            ?.first
-            ?.let { remainingExisting.removeAt(it) }
-
-        return bestMatch
-    }
-
-    private fun findBestMatchingNode(
-        targetNode: ProxyNode,
-        candidates: List<ProxyNode>
-    ): ProxyNode? {
-        takeUniqueNameMatch(targetNode, candidates.toMutableList())?.let { return it }
-
-        return candidates.firstOrNull {
-            it.connectionFingerprint(includeName = false) == targetNode.connectionFingerprint(includeName = false)
-        } ?: candidates
-            .map { candidate -> candidate to targetNode.matchScore(candidate) }
-            .filter { (_, score) -> score >= NODE_MATCH_THRESHOLD }
-            .maxByOrNull { (_, score) -> score }
-            ?.first
-    }
-
-    private fun takeUniqueNameMatch(
-        targetNode: ProxyNode,
-        candidates: MutableList<ProxyNode>
-    ): ProxyNode? {
-        val normalizedName = targetNode.normalizedDisplayName()
-        if (normalizedName.isBlank()) return null
-
-        val matchingIndices = candidates.withIndex()
-            .filter { (_, candidate) ->
-                candidate.type == targetNode.type &&
-                    candidate.normalizedDisplayName() == normalizedName
-            }
-            .map { it.index }
-
-        return if (matchingIndices.size == 1) {
-            candidates.removeAt(matchingIndices.first())
-        } else {
-            null
         }
     }
 

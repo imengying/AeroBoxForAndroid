@@ -338,6 +338,7 @@
     <string name="node_edit_server">服务器</string>
     <string name="node_edit_port">端口</string>
     <string name="node_edit_required">必填</string>
+    <string name="node_edit_conflict">节点已被更新，请返回后重新打开编辑。</string>
     <string name="node_edit_method">加密方式</string>
     <string name="node_edit_password">密码</string>
     <string name="node_edit_username">用户名</string>

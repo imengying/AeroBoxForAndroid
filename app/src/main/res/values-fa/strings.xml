@@ -344,6 +344,7 @@
     <string name="node_edit_server">سرور</string>
     <string name="node_edit_port">درگاه</string>
     <string name="node_edit_required">الزامی</string>
+    <string name="node_edit_conflict">این گره تغییر کرده است. برگردید و آن را دوباره برای ویرایش باز کنید.</string>
     <string name="node_edit_method">روش رمزنگاری</string>
     <string name="node_edit_password">گذرواژه</string>
     <string name="node_edit_username">نام کاربری</string>

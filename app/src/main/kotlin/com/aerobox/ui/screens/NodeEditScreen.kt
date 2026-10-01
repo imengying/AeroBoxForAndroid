@@ -48,7 +48,9 @@ import com.aerobox.R
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
 import com.aerobox.data.model.supportedProxyTransports
+import com.aerobox.data.repository.NodeUpdateResult
 import com.aerobox.ui.components.AppSnackbarHost
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -106,9 +108,10 @@ fun NodeEditScreen(
 @Composable
 private fun NodeEditForm(
     node: ProxyNode,
-    onSave: suspend (ProxyNode) -> Boolean,
+    onSave: suspend (ProxyNode, ProxyNode) -> NodeUpdateResult,
     onNavigateBack: () -> Unit
 ) {
+    val original = remember(node.id) { node }
     var draft by remember(node.id) { mutableStateOf(node) }
     var portText by remember(node.id) { mutableStateOf(node.port.toString()) }
     var alterIdText by remember(node.id) { mutableStateOf(node.alterId.toString()) }
@@ -116,6 +119,7 @@ private fun NodeEditForm(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val saveError = stringResource(R.string.operation_failed)
+    val conflictError = stringResource(R.string.node_edit_conflict)
     val port = portText.toIntOrNull()
     val isValid = draft.hasRequiredFields() && port != null && port in 1..65535
 
@@ -128,14 +132,17 @@ private fun NodeEditForm(
                     if (validPort != null) {
                         saving = true
                         scope.launch {
-                            val saved = runCatching {
-                                onSave(draft.normalizedForSave(validPort, alterIdText))
-                            }.getOrDefault(false)
-                            saving = false
-                            if (saved) {
-                                onNavigateBack()
-                            } else {
+                            try {
+                                when (onSave(draft.normalizedForSave(validPort, alterIdText), original)) {
+                                    NodeUpdateResult.SAVED, NodeUpdateResult.NOT_FOUND -> onNavigateBack()
+                                    NodeUpdateResult.CONFLICT -> snackbarHostState.showSnackbar(conflictError)
+                                }
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
                                 snackbarHostState.showSnackbar(saveError)
+                            } finally {
+                                saving = false
                             }
                         }
                     }

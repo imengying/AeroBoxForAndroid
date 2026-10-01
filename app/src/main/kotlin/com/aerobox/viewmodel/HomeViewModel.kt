@@ -30,6 +30,7 @@ import com.aerobox.utils.PreferenceManager
 import com.aerobox.utils.formatDuration
 import com.aerobox.utils.toTrafficStats
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -55,6 +56,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -62,6 +64,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         const val POST_CONNECT_IP_DETECT_DELAY_MS = 500L
         const val NODE_TEST_TIMEOUT_MS = 5000
         const val NODE_TEST_CONCURRENCY = 3
+        const val LATENCY_PUBLISH_INTERVAL_MS = 250L
         const val CONNECT_TIMEOUT_MS = 12_000L
         const val AUTO_RECONNECT_TIMEOUT_MS = 5 * 60_000L
     }
@@ -363,30 +366,40 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val subscriptionId = nodes.firstOrNull()?.subscriptionId ?: return@launch
             val testSettings = loadUrlTestSettings()
             val semaphore = Semaphore(NODE_TEST_CONCURRENCY)
-            val latencyResults = java.util.concurrent.ConcurrentHashMap<Long, Int>()
+            val latencyResults = mutableMapOf<Long, Int>()
             _nodeLatencyOverrides.update { current ->
                 current + nodes.associate { it.id to NodeLatencyState.TESTING }
             }
 
             try {
                 supervisorScope {
-                    val jobs = nodes.map { node ->
-                        launch {
-                            val latency = semaphore.withPermit {
-                                testNodeLatency(node, testSettings)
+                    val publisher = launch {
+                        var publishedCount = 0
+                        while (isActive) {
+                            delay(LATENCY_PUBLISH_INTERVAL_MS)
+                            if (latencyResults.size != publishedCount) {
+                                val snapshot = latencyResults.toMap()
+                                publishLatencyResults(nodes, subscriptionId, snapshot)
+                                publishedCount = snapshot.size
                             }
-                            val finalLatency = latency.takeIf { it > 0 } ?: NodeLatencyState.FAILED
-                            latencyResults[node.id] = finalLatency
-                            _nodeLatencyOverrides.update { it + (node.id to finalLatency) }
-
-                            // Recompute sort after each result using in-memory states.
-                            val sortedIds = computeSortedIds(nodes, latencyResults)
-                            _nodeSortOrder.update { it + (subscriptionId to sortedIds) }
                         }
                     }
-                    jobs.forEach { it.join() }
+                    try {
+                        val jobs = nodes.map { node ->
+                            launch {
+                                val latency = semaphore.withPermit {
+                                    testNodeLatency(node, testSettings)
+                                }
+                                latencyResults[node.id] = latency.takeIf { it > 0 } ?: NodeLatencyState.FAILED
+                            }
+                        }
+                        jobs.forEach { it.join() }
+                    } finally {
+                        publisher.cancelAndJoin()
+                    }
                 }
-                subscriptionRepository.updateNodeLatencies(latencyResults)
+                publishLatencyResults(nodes, subscriptionId, latencyResults.toMap())
+                subscriptionRepository.updateNodeLatencies(nodes, latencyResults)
             } finally {
                 val testedIds = nodes.map { it.id }.toSet()
                 _nodeLatencyOverrides.update { current ->
@@ -394,6 +407,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    private suspend fun publishLatencyResults(
+        nodes: List<ProxyNode>,
+        subscriptionId: Long,
+        results: Map<Long, Int>
+    ) {
+        val sortedIds = withContext(Dispatchers.Default) { computeSortedIds(nodes, results) }
+        _nodeLatencyOverrides.update { it + results }
+        _nodeSortOrder.update { it + (subscriptionId to sortedIds) }
     }
 
     private fun computeSortedIds(
@@ -426,7 +449,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 val latency = testNodeLatency(node, testSettings)
                 val finalLatency = latency.takeIf { it > 0 } ?: NodeLatencyState.FAILED
                 _nodeLatencyOverrides.update { it + (node.id to finalLatency) }
-                subscriptionRepository.updateNodeLatency(node.id, finalLatency)
+                subscriptionRepository.updateNodeLatency(node, finalLatency)
             } finally {
                 _nodeLatencyOverrides.update { it - node.id }
             }
@@ -434,14 +457,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun testNodeLatency(node: ProxyNode, settings: UrlTestSettings): Int {
-        return runCatching {
+        return try {
             vpnRepository.urlTestNode(
                 node = node,
                 directDns = settings.directDns,
                 ipv6Mode = settings.ipv6Mode,
                 timeoutMs = NODE_TEST_TIMEOUT_MS
             )
-        }.getOrDefault(-1)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            -1
+        }
     }
 
     fun refreshNetworkInfo() {
