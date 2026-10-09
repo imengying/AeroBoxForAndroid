@@ -6,6 +6,7 @@ ROOT = Path.cwd()
 TEMPLATE_ROOT = Path(__file__).resolve().parent.parent / "libbox"
 DISABLED_BUILD_TAG = "//go:build aerobox_disabled_libbox_feature\n\n"
 
+# Reviewed against sing-box v1.14.3.
 UPSTREAM_HASHES = {
     "log/observable.go": "49f1b8a85f256e605aef4cb23033374a8f83d8f05704d84c7e818af52a80e850",
     "include/registry.go": "cbc7bc06391fe555828782df7bc1ce0844e446a82647448739dbb3e8e3eef19e",
@@ -17,8 +18,8 @@ UPSTREAM_HASHES = {
     "experimental/libbox/deprecated.go": "d3eafe8092bb78276f88e1428ef02876a807d3d9ad5668afe192f776898f2629",
     "experimental/libbox/fdroid.go": "749c57b9a52eaf99a5fcb01a26d1028be10a73859422cadff3b531e18117196b",
     "experimental/libbox/fdroid_mirrors.go": "5a069edecf0766ab35d7dea57ca99dfe3c5307875304179f2767d57a11ca4ed3",
-    "experimental/libbox/http.go": "ceacdd7722fbc70f7132eb27b18d98907b23e1dcf950a5e18cfe6742e1e3d447",
-    "experimental/libbox/log.go": "ace67f3e6b3c4bc5d69814b1174ca688e76f75f8ad1155e732631a7dd747ab5f",
+    "experimental/libbox/http.go": "74f2aa6428a8d17923c48ed47abdddf64000bbff93d33a6028c991ce79d10a60",
+    "experimental/libbox/log.go": "8994884541ce20c3e506f087d948c44abb0c19f900416708704f9aebef7f98ff",
     "experimental/libbox/pprof.go": "8be57f35cedebcff7e325133ce162c2b602162e606362c4f42a1c4c6a12dd3d1",
     "experimental/libbox/profile_import.go": "df883b526a5f63c799d6713b90fa7d61927164788333bf603e423c0a9ba3c135",
     "experimental/libbox/remote_profile.go": "63b30392f33b8cd0d6787105d64a3787446aeefbe24cbb506756131d94d2f895",
@@ -27,9 +28,9 @@ UPSTREAM_HASHES = {
     "experimental/libbox/platform.go": "b25817582c554d713f49d23267850d79893620862f55ffbc538e887422b6ea9e",
     "experimental/libbox/service.go": "6539b080a3db16ec4ba6150c1e445e8b2da57434be07a0b4de44d1bd97687c04",
     "experimental/libbox/config.go": "7cc7b92f90fe7310523792bb79650d2f29466c3342b3b46dc509b320d9487702",
-    "experimental/libbox/command_server.go": "7c1bdad02ee81c397e56eb326994a2a75c435531afaeaf643d7c971446be344d",
-    "experimental/libbox/setup.go": "688a3286ab733f2a94aa05a5259460519c86fe627b9126475f05cd67c5ee0512",
-    "experimental/libbox/monitor.go": "cfbfe1e35ecebc375f35b3a44d165ec78c3c157228b3ed6c315a31f45cdf4c2f",
+    "experimental/libbox/command_server.go": "a76df699286c3e0f9ef232fc1a0ff8b8d315036e066a6ccdbf7dc74a6202113f",
+    "experimental/libbox/setup.go": "052e043c4e257a32f1df94a2bcb999ecff8ecae4d11e0388214dc6631cb48238",
+    "experimental/libbox/monitor.go": "b4afd41fc13f55c602d83d7caa210fa21fbd9bb0db038804ca0cc0cbfe42ca39",
     "experimental/libbox/bridge_service_darwin.go": "74aeb9334cef49f231dc743c8e0eb021db65cf5fa7d0d2d927c0c5a40f6835cf",
     "experimental/libbox/bridge_service_linux.go": "615814c3ed53d0cbfa411c51c54e7fab040e8dba56d72b932f02a06f040ccb7c",
     "experimental/libbox/bridge_stub.go": "7bb780f47fadcbd57dd4ea0409294b42bc0011e8ea49fbed135add1eddae01bd",
@@ -47,7 +48,7 @@ UPSTREAM_HASHES = {
     "experimental/libbox/command_types_usbip_local_darwin.go": "580e96383e9bb0a91facb0c2056674c05b8b3c002b46e392b331b357498c41a2",
     "experimental/libbox/command_types_usbip_local_stub.go": "35288ad29055c2af92de41d424ec42d833f6537615f9a80b203156cb7bcbacf2",
     "experimental/libbox/command_types_usbip_status.go": "8d9ea6279501922c3ffba823aa22757d1e40e85a6c4afc93ef95daa490286261",
-    "experimental/libbox/debug.go": "1a4b4390441b6356048770110e06799bdaf5196f847ddbb60c45dbcf2828ebc1",
+    "experimental/libbox/debug.go": "b1ba075d38e77b9f8cb217b7596c1569456fbfd2c948ccb9be7e1ee8d848833c",
     "experimental/libbox/native_shell_session.go": "3a3702f787c48d5dde1f3ebcdc13c2d0c08693b65a2052499aff7422e86db723",
     "experimental/libbox/native_shell_session_stub.go": "1e5ee8dd0fb4dfbecfd7fa430a0e5eccd598fa73bddcf59d0f2922f11b84820c",
     "experimental/libbox/neighbor.go": "cfe24dd4252aba380233db1979bc786eda8e8499ca5c491be56c458a697bc33f",
@@ -57,8 +58,8 @@ UPSTREAM_HASHES = {
     "experimental/libbox/neighbor_unix.go": "9cda1d0d694bca72be0f345f7a9e8cee3bcc2e7b36735ca00803c8d7b9d0c73c",
     "experimental/libbox/networkquality.go": "6dc6e3b4baf8c03aeee235788abd9732fcb436ff2df9aad919628bc84cbf8588",
     "experimental/libbox/oom_report.go": "fa9251c8a01a15a5c67dbb22c96775dd878c63639988d98993a79d5008d20e93",
-    "experimental/libbox/power_report.go": "52098d7c65096aa5b66e5c8adb0cc016ba597f095164f0f5fdbaf2ec1bff334f",
-    "experimental/libbox/report.go": "b15bc07557f644afe2a903c136760441e75acc0956d448e8b656b0f4aadfff23",
+    "experimental/libbox/power_report.go": "d620b1e900c9521dd523a26a38ae9376c446a5b744bdf284361ebddd323e945f",
+    "experimental/libbox/report.go": "345c22814f1406db28d087d1af7cec23a657781e1f1923e9ea82ed28a96e6f2d",
     "experimental/libbox/ssh_shell.go": "67a29a74f2da51306625bf34891a21d89e0408729be732d2be4a91b54c6ae829",
     "experimental/libbox/stun.go": "f46eebc255678de7653126229d2b24378566d31a6e32c200ff097ab6cf1cb570",
 }
@@ -262,10 +263,14 @@ def patch_monitor() -> None:
     path = "experimental/libbox/monitor.go"
     verify_upstream_file(path)
     remove_once(path, '\t"github.com/sagernet/sing-box/service/powerreport"\n')
+    remove_once(path, "\tlastNetworkPath             string\n")
     remove_once(
         path,
         "func (m *platformDefaultInterfaceMonitor) UpdateNetworkPath(networkPath string) {\n"
-        "\tm.logger.Debug(\"updated network path: \", networkPath)\n"
+        "\tif networkPath != m.lastNetworkPath {\n"
+        "\t\tm.lastNetworkPath = networkPath\n"
+        "\t\tm.logger.Debug(\"updated network path: \", networkPath)\n"
+        "\t}\n"
         "\tif m.powerManager == nil {\n"
         "\t\treturn\n"
         "\t}\n"
@@ -352,14 +357,23 @@ def patch_command_server() -> None:
         "\t\tcopyConfigSnapshot(filepath.Join(sWorkingPath, powerreport.DraftDirectoryName))\n"
         "\t}\n",
     )
-    for event in ("ne-sleep", "ne-wake"):
+    for event in ("RecordDeviceSleep", "RecordDeviceWake"):
         remove_once(
             path,
             "\trecorder := s.powerManager.Recorder()\n"
             "\tif recorder != nil {\n"
-            f"\t\trecorder.RecordPlatformEvent(\"{event}\")\n"
+            f"\t\trecorder.{event}()\n"
             "\t}\n",
         )
+    remove_once(
+        path,
+        "func (s *CommandServer) RecordScreenState(on bool) {\n"
+        "\trecorder := s.powerManager.Recorder()\n"
+        "\tif recorder != nil {\n"
+        "\t\trecorder.RecordScreenState(on)\n"
+        "\t}\n"
+        "}\n\n",
+    )
     replace_once(
         path,
         "func (h *platformHandler) TriggerNativeCrash() error {\n"
