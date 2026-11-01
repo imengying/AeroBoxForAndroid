@@ -6,7 +6,7 @@ ROOT = Path.cwd()
 TEMPLATE_ROOT = Path(__file__).resolve().parent.parent / "libbox"
 DISABLED_BUILD_TAG = "//go:build aerobox_disabled_libbox_feature\n\n"
 
-# Reviewed against sing-box v1.14.3.
+# Reviewed against sing-box v1.14.4.
 UPSTREAM_HASHES = {
     "log/observable.go": "49f1b8a85f256e605aef4cb23033374a8f83d8f05704d84c7e818af52a80e850",
     "include/registry.go": "cbc7bc06391fe555828782df7bc1ce0844e446a82647448739dbb3e8e3eef19e",
@@ -25,10 +25,10 @@ UPSTREAM_HASHES = {
     "experimental/libbox/remote_profile.go": "63b30392f33b8cd0d6787105d64a3787446aeefbe24cbb506756131d94d2f895",
     "experimental/libbox/semver.go": "dbcf34248eb9ad06fae1f5fca667045fcb1b0e4f5ea0de37dc5c62ddb7eb49b6",
     "experimental/libbox/semver_test.go": "dd0901f2b0ddfc7a4564d067c16f53dc90e11157a810ce2658940fb8de13f9d2",
-    "experimental/libbox/platform.go": "b25817582c554d713f49d23267850d79893620862f55ffbc538e887422b6ea9e",
-    "experimental/libbox/service.go": "6539b080a3db16ec4ba6150c1e445e8b2da57434be07a0b4de44d1bd97687c04",
+    "experimental/libbox/platform.go": "18b87867b99f956834adfd686f5a59234ae2d6766a43446c363a985e8f3c85b2",
+    "experimental/libbox/service.go": "f24115be10e1109e20c32c06750a6cb74a149b00dd82773bf7812959f25ac0ac",
     "experimental/libbox/config.go": "7cc7b92f90fe7310523792bb79650d2f29466c3342b3b46dc509b320d9487702",
-    "experimental/libbox/command_server.go": "a76df699286c3e0f9ef232fc1a0ff8b8d315036e066a6ccdbf7dc74a6202113f",
+    "experimental/libbox/command_server.go": "6402aba013b8dd87224e8d8999a36e50e23a9346be81cf9de1ee14a7043c4a90",
     "experimental/libbox/setup.go": "052e043c4e257a32f1df94a2bcb999ecff8ecae4d11e0388214dc6631cb48238",
     "experimental/libbox/monitor.go": "b4afd41fc13f55c602d83d7caa210fa21fbd9bb0db038804ca0cc0cbfe42ca39",
     "experimental/libbox/bridge_service_darwin.go": "74aeb9334cef49f231dc743c8e0eb021db65cf5fa7d0d2d927c0c5a40f6835cf",

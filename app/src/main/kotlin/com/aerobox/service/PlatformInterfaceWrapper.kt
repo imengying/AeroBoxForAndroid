@@ -34,8 +34,6 @@ interface PlatformInterfaceWrapper : PlatformInterface {
         error("openTun not implemented — must be overridden by VpnService")
     }
 
-    override fun useProcFS(): Boolean = false
-
     override fun findConnectionOwner(
         ipProtocol: Int,
         sourceAddress: String,
