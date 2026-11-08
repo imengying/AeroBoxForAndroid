@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -87,15 +88,16 @@ private fun SettingItemContent(
     supporting: String?,
     trailing: (@Composable () -> Unit)?
 ) {
+    val largeText = LocalDensity.current.fontScale >= 1.5f
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 72.dp)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = if (largeText) Alignment.Top else Alignment.CenterVertically
     ) {
         Box(
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(if (largeText) 24.dp else 40.dp),
             contentAlignment = Alignment.Center
         ) {
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
@@ -119,8 +121,15 @@ private fun SettingItemContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            if (largeText && trailing != null) {
+                Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.CenterEnd) {
+                    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                        trailing()
+                    }
+                }
+            }
         }
-        if (trailing != null) {
+        if (!largeText && trailing != null) {
             Spacer(Modifier.width(12.dp))
             Box(contentAlignment = Alignment.Center) {
                 CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {

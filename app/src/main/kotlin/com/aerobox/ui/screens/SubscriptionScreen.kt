@@ -17,23 +17,22 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -73,8 +72,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,6 +95,7 @@ import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.GroupPickerDialog
 import com.aerobox.ui.components.GroupPickerSection
 import com.aerobox.ui.components.AppDialog
+import com.aerobox.ui.components.DialogActions
 import com.aerobox.ui.components.rememberGroupPickerState
 import com.aerobox.ui.scanner.AeroBoxQrCaptureActivity
 import com.aerobox.utils.NetworkUtils
@@ -531,15 +534,10 @@ fun SubscriptionScreen(
                     text = deleteMessage,
                     style = MaterialTheme.typography.bodyMedium
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                DialogActions {
                     TextButton(onClick = { deleteTarget = null }) {
                         Text(cancelText)
                     }
-                    Spacer(Modifier.width(4.dp))
                     TextButton(onClick = {
                         viewModel.deleteSubscription(subscription)
                         deleteTarget = null
@@ -590,9 +588,7 @@ private fun NodeImportDialog(
             )
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
@@ -607,15 +603,10 @@ private fun NodeImportDialog(
                     localGroups = localGroups
                 )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            DialogActions {
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
                 }
-                Spacer(Modifier.width(4.dp))
                 TextButton(
                     onClick = {
                         val target = holder.state.toTarget(
@@ -876,6 +867,7 @@ private fun relativeTimeText(timestampMs: Long): String {
     return stringResource(R.string.days_ago_format, days.toInt())
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SubscriptionEditorDialog(
     title: String,
@@ -888,6 +880,7 @@ private fun SubscriptionEditorDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, url: String, autoUpdate: Boolean, updateInterval: Long) -> Unit
 ) {
+    val largeText = LocalDensity.current.fontScale >= 1.5f
     var name by remember(initialName) { mutableStateOf(initialName) }
     var url by remember(initialUrl) { mutableStateOf(initialUrl) }
     var autoUpdate by remember(initialAutoUpdate) { mutableStateOf(initialAutoUpdate) }
@@ -926,19 +919,26 @@ private fun SubscriptionEditorDialog(
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = url,
+                    textStyle = androidx.compose.material3.LocalTextStyle.current.copy(
+                        textDirection = androidx.compose.ui.text.style.TextDirection.Ltr,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Left
+                    ),
                     onValueChange = { url = it },
                     label = { Text(stringResource(R.string.subscription_url)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.End,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = stringResource(R.string.subscription_auto_update),
+                        modifier = if (largeText) Modifier.fillMaxWidth()
+                            else Modifier.weight(1f).padding(end = 12.dp),
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Switch(
@@ -948,12 +948,17 @@ private fun SubscriptionEditorDialog(
                 }
                 if (autoUpdate) {
                     Spacer(Modifier.height(8.dp))
+                    val intervalLabel = stringResource(R.string.subscription_update_interval_minutes)
+                    if (largeText) {
+                        Text(intervalLabel, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(8.dp))
+                    }
                     OutlinedTextField(
                         value = updateIntervalMinutes,
                         onValueChange = { input ->
                             updateIntervalMinutes = input.filter { it.isDigit() }
                         },
-                        label = { Text(stringResource(R.string.subscription_update_interval_minutes)) },
+                        label = if (largeText) null else { { Text(intervalLabel) } },
                         supportingText = {
                             Text(
                                 text = if (intervalValid) {
@@ -966,21 +971,18 @@ private fun SubscriptionEditorDialog(
                         isError = !intervalValid,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            if (largeText) contentDescription = intervalLabel
+                        }
                     )
                 }
             }
 
             Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            DialogActions {
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
                 }
-                Spacer(Modifier.width(8.dp))
                 TextButton(
                     onClick = {
                         val minutes = if (autoUpdate && !isLocalGroup) {

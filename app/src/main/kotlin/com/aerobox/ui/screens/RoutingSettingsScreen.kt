@@ -6,17 +6,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
@@ -57,6 +52,7 @@ import com.aerobox.data.model.CustomRuleSet
 import com.aerobox.data.model.RuleSetAction
 import com.aerobox.data.model.RuleSetFormat
 import com.aerobox.ui.components.AppDialog
+import com.aerobox.ui.components.DialogActions
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.SectionHeader
 import com.aerobox.ui.components.SettingItem
@@ -360,9 +356,7 @@ private fun CustomRuleSetDialog(
 
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
@@ -374,6 +368,10 @@ private fun CustomRuleSetDialog(
                 )
                 OutlinedTextField(
                     value = url,
+                    textStyle = androidx.compose.material3.LocalTextStyle.current.copy(
+                        textDirection = androidx.compose.ui.text.style.TextDirection.Ltr,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Left
+                    ),
                     onValueChange = { url = it },
                     label = { Text(stringResource(R.string.routing_custom_rule_url)) },
                     supportingText = { Text(stringResource(R.string.routing_custom_rule_url_hint)) },
@@ -430,6 +428,7 @@ private fun CustomRuleSetDialog(
                     ) {
                         Text(
                             text = stringResource(R.string.routing_custom_rule_enabled),
+                            modifier = Modifier.weight(1f).padding(end = 12.dp),
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Switch(
@@ -440,20 +439,15 @@ private fun CustomRuleSetDialog(
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            DialogActions {
                 if (ruleSet != null) {
                     TextButton(onClick = { onDelete(ruleSet) }) {
                         Text(stringResource(R.string.delete))
                     }
                 }
-                Spacer(modifier = Modifier.weight(1f))
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
                 }
-                Spacer(modifier = Modifier.width(8.dp))
                 TextButton(
                     onClick = { onConfirm(name, url, format, action, enabled) },
                     enabled = name.isNotBlank() && url.isNotBlank()

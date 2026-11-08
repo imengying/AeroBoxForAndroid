@@ -58,6 +58,7 @@ import com.aerobox.ui.components.ConnectionCard
 import com.aerobox.ui.components.NodeListSheet
 import com.aerobox.ui.components.TrafficStatsCard
 import com.aerobox.ui.components.AppDialog
+import com.aerobox.ui.components.DialogActions
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.utils.needsNotificationPermission
 import com.aerobox.viewmodel.HomeViewModel
@@ -236,11 +237,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(factory = AppViewModelFactor
                     },
                     style = MaterialTheme.typography.bodyMedium
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                DialogActions {
                     TextButton(onClick = { viewModel.dismissConnectionIssue() }) {
                         Text(
                             stringResource(

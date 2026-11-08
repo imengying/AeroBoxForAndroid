@@ -5,10 +5,16 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,8 +46,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -93,56 +102,69 @@ fun LogScreen(
         }
     }
 
+    val largeText = LocalDensity.current.fontScale >= 1.5f
+    val logActions: @Composable RowScope.() -> Unit = {
+        IconButton(onClick = onNavigateToConnections) {
+            Icon(AppIcons.Route, contentDescription = stringResource(R.string.connections_title))
+        }
+        IconButton(onClick = { export.launch("AeroBox-diagnostics.json") }, enabled = !busy) {
+            Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.export_diagnostics))
+        }
+        val logCopiedMessage = stringResource(R.string.log_copied)
+        IconButton(
+            onClick = {
+                copyAllLogEntries(context, logLines)
+                scope.launch {
+                    snackbarHostState.showSnackbar(logCopiedMessage)
+                }
+            },
+            enabled = logLines.isNotEmpty()
+        ) {
+            Icon(AppIcons.ContentCopy, contentDescription = stringResource(R.string.log_action_copy_all))
+        }
+        IconButton(onClick = {
+            scope.launch {
+                try {
+                    CrashDiagnostics.clear()
+                    RuntimeLogBuffer.clear()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    RuntimeLogBuffer.appendError("Failed to clear crash summaries: ${error.message ?: error}")
+                }
+            }
+        }) {
+            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.log_action_clear))
+        }
+    }
+
     Scaffold(
         snackbarHost = {
             AppSnackbarHost(hostState = snackbarHostState)
         },
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.log_screen_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onNavigateToConnections) {
-                        Icon(AppIcons.Route, contentDescription = stringResource(R.string.connections_title))
-                    }
-                    IconButton(onClick = { export.launch("AeroBox-diagnostics.json") }, enabled = !busy) {
-                        Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.export_diagnostics))
-                    }
-                    val logCopiedMessage = stringResource(R.string.log_copied)
-                    IconButton(
-                        onClick = {
-                            copyAllLogEntries(context, logLines)
-                            scope.launch {
-                                snackbarHostState.showSnackbar(logCopiedMessage)
-                            }
-                        },
-                        enabled = logLines.isNotEmpty()
-                    ) {
-                        Icon(AppIcons.ContentCopy, contentDescription = stringResource(R.string.log_action_copy_all))
-                    }
-                    IconButton(onClick = {
-                        scope.launch {
-                            try {
-                                CrashDiagnostics.clear()
-                                RuntimeLogBuffer.clear()
-                            } catch (error: CancellationException) {
-                                throw error
-                            } catch (error: Exception) {
-                                RuntimeLogBuffer.appendError("Failed to clear crash summaries: ${error.message ?: error}")
-                            }
+            Column {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.log_screen_title)) },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                         }
-                    }) {
-                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.log_action_clear))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    },
+                    actions = { if (!largeText) logActions() },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
-            )
+                if (largeText) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .windowInsetsPadding(TopAppBarDefaults.windowInsets.only(WindowInsetsSides.Horizontal)),
+                        horizontalArrangement = Arrangement.End,
+                        content = logActions
+                    )
+                }
+            }
         }
     ) { innerPadding ->
         if (logLines.isEmpty()) {
@@ -189,7 +211,9 @@ private fun LogEntryRow(entry: RuntimeLogEntry) {
             style = MaterialTheme.typography.bodySmall.copy(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp,
-                lineHeight = 16.sp
+                lineHeight = 16.sp,
+                textDirection = TextDirection.Ltr,
+                textAlign = TextAlign.Left
             ),
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)

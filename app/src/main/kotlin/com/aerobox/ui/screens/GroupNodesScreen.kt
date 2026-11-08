@@ -58,13 +58,18 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.aerobox.R
 import com.aerobox.data.model.ProxyNode
+import com.aerobox.data.model.Subscription
 import com.aerobox.data.model.isLocalGroup
 import com.aerobox.ui.components.AppDialog
+import com.aerobox.ui.components.DialogActions
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.GroupPickerDialog
 import com.aerobox.ui.icons.AppIcons
 import com.aerobox.viewmodel.DataTransferViewModel
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+private data class SubscriptionSnapshot(val value: Subscription?)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,8 +80,11 @@ fun GroupNodesScreen(
     viewModel: DataTransferViewModel = viewModel(factory = AppViewModelFactory)
 ) {
     val isUngrouped = subscriptionId == 0L
-    val subscription by viewModel.observeSubscription(subscriptionId)
+    val subscriptionSnapshot by remember(viewModel, subscriptionId) {
+        viewModel.observeSubscription(subscriptionId).map { SubscriptionSnapshot(it) }
+    }
         .collectAsStateWithLifecycle(initialValue = null)
+    val subscription = subscriptionSnapshot?.value
     val nodes by viewModel.observeNodes(subscriptionId)
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
@@ -106,15 +114,10 @@ fun GroupNodesScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteGroupDialog by remember { mutableStateOf(false) }
 
-    // If the subscription row disappears (deleted elsewhere, or navigated here
-    // with a stale id), bail back to the subscription list so the user isn't
-    // stranded on an empty screen.  Skip this check for the virtual ungrouped
-    // bucket (subscriptionId = 0) which has no backing Subscription row.
-    var everLoaded by rememberSaveable(subscriptionId) { mutableStateOf(false) }
-    LaunchedEffect(subscription, operationBusy) {
-        if (isUngrouped || subscription != null) {
-            everLoaded = true
-        } else if (everLoaded && !operationBusy) {
+    // Wait for a database result before treating a missing row as deleted.
+    // A newly restored composition briefly has no value when returning from the editor.
+    LaunchedEffect(subscriptionSnapshot, operationBusy) {
+        if (!isUngrouped && subscriptionSnapshot != null && subscription == null && !operationBusy) {
             onNavigateBack()
         }
     }
@@ -264,15 +267,10 @@ fun GroupNodesScreen(
                     ),
                     style = MaterialTheme.typography.bodyMedium
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                DialogActions {
                     TextButton(onClick = { deleteNodeTarget = null }) {
                         Text(stringResource(R.string.cancel))
                     }
-                    Spacer(Modifier.width(4.dp))
                     TextButton(onClick = {
                         viewModel.deleteNodes(listOf(node.id))
                         deleteNodeTarget = null
@@ -316,15 +314,10 @@ fun GroupNodesScreen(
                     ),
                     style = MaterialTheme.typography.bodyMedium
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                DialogActions {
                     TextButton(onClick = { showDeleteGroupDialog = false }) {
                         Text(stringResource(R.string.cancel))
                     }
-                    Spacer(Modifier.width(4.dp))
                     TextButton(onClick = {
                         showDeleteGroupDialog = false
                         viewModel.deleteGroup(editableSubscription)
@@ -424,15 +417,10 @@ private fun RenameGroupDialog(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            DialogActions {
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
                 }
-                Spacer(Modifier.width(4.dp))
                 TextButton(
                     onClick = { onConfirm(name.trim()) },
                     enabled = name.isNotBlank()

@@ -26,6 +26,8 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import com.aerobox.R
 
@@ -89,7 +91,9 @@ fun LicenseScreen(
                     Text(
                         text = licenseBody,
                         style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = FontFamily.Monospace
+                            fontFamily = FontFamily.Monospace,
+                            textDirection = TextDirection.Ltr,
+                            textAlign = TextAlign.Left
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

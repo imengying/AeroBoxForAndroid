@@ -312,14 +312,14 @@
     <string name="routing_custom_rule_name">نام</string>
     <string name="routing_custom_rule_name_empty">نام قانون نمی‌تواند خالی باشد</string>
     <string name="routing_custom_rule_url">لینک قانون</string>
-    <string name="routing_custom_rule_url_hint">از لینک‌های rule-set با https:// پشتیبانی می‌شود</string>
+    <string name="routing_custom_rule_url_hint">از لینک‌های rule-set با &#x2066;https://&#x2069; پشتیبانی می‌شود</string>
     <string name="routing_custom_rule_url_invalid">لینک قانون نامعتبر است</string>
     <string name="routing_custom_rule_action">اقدام</string>
     <string name="routing_custom_rule_action_direct">مستقیم</string>
     <string name="routing_custom_rule_action_proxy">پراکسی</string>
     <string name="routing_custom_rule_action_reject">رد کردن</string>
     <string name="routing_custom_rule_format">قالب</string>
-    <string name="routing_custom_rule_format_binary">باینری (.srs)</string>
+    <string name="routing_custom_rule_format_binary">باینری &#x2066;(.srs)&#x2069;</string>
     <string name="routing_custom_rule_format_source">JSON منبع</string>
     <string name="routing_custom_rule_enabled">فعال</string>
     <string name="routing_section_resources">منابع</string>

@@ -5,13 +5,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -22,6 +22,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarHostState
@@ -39,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.aerobox.viewmodel.AppViewModelFactory
@@ -48,6 +50,7 @@ import com.aerobox.R
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.ui.components.AppDialog
+import com.aerobox.ui.components.DialogActions
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.SectionHeader
 import com.aerobox.ui.components.SettingItem
@@ -203,10 +206,9 @@ fun SettingsScreen(
                         androidx.compose.material3.DropdownMenu(
                             expanded = expanded,
                             onDismissRequest = { expanded = false },
-                            modifier = Modifier.width(108.dp)
+                            modifier = Modifier.widthIn(min = 160.dp, max = 280.dp)
                         ) {
                             androidx.compose.material3.DropdownMenuItem(
-                                modifier = Modifier.height(40.dp),
                                 text = {
                                     Text(
                                         text = stringResource(R.string.settings_theme_system),
@@ -219,7 +221,6 @@ fun SettingsScreen(
                                 contentPadding = PaddingValues(horizontal = 8.dp)
                             )
                             androidx.compose.material3.DropdownMenuItem(
-                                modifier = Modifier.height(40.dp),
                                 text = {
                                     Text(
                                         text = stringResource(R.string.settings_theme_dark),
@@ -232,7 +233,6 @@ fun SettingsScreen(
                                 contentPadding = PaddingValues(horizontal = 8.dp)
                             )
                             androidx.compose.material3.DropdownMenuItem(
-                                modifier = Modifier.height(40.dp),
                                 text = {
                                     Text(
                                         text = stringResource(R.string.settings_theme_light),
@@ -477,15 +477,10 @@ private fun AppUpdateDialog(
                 style = MaterialTheme.typography.bodyMedium
             )
             Spacer(Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            DialogActions {
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
                 }
-                Spacer(Modifier.width(8.dp))
                 TextButton(onClick = onOpenRelease) {
                     Text(stringResource(R.string.app_update_open_release))
                 }
@@ -541,15 +536,10 @@ private fun LanguageSettingsDialog(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            DialogActions {
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
                 }
-                Spacer(Modifier.width(4.dp))
                 TextButton(onClick = { onConfirm(selected) }) {
                     Text(stringResource(R.string.confirm))
                 }
@@ -582,6 +572,7 @@ private fun DnsSettingsDialog(
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = remote,
+                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr, textAlign = TextAlign.Left),
                 onValueChange = { remote = it },
                 label = { Text(stringResource(R.string.dns_label_remote)) },
                 supportingText = { Text(stringResource(R.string.dns_dialog_remote_example)) },
@@ -591,6 +582,7 @@ private fun DnsSettingsDialog(
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = direct,
+                textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr, textAlign = TextAlign.Left),
                 onValueChange = { direct = it },
                 label = { Text(stringResource(R.string.dns_label_direct)) },
                 supportingText = { Text(stringResource(R.string.dns_dialog_direct_example)) },
@@ -599,18 +591,13 @@ private fun DnsSettingsDialog(
             )
 
             Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            DialogActions {
                 TextButton(onClick = onReset) {
                     Text(stringResource(R.string.dns_dialog_reset))
                 }
-                Spacer(Modifier.weight(1f))
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
                 }
-                Spacer(Modifier.width(8.dp))
                 TextButton(
                     onClick = { onConfirm(remote.trim(), direct.trim()) },
                     enabled = remote.isNotBlank() && direct.isNotBlank()
