@@ -4,14 +4,11 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import com.aerobox.core.network.SharedHttpClient
 import org.json.JSONObject
 import org.tukaani.xz.XZInputStream
 import java.io.File
-import java.io.FileNotFoundException
-import java.io.FileOutputStream
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
@@ -90,9 +87,9 @@ object GeoAssetManager {
     private fun getGeoAdsVersionFile(context: Context): File = File(getGeoDir(context), GEOSITE_ADS_VERSION_FILE)
 
     fun hasLocalFiles(context: Context, targets: GeoUpdateTargets = GeoUpdateTargets()): Boolean {
-        return (!targets.geoIpCn || isValidRuleSetFile(getGeoIpFile(context))) &&
-            (!targets.geoSiteCn || isValidRuleSetFile(getGeoSiteFile(context))) &&
-            (!targets.geoAds || isValidRuleSetFile(getGeoAdsFile(context)))
+        return (!targets.geoIpCn || getGeoIpFile(context).hasRuleSetHeader()) &&
+            (!targets.geoSiteCn || getGeoSiteFile(context).hasRuleSetHeader()) &&
+            (!targets.geoAds || getGeoAdsFile(context).hasRuleSetHeader())
     }
 
     fun getGeoIpSize(context: Context): String = formatFileSize(context, getGeoIpFile(context))
@@ -154,9 +151,9 @@ object GeoAssetManager {
             }
 
             val missing = GeoUpdateTargets(
-                geoIpCn = targets.geoIpCn && !isValidRuleSetFile(getGeoIpFile(context)),
-                geoSiteCn = targets.geoSiteCn && !isValidRuleSetFile(getGeoSiteFile(context)),
-                geoAds = targets.geoAds && !isValidRuleSetFile(getGeoAdsFile(context))
+                geoIpCn = targets.geoIpCn && !getGeoIpFile(context).hasRuleSetHeader(),
+                geoSiteCn = targets.geoSiteCn && !getGeoSiteFile(context).hasRuleSetHeader(),
+                geoAds = targets.geoAds && !getGeoAdsFile(context).hasRuleSetHeader()
             )
             val result = updateAllLocked(context, missing)
             val available = result.allOk && hasLocalFiles(context, targets)
@@ -200,26 +197,10 @@ object GeoAssetManager {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return false
 
-                val tmpFile = File(target.parentFile, "${target.name}.tmp")
                 response.body.byteStream().use { input ->
-                    FileOutputStream(tmpFile).use { output ->
-                        input.copyTo(output, bufferSize = 8192)
-                    }
+                    target.writeRuleSet(input)
                 }
-
-                if (isValidRuleSetFile(tmpFile)) {
-                    if (tmpFile.renameTo(target)) {
-                        isValidRuleSetFile(target)
-                    } else {
-                        // renameTo can fail across filesystems; fall back to copy
-                        tmpFile.copyTo(target, overwrite = true)
-                        tmpFile.delete()
-                        isValidRuleSetFile(target)
-                    }
-                } else {
-                    tmpFile.delete()
-                    false
-                }
+                true
             }
         } catch (_: Exception) {
             false
@@ -240,72 +221,23 @@ object GeoAssetManager {
         val localVersion = versionFile.takeIf { it.isFile }?.readText()?.trim().orEmpty()
 
         val shouldExtract = when {
-            !isValidRuleSetFile(target) -> true
+            !target.hasRuleSetHeader() -> true
             localVersion.isBlank() -> true
             else -> shouldReplaceByVersion(assetVersion, localVersion)
         }
 
         if (!shouldExtract) return
 
-        val tmpFile = File(target.parentFile, "${target.name}.tmp")
-        tmpFile.delete()
-
-        val extracted = extractBundledFile(context, fileName, tmpFile)
-        if (!extracted || !isValidRuleSetFile(tmpFile)) {
-            tmpFile.delete()
-            return
-        }
-
-        target.delete()
-        if (!tmpFile.renameTo(target)) {
-            tmpFile.copyTo(target, overwrite = true)
-            tmpFile.delete()
-        }
-
-        if (!isValidRuleSetFile(target)) {
-            target.delete()
+        try {
+            context.assets.open(ASSET_PREFIX + fileName + ".xz").use { raw ->
+                XZInputStream(raw).use { input -> target.writeRuleSet(input) }
+            }
+        } catch (error: Exception) {
+            Log.w(TAG, "Failed to extract $fileName", error)
             return
         }
 
         writeVersionFile(versionFile, assetVersion)
-    }
-
-    private fun isValidRuleSetFile(file: File): Boolean {
-        if (!file.isFile || file.length() < 4L) return false
-        return runCatching {
-            file.inputStream().use { input ->
-                input.read() == 'S'.code &&
-                    input.read() == 'R'.code &&
-                    input.read() == 'S'.code
-            }
-        }.getOrDefault(false)
-    }
-
-    private fun extractBundledFile(context: Context, fileName: String, outputFile: File): Boolean {
-        val xzAssetPath = ASSET_PREFIX + fileName + ".xz"
-        return try {
-            context.assets.open(xzAssetPath).use { raw ->
-                XZInputStream(raw).use { xz ->
-                    FileOutputStream(outputFile).use { out ->
-                        xz.copyTo(out, bufferSize = 8192)
-                    }
-                }
-            }
-            true
-        } catch (_: FileNotFoundException) {
-            try {
-                context.assets.open(ASSET_PREFIX + fileName).use { raw ->
-                    FileOutputStream(outputFile).use { out ->
-                        raw.copyTo(out, bufferSize = 8192)
-                    }
-                }
-                true
-            } catch (_: Exception) {
-                false
-            }
-        } catch (_: Exception) {
-            false
-        }
     }
 
     private fun readAssetText(context: Context, assetPath: String): String? {
@@ -324,11 +256,9 @@ object GeoAssetManager {
     }
 
     private fun fetchLatestReleaseTag(repo: String): String? {
-        val url = "https://api.github.com/repos/$repo/releases/latest".toHttpUrlOrNull()
-            ?: return null
         return try {
             val request = Request.Builder()
-                .url(url)
+                .url("https://api.github.com/repos/$repo/releases/latest")
                 .header("Accept", "application/vnd.github+json")
                 .build()
             val response = client.newCall(request).execute()

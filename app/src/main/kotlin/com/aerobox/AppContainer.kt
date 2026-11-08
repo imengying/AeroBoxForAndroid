@@ -43,7 +43,7 @@ class AppContainer(context: Context, scope: CoroutineScope) {
             PreferenceSelectedNodeStore(this.context)) { SubscriptionUpdateScheduler.reconfigure(this.context) }
     }
     val vpnConfigResolver: VpnConfigResolver by lazy {
-        VpnConfigResolver(this.context, database.proxyNodeDao(), subscriptionRepository)
+        VpnConfigResolver(this.context, database.proxyNodeDao())
     }
     val vpnRepository: VpnRepository by lazy {
         VpnRepository(this.context, vpnConfigResolver, subscriptionRepository)

@@ -84,10 +84,10 @@ object SingBoxNative {
 
     suspend fun urlTestOutbound(
         configContent: String,
-        outboundTag: String = "proxy",
-        testUrl: String = "http://cp.cloudflare.com/",
-        timeoutMs: Int = 3000,
-        platformInterface: PlatformInterface? = null
+        outboundTag: String,
+        testUrl: String,
+        timeoutMs: Int,
+        platformInterface: PlatformInterface?
     ): Int = withContext(Dispatchers.IO) {
         awaitReady()
         try {

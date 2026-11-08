@@ -17,8 +17,7 @@ import kotlinx.coroutines.flow.first
 
 class VpnConfigResolver(
     private val context: Context,
-    private val nodeDao: ProxyNodeDao,
-    private val subscriptionRepository: SubscriptionRepository
+    private val nodeDao: ProxyNodeDao
 ) {
     companion object {
         private const val TAG = "VpnConfigResolver"
@@ -32,11 +31,6 @@ class VpnConfigResolver(
             PreferenceManager.setLastSelectedNodeId(context, fallbackNode.id)
         }
         return fallbackNode
-    }
-
-    suspend fun resolveNodeForAction(node: ProxyNode): ProxyNode? {
-        subscriptionRepository.resolveNode(node)?.let { return it }
-        return node.takeIf { it.id == 0L && it.subscriptionId == 0L }
     }
 
     suspend fun resolveNodeById(nodeId: Long?): ProxyNode? {

@@ -12,7 +12,6 @@ import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.service.VpnStateManager
-import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -172,7 +171,7 @@ class VpnRepository(
         action: (String, ProxyNode) -> Unit
     ): VpnConnectionResult {
         return runCatching {
-            val resolvedNode = configResolver.resolveNodeForAction(node)
+            val resolvedNode = subscriptionRepository.resolveNode(node)
                 ?: return@runCatching VpnConnectionResult.NoNodeAvailable
 
             val config = configResolver.buildConfig(resolvedNode)
@@ -226,30 +225,22 @@ class VpnRepository(
 
     suspend fun urlTestNode(
         node: ProxyNode,
-        testUrl: String = "http://cp.cloudflare.com/",
-        timeoutMs: Int = 5000,
-        directDns: String? = null,
-        ipv6Mode: IPv6Mode? = null
+        directDns: String,
+        ipv6Mode: IPv6Mode,
+        timeoutMs: Int
     ): Int {
         return withContext(Dispatchers.IO) {
-            val preferences = if (directDns != null && ipv6Mode != null) {
-                null
-            } else {
-                PreferenceManager.readVpnConfigPreferences(context)
-            }
-            val resolvedDirectDns = directDns ?: preferences?.directDns ?: PreferenceManager.DEFAULT_DIRECT_DNS
-            val resolvedIpv6Mode = ipv6Mode ?: preferences?.ipv6Mode ?: IPv6Mode.DISABLE
             val nodeIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(node)
             val config = ConfigGenerator.generateUrlTestConfig(
                 node = node,
-                directDns = resolvedDirectDns,
-                ipv6Mode = resolvedIpv6Mode,
+                directDns = directDns,
+                ipv6Mode = ipv6Mode,
                 nodeIsIpv6OnlyOverride = nodeIsIpv6Only
             )
             SingBoxNative.urlTestOutbound(
                 configContent = config,
                 outboundTag = "proxy",
-                testUrl = testUrl,
+                testUrl = "http://cp.cloudflare.com/",
                 timeoutMs = timeoutMs,
                 platformInterface = AeroBoxVpnService.activePlatformInterface()
             )

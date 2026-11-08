@@ -9,7 +9,6 @@ import io.nekohasekai.libbox.LocalDNSTransport
 import io.nekohasekai.libbox.NetworkInterfaceIterator
 import io.nekohasekai.libbox.PlatformInterface
 import io.nekohasekai.libbox.StringIterator
-import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
 import com.aerobox.AeroBoxApplication
 import java.net.Inet6Address
@@ -25,14 +24,6 @@ import io.nekohasekai.libbox.NetworkInterface as LibboxNetworkInterface
 interface PlatformInterfaceWrapper : PlatformInterface {
 
     override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
-
-    override fun autoDetectInterfaceControl(fd: Int) {
-        // Subclass (VpnService) should override to call protect(fd)
-    }
-
-    override fun openTun(options: TunOptions): Int {
-        error("openTun not implemented — must be overridden by VpnService")
-    }
 
     override fun findConnectionOwner(
         ipProtocol: Int,
