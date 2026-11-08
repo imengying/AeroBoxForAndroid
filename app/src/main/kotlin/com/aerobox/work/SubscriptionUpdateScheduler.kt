@@ -6,7 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.aerobox.AeroBoxApplication
+import com.aerobox.appContainer
 import com.aerobox.data.repository.SubscriptionRepository
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
@@ -17,7 +17,7 @@ object SubscriptionUpdateScheduler {
     suspend fun reconfigure(context: Context) {
         val appContext = context.applicationContext
         val workManager = WorkManager.getInstance(appContext)
-        val repository = AeroBoxApplication.subscriptionRepository
+        val repository = appContext.appContainer.subscriptionRepository
         val subscriptions = repository.getAllSubscriptions().first()
             .filter { it.autoUpdate }
         if (subscriptions.isEmpty()) {

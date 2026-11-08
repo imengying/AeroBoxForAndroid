@@ -241,7 +241,9 @@
     <string name="per_app_proxy_chip_show_system">Show system</string>
     <string name="per_app_proxy_search_hint">Search by name or package</string>
     <string name="per_app_proxy_loading">Loading</string>
-    <string name="per_app_proxy_empty">Couldn\'t load app list; try again later</string>
+    <string name="per_app_proxy_empty">Unable to read the app list. Check app list access in system settings, then retry.</string>
+    <string name="per_app_proxy_retry">Retry</string>
+    <string name="per_app_proxy_app_settings">App settings</string>
     <string name="per_app_proxy_no_match">No matching apps</string>
     <string name="per_app_proxy_no_internet">No network permission</string>
 
@@ -310,7 +312,7 @@
     <string name="routing_custom_rule_name">Name</string>
     <string name="routing_custom_rule_name_empty">Rule name cannot be empty</string>
     <string name="routing_custom_rule_url">Rule URL</string>
-    <string name="routing_custom_rule_url_hint">Supports http:// or https:// rule-set links</string>
+    <string name="routing_custom_rule_url_hint">Supports https:// rule-set links</string>
     <string name="routing_custom_rule_url_invalid">Rule URL is invalid</string>
     <string name="routing_custom_rule_action">Action</string>
     <string name="routing_custom_rule_action_direct">Direct</string>
@@ -343,7 +345,7 @@
     <string name="node_edit_server">Server</string>
     <string name="node_edit_port">Port</string>
     <string name="node_edit_required">Required</string>
-    <string name="node_edit_conflict">This node has changed. Go back and reopen it before editing.</string>
+    <string name="node_edit_conflict">This node has changed. Reload it before saving; your current edits will be discarded.</string>
     <string name="node_edit_method">Encryption method</string>
     <string name="node_edit_password">Password</string>
     <string name="node_edit_username">Username</string>

@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="backup_restore_pending">Данные импортированы, но восстановление настроек не завершено. Перезапустите приложение; не импортируйте эту копию повторно.</string>
+    <string name="backup_too_large">Резервная копия превышает ограничение: 32 МиБ, 50 000 узлов или 10 000 групп.</string>
+    <string name="node_export_request_unavailable">Данные ожидающего экспорта недоступны. Выберите узлы и повторите экспорт.</string>
     <string name="operation_complete">Готово</string>
     <string name="backup_invalid">Неверный или неподдерживаемый файл резервной копии</string>
     <string name="backup_title">Резервное копирование</string>

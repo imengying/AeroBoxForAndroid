@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_go_back">بازگشت</string>
+    <string name="action_clear_search">پاک کردن جستجو</string>
+    <string name="per_app_proxy_none">برنامه‌ای برای پیکربندی موجود نیست.</string>
+    <string name="per_app_proxy_system_hidden">فقط برنامه‌های سیستمی موجودند و اکنون پنهان هستند.</string>
+    <string name="per_app_proxy_system_matches_hidden">برنامه‌های سیستمی مطابق جستجو پنهان هستند. نمایش آن‌ها را فعال کنید.</string>
+    <string name="per_app_selection_load_failed">بازیابی انتخاب برنامه‌ها ممکن نشد. پیش از تغییر، دوباره تلاش کنید.</string>
+    <string name="per_app_selection_draft_failed">ذخیره پیش‌نویس انتخاب ممکن نشد. صفحه را باز نگه دارید و دوباره ذخیره کنید.</string>
+</resources>

@@ -52,13 +52,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aerobox.viewmodel.AppViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.aerobox.R
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.isLocalGroup
-import com.aerobox.AeroBoxApplication
 import com.aerobox.ui.components.AppDialog
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.GroupPickerDialog
@@ -72,30 +72,31 @@ fun GroupNodesScreen(
     subscriptionId: Long,
     onEditNode: (Long) -> Unit,
     onNavigateBack: () -> Unit,
-    viewModel: DataTransferViewModel = viewModel()
+    viewModel: DataTransferViewModel = viewModel(factory = AppViewModelFactory)
 ) {
     val isUngrouped = subscriptionId == 0L
-    val repository = AeroBoxApplication.subscriptionRepository
-    val subscription by repository.observeSubscriptionById(subscriptionId)
+    val subscription by viewModel.observeSubscription(subscriptionId)
         .collectAsStateWithLifecycle(initialValue = null)
-    val nodes by repository.observeNodesInGroup(subscriptionId)
+    val nodes by viewModel.observeNodes(subscriptionId)
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
-    val localGroups by repository.getLocalGroups().collectAsStateWithLifecycle(initialValue = emptyList())
-    val busy by viewModel.busy.collectAsStateWithLifecycle()
+    val localGroups by viewModel.observeLocalGroups().collectAsStateWithLifecycle(initialValue = emptyList())
+    val operationBusy by viewModel.busy.collectAsStateWithLifecycle()
+    val selectionReady by viewModel.selectionReady.collectAsStateWithLifecycle()
+    val busy = operationBusy || !selectionReady
     val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var query by rememberSaveable { mutableStateOf("") }
-    var selected by rememberSaveable { mutableStateOf(emptyList<Long>()) }
+    val selected by viewModel.selectedNodes.collectAsStateWithLifecycle()
     var showCopyDialog by remember { mutableStateOf(false) }
     var showBatchDelete by remember { mutableStateOf(false) }
     val visibleNodes = remember(nodes, query) {
         nodes.filter { it.name.contains(query, true) || it.server.contains(query, true) || it.type.name.contains(query, true) }
     }
     val nodeIds = remember(nodes) { nodes.map { it.id }.toSet() }
-    val selectedIds = selected.filter { it in nodeIds }
+    val selectedIds = remember(selected, nodeIds) { selected.intersect(nodeIds) }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        uri?.let(viewModel::exportNodes)
+        if (uri != null) viewModel.exportNodes(uri) else viewModel.cancelNodeExport()
     }
     LaunchedEffect(message) {
         message?.let { snackbar.showSnackbar(it); viewModel.dismissMessage() }
@@ -109,11 +110,11 @@ fun GroupNodesScreen(
     // with a stale id), bail back to the subscription list so the user isn't
     // stranded on an empty screen.  Skip this check for the virtual ungrouped
     // bucket (subscriptionId = 0) which has no backing Subscription row.
-    var everLoaded by remember { mutableStateOf(false) }
-    LaunchedEffect(subscription) {
+    var everLoaded by rememberSaveable(subscriptionId) { mutableStateOf(false) }
+    LaunchedEffect(subscription, operationBusy) {
         if (isUngrouped || subscription != null) {
             everLoaded = true
-        } else if (everLoaded) {
+        } else if (everLoaded && !operationBusy) {
             onNavigateBack()
         }
     }
@@ -172,7 +173,7 @@ fun GroupNodesScreen(
                     checked = visibleNodes.isNotEmpty() && visibleNodes.all { it.id in selectedIds },
                     onCheckedChange = { checked ->
                         val visibleIds = visibleNodes.map { it.id }.toSet()
-                        selected = if (checked) (selectedIds + visibleIds).distinct() else selectedIds.filterNot { it in visibleIds }
+                        viewModel.selectNodes(if (checked) selectedIds + visibleIds else selectedIds - visibleIds)
                     }, enabled = !busy && visibleNodes.isNotEmpty()
                 )
                 Text(stringResource(R.string.nodes_selected, selectedIds.size), Modifier.weight(1f))
@@ -180,8 +181,9 @@ fun GroupNodesScreen(
                     Icon(AppIcons.ContentCopy, stringResource(R.string.copy_to_group))
                 }
                 IconButton(onClick = {
-                    viewModel.prepareNodeExport(selectedIds)
-                    export.launch("AeroBox-nodes.json")
+                    scope.launch {
+                        if (viewModel.prepareNodeExport(selectedIds.toList())) export.launch("AeroBox-nodes.json")
+                    }
                 }, enabled = !busy && selectedIds.isNotEmpty()) {
                     Icon(Icons.Filled.Share, stringResource(R.string.export_nodes))
                 }
@@ -217,7 +219,7 @@ fun GroupNodesScreen(
                         onEdit = { onEditNode(node.id) },
                         onDelete = { deleteNodeTarget = node },
                         selected = node.id in selectedIds,
-                        onSelect = { checked -> selected = if (checked) (selectedIds + node.id).distinct() else selectedIds - node.id },
+                        onSelect = { checked -> viewModel.selectNodes(if (checked) selectedIds + node.id else selectedIds - node.id) },
                         enabled = !busy
                     )
                 }
@@ -228,7 +230,7 @@ fun GroupNodesScreen(
 
     if (showCopyDialog) GroupPickerDialog(
         nodeCount = selectedIds.size, suggestedName = "", localGroups = localGroups,
-        onConfirm = { target -> showCopyDialog = false; viewModel.copyNodes(selectedIds, target) },
+        onConfirm = { target -> showCopyDialog = false; viewModel.copyNodes(selectedIds.toList(), target) },
         onDismiss = { showCopyDialog = false }
     )
     if (showBatchDelete) AlertDialog(
@@ -237,8 +239,8 @@ fun GroupNodesScreen(
         text = { Text(pluralStringResource(R.plurals.delete_nodes_confirm, selectedIds.size, selectedIds.size)) },
         confirmButton = { TextButton(onClick = {
             showBatchDelete = false
-            viewModel.deleteNodes(selectedIds)
-            selected = emptyList()
+            viewModel.deleteNodes(selectedIds.toList())
+            viewModel.selectNodes(emptyList())
         }, enabled = !busy) { Text(stringResource(R.string.confirm)) } },
         dismissButton = { TextButton(onClick = { showBatchDelete = false }) { Text(stringResource(R.string.cancel)) } }
     )
@@ -288,7 +290,7 @@ fun GroupNodesScreen(
             onDismiss = { showRenameDialog = false },
             onConfirm = { newName ->
                 scope.launch {
-                    repository.renameLocalGroup(editableSubscription, newName)
+                    viewModel.renameLocalGroup(editableSubscription, newName)
                 }
                 showRenameDialog = false
             }
@@ -325,10 +327,7 @@ fun GroupNodesScreen(
                     Spacer(Modifier.width(4.dp))
                     TextButton(onClick = {
                         showDeleteGroupDialog = false
-                        scope.launch {
-                            repository.deleteSubscription(editableSubscription)
-                            onNavigateBack()
-                        }
+                        viewModel.deleteGroup(editableSubscription)
                     }) {
                         Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
                     }

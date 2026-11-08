@@ -81,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aerobox.viewmodel.AppViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
 import com.aerobox.data.model.Subscription
@@ -111,7 +112,7 @@ fun SubscriptionScreen(
     onNavigateToGroupNodes: (Long) -> Unit = {},
     pendingExternalImport: ExternalImportRequest? = null,
     onExternalImportHandled: (Long) -> Unit = {},
-    viewModel: SubscriptionViewModel = viewModel()
+    viewModel: SubscriptionViewModel = viewModel(factory = AppViewModelFactory)
 ) {
     val context = LocalContext.current
     val subscriptions by viewModel.subscriptions.collectAsStateWithLifecycle()

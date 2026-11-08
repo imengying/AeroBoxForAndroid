@@ -1,9 +1,10 @@
 package com.aerobox.core.logging
 
-import kotlinx.coroutines.flow.MutableStateFlow
+import android.content.Context
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import java.io.File
 import java.net.URI
 
 data class RuntimeLogEntry(
@@ -12,7 +13,6 @@ data class RuntimeLogEntry(
 )
 
 object RuntimeLogBuffer {
-    private const val MAX_LINES = 500
     private val coreLevelRegex = Regex(
         """(?i)^(FATAL|PANIC|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)(?:\[\d+\]|:|\s|$)\s*"""
     )
@@ -26,14 +26,20 @@ object RuntimeLogBuffer {
     // Mask common credential-bearing key/value forms before host/IP masking
     // runs, so the value never reaches the more permissive scrubbers above.
     private val credentialKvRegex = Regex(
-        """(?i)\b(password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|token|bearer)\s*[=:]\s*[^\s,;&"']+"""
+        """(?i)(["']?\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|token|bearer)["']?\s*[=:]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;&"']+)"""
     )
     private val authorizationHeaderRegex = Regex(
         """(?i)\bauthorization\s*[:=]\s*(?:bearer|basic|token|digest)\s+[^\s,;"']+"""
     )
 
-    private val _lines = MutableStateFlow<List<RuntimeLogEntry>>(emptyList())
-    val lines: StateFlow<List<RuntimeLogEntry>> = _lines.asStateFlow()
+    private val store = RuntimeLogStore()
+    val lines: StateFlow<List<RuntimeLogEntry>> = store.lines
+
+    fun initialize(context: Context, scope: CoroutineScope) {
+        store.persistTo(File(context.noBackupFilesDir, "runtime-errors.json"), scope) {
+            Log.w("RuntimeLogBuffer", "Unable to read or write runtime error history", it)
+        }
+    }
 
     fun appendError(message: String) {
         val normalizedMessage = sanitize(message.trim())
@@ -43,9 +49,7 @@ object RuntimeLogBuffer {
             timestamp = System.currentTimeMillis(),
             message = normalizedMessage
         )
-        _lines.update { current ->
-            (current + entry).takeLast(MAX_LINES)
-        }
+        store.append(entry)
     }
 
     fun appendCore(message: String) {
@@ -61,9 +65,7 @@ object RuntimeLogBuffer {
         }
     }
 
-    fun clear() {
-        _lines.value = emptyList()
-    }
+    suspend fun clear() = store.clear()
 
     private fun sanitize(message: String): String {
         if (message.isBlank()) return message
@@ -76,10 +78,7 @@ object RuntimeLogBuffer {
                 "$key: ***"
             }
             .replace(credentialKvRegex) { match ->
-                val sep = if (match.value.contains(':') &&
-                    !match.value.contains('=')) ':' else '='
-                val key = match.value.substringBefore(sep).trim()
-                "$key$sep***"
+                "${match.groupValues[1]}***"
             }
             .replace(urlRegex) { maskUrl(it.value) }
             .replace(uuidRegex) { maskUuid(it.value) }

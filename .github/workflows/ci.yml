@@ -52,8 +52,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6.4.1
-        with:
-          gradle-version: "9.8.2"
 
       - name: Set up Android SDK
         run: bash .github/scripts/setup-android-sdk.sh
@@ -61,7 +59,7 @@ jobs:
       - name: Install required Android SDK packages
         run: bash .github/scripts/install-android-packages.sh
 
-      - name: Resolve latest stable sing-box release
+      - name: Read pinned sing-box version
         run: bash .github/scripts/resolve-sing-box-version.sh
 
       - name: Build libbox.aar
@@ -74,11 +72,16 @@ jobs:
       - name: Prepare bundled routing rule-set assets
         run: bash .github/scripts/prepare-geo-assets.sh
 
+      - name: Run regression tests
+        run: |
+          set -euo pipefail
+          ./gradlew --stacktrace :app:testDebugUnitTest 2>&1 | tee build-logs/unit-tests.log
+
       - name: Build unsigned release APK
         if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/main' && github.event_name != 'workflow_dispatch')
         run: |
           set -euo pipefail
-          gradle --stacktrace --warning-mode all :app:assembleRelease \
+          ./gradlew --stacktrace --warning-mode all :app:assembleRelease \
             2>&1 | tee build-logs/assemble-release.log
 
       - name: Run Android lint
@@ -86,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           REPORT="app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt"
-          if ! gradle --stacktrace --warning-mode all :app:lintRelease \
+          if ! ./gradlew --stacktrace --warning-mode all :app:lintRelease \
             2>&1 | tee build-logs/lint-release.log; then
             if [ -f "${REPORT}" ]; then
               cat "${REPORT}"
@@ -108,7 +111,7 @@ jobs:
         if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
         run: |
           set -euo pipefail
-          gradle --stacktrace --warning-mode all :app:assembleBeta \
+          ./gradlew --stacktrace --warning-mode all :app:assembleBeta \
             2>&1 | tee build-logs/assemble-beta.log
 
       - name: Sign beta APKs (v3 only)

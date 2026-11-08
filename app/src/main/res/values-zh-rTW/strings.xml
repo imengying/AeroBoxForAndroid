@@ -235,7 +235,9 @@
     <string name="per_app_proxy_chip_show_system">顯示系統</string>
     <string name="per_app_proxy_search_hint">搜尋應用名稱或套件名稱</string>
     <string name="per_app_proxy_loading">載入中</string>
-    <string name="per_app_proxy_empty">未取得應用列表，可稍後重試</string>
+    <string name="per_app_proxy_empty">無法讀取應用程式清單。可在系統設定中檢查清單存取限制後重試。</string>
+    <string name="per_app_proxy_retry">重試</string>
+    <string name="per_app_proxy_app_settings">應用程式設定</string>
     <string name="per_app_proxy_no_match">未找到符合的應用</string>
     <string name="per_app_proxy_no_internet">無網路權限</string>
 
@@ -304,7 +306,7 @@
     <string name="routing_custom_rule_name">名稱</string>
     <string name="routing_custom_rule_name_empty">規則名稱不能為空</string>
     <string name="routing_custom_rule_url">規則連結</string>
-    <string name="routing_custom_rule_url_hint">支援 http:// 或 https:// 規則集連結</string>
+    <string name="routing_custom_rule_url_hint">支援 https:// 規則集連結</string>
     <string name="routing_custom_rule_url_invalid">規則連結無效</string>
     <string name="routing_custom_rule_action">動作</string>
     <string name="routing_custom_rule_action_direct">直連</string>
@@ -337,7 +339,7 @@
     <string name="node_edit_server">伺服器</string>
     <string name="node_edit_port">連接埠</string>
     <string name="node_edit_required">必填</string>
-    <string name="node_edit_conflict">節點已更新，請返回後重新開啟編輯。</string>
+    <string name="node_edit_conflict">節點已被更新，請重新載入後再儲存；重新載入會捨棄目前修改。</string>
     <string name="node_edit_method">加密方式</string>
     <string name="node_edit_password">密碼</string>
     <string name="node_edit_username">使用者名稱</string>

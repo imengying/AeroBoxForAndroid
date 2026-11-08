@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.aerobox.viewmodel.AppViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.viewmodel.DataTransferViewModel
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,7 +62,7 @@ import kotlinx.coroutines.launch
 fun LogScreen(
     onNavigateBack: () -> Unit,
     onNavigateToConnections: () -> Unit,
-    viewModel: DataTransferViewModel = viewModel()
+    viewModel: DataTransferViewModel = viewModel(factory = AppViewModelFactory)
 ) {
     val context = LocalContext.current
     val runtimeLines by RuntimeLogBuffer.lines.collectAsStateWithLifecycle()

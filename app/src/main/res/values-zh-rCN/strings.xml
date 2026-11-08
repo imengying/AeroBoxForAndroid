@@ -235,7 +235,9 @@
     <string name="per_app_proxy_chip_show_system">显示系统</string>
     <string name="per_app_proxy_search_hint">搜索应用名称或包名</string>
     <string name="per_app_proxy_loading">加载中</string>
-    <string name="per_app_proxy_empty">未获取到应用列表，可稍后重试</string>
+    <string name="per_app_proxy_empty">无法读取应用列表。可在系统设置中检查应用列表访问限制后重试。</string>
+    <string name="per_app_proxy_retry">重试</string>
+    <string name="per_app_proxy_app_settings">应用设置</string>
     <string name="per_app_proxy_no_match">未找到匹配的应用</string>
     <string name="per_app_proxy_no_internet">无网络权限</string>
 
@@ -304,7 +306,7 @@
     <string name="routing_custom_rule_name">名称</string>
     <string name="routing_custom_rule_name_empty">规则名称不能为空</string>
     <string name="routing_custom_rule_url">规则链接</string>
-    <string name="routing_custom_rule_url_hint">支持 http:// 或 https:// 规则集链接</string>
+    <string name="routing_custom_rule_url_hint">支持 https:// 规则集链接</string>
     <string name="routing_custom_rule_url_invalid">规则链接无效</string>
     <string name="routing_custom_rule_action">动作</string>
     <string name="routing_custom_rule_action_direct">直连</string>
@@ -337,7 +339,7 @@
     <string name="node_edit_server">服务器</string>
     <string name="node_edit_port">端口</string>
     <string name="node_edit_required">必填</string>
-    <string name="node_edit_conflict">节点已被更新，请返回后重新打开编辑。</string>
+    <string name="node_edit_conflict">节点已被更新，请重新加载后再保存；重新加载会丢弃当前修改。</string>
     <string name="node_edit_method">加密方式</string>
     <string name="node_edit_password">密码</string>
     <string name="node_edit_username">用户名</string>

@@ -61,22 +61,25 @@ class VpnPermissionActivity : ComponentActivity() {
 
     private fun connectSelectedNode() {
         lifecycleScope.launch {
-            when (val result = AeroBoxApplication.vpnRepository.connectSelectedNode()) {
-                is VpnConnectionResult.Success -> Unit
-                VpnConnectionResult.NoNodeAvailable -> {
-                    showMessage(R.string.add_node_first)
-                    startActivity(Intent(this@VpnPermissionActivity, MainActivity::class.java))
+            try {
+                when (val result = appContainer.vpnRepository.connectSelectedNode()) {
+                    is VpnConnectionResult.Success -> Unit
+                    VpnConnectionResult.NoNodeAvailable -> {
+                        showMessage(R.string.add_node_first)
+                        startActivity(Intent(this@VpnPermissionActivity, MainActivity::class.java))
+                    }
+                    is VpnConnectionResult.InvalidConfig,
+                    is VpnConnectionResult.Failure -> {
+                        val message = ConnectionDiagnostics.userFacingFailureMessage(
+                            result = result,
+                            operationFailedText = appString(R.string.operation_failed)
+                        )
+                        Toast.makeText(this@VpnPermissionActivity, message, Toast.LENGTH_LONG).show()
+                    }
                 }
-                is VpnConnectionResult.InvalidConfig,
-                is VpnConnectionResult.Failure -> {
-                    val message = ConnectionDiagnostics.userFacingFailureMessage(
-                        result = result,
-                        operationFailedText = appString(R.string.operation_failed)
-                    )
-                    Toast.makeText(this@VpnPermissionActivity, message, Toast.LENGTH_LONG).show()
-                }
+            } finally {
+                finishAction()
             }
-            finishAction()
         }
     }
 

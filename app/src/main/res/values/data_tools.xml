@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="backup_restore_pending">Data was imported, but settings recovery is pending. Restart the app to finish; do not import this backup again.</string>
     <string name="operation_complete">Completed</string>
     <string name="backup_invalid">Invalid or unsupported backup</string>
+    <string name="backup_too_large">Backup exceeds the limit: 32 MiB, 50,000 nodes or 10,000 groups.</string>
+    <string name="node_export_request_unavailable">The pending export is no longer available. Select the nodes and export again.</string>
     <string name="backup_title">Backup and restore</string>
     <string name="backup_credentials">The backup contains subscription URLs, node passwords and settings in plain text. Keep it private.</string>
     <string name="backup_export">Export backup</string>

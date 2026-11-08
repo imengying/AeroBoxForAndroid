@@ -7,15 +7,16 @@ data class TrafficStats(
     val totalDownload: Long = 0
 )
 
+enum class VpnPhase { IDLE, STARTING, CONNECTED, STOPPING, FAILED }
+
 data class VpnState(
-    val isConnected: Boolean = false,
+    val phase: VpnPhase = VpnPhase.IDLE,
+    val serviceActive: Boolean = false,
+    val lastError: String? = null,
+    val generation: Long = 0L,
     val currentNode: ProxyNode? = null,
     val connectionTime: Long = 0,
     val traffic: TrafficStats = TrafficStats()
 ) {
-    // Convenience accessors to avoid breaking existing callers
-    val uploadSpeed: Long get() = traffic.uploadSpeed
-    val downloadSpeed: Long get() = traffic.downloadSpeed
-    val totalUpload: Long get() = traffic.totalUpload
-    val totalDownload: Long get() = traffic.totalDownload
+    val isConnected: Boolean get() = phase == VpnPhase.CONNECTED
 }

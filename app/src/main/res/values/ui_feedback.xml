@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_go_back">Back</string>
+    <string name="action_clear_search">Clear search</string>
+    <string name="per_app_proxy_none">No apps available to configure.</string>
+    <string name="per_app_proxy_system_hidden">Only system apps are available. They are currently hidden.</string>
+    <string name="per_app_proxy_system_matches_hidden">Matching system apps are hidden. Show them to see the results.</string>
+    <string name="per_app_selection_load_failed">Unable to restore your app selection. Retry before making changes.</string>
+    <string name="per_app_selection_draft_failed">Unable to save your selection draft. Keep this page open and try saving again.</string>
+</resources>

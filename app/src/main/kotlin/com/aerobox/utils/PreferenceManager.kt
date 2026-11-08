@@ -1,13 +1,14 @@
 package com.aerobox.utils
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
+import com.aerobox.appContainer
 import com.aerobox.data.model.CustomRuleSet
 import com.aerobox.data.model.CustomRuleSetCodec
 import com.aerobox.data.model.IPv6Mode
@@ -18,7 +19,7 @@ import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
 
-private val Context.dataStore by preferencesDataStore(name = "settings")
+private val Context.dataStore get() = appContainer.settingsStore
 
 object PreferenceManager {
     const val DEFAULT_REMOTE_DNS = "https://cloudflare-dns.com/dns-query"
@@ -76,7 +77,7 @@ object PreferenceManager {
         repeat(packages.length()) { require(packages.get(it) is String) }
         if (settings.has(ROUTING_MODE.name)) RoutingMode.valueOf(settings.getString(ROUTING_MODE.name))
         if (settings.has(IPV6_MODE.name)) IPv6Mode.valueOf(settings.getString(IPV6_MODE.name))
-        if (settings.has(DARK_MODE.name)) require(settings.getString(DARK_MODE.name) in setOf("system", "light", "dark"))
+        if (settings.has(DARK_MODE.name)) require(settings.getString(DARK_MODE.name) in setOf("system", "on", "off", "light", "dark"))
         if (settings.has(PER_APP_PROXY_MODE.name)) require(settings.getString(PER_APP_PROXY_MODE.name) in setOf("whitelist", "blacklist"))
         if (settings.has(CUSTOM_RULE_SETS.name)) {
             val raw = settings.getString(CUSTOM_RULE_SETS.name)
@@ -84,11 +85,17 @@ object PreferenceManager {
         }
     }
 
-    suspend fun restoreSettings(context: Context, settings: JSONObject, selectedNodeId: Long) {
+    internal fun restoredPreferences(current: Preferences, settings: JSONObject, selectedNodeId: Long): Preferences {
         validateSettings(settings)
-        context.dataStore.edit { prefs ->
+        return current.toMutablePreferences().apply {
+            val prefs = this
             backupStrings.forEach { key ->
                 if (settings.has(key.name)) prefs[key] = settings.getString(key.name) else prefs.remove(key)
+            }
+            // The UI persists on/off; also normalize aliases accepted by older backups.
+            when (prefs[DARK_MODE]) {
+                "dark" -> prefs[DARK_MODE] = "on"
+                "light" -> prefs[DARK_MODE] = "off"
             }
             backupBooleans.forEach { key ->
                 if (settings.has(key.name)) prefs[key] = settings.getBoolean(key.name) else prefs.remove(key)
@@ -203,12 +210,11 @@ object PreferenceManager {
         context.dataStore.edit { it[ROUTING_MODE] = mode.name }
     }
 
-    suspend fun setRemoteDns(context: Context, dns: String) {
-        context.dataStore.edit { it[REMOTE_DNS] = dns }
-    }
-
-    suspend fun setDirectDns(context: Context, dns: String) {
-        context.dataStore.edit { it[DIRECT_DNS] = dns }
+    suspend fun setDnsServers(context: Context, remote: String, direct: String) {
+        context.dataStore.edit {
+            it[REMOTE_DNS] = remote
+            it[DIRECT_DNS] = direct
+        }
     }
 
     suspend fun setPerAppProxyEnabled(context: Context, enabled: Boolean) {

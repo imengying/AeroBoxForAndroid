@@ -19,9 +19,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
     private val pendingExternalImport = MutableStateFlow<ExternalImportRequest?>(null)
+    private var externalImportHandled = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        externalImportHandled = savedInstanceState?.getBoolean(EXTERNAL_IMPORT_HANDLED) ?: false
         enableEdgeToEdge()
 
         setContent {
@@ -48,6 +50,7 @@ class MainActivity : ComponentActivity() {
                         onExternalImportHandled = { requestId ->
                             val current = pendingExternalImport.value
                             if (current?.id == requestId) {
+                                externalImportHandled = true
                                 pendingExternalImport.value = null
                             }
                         }
@@ -56,12 +59,20 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        consumeActionIntent(intent)
+        // The launch Intent survives recreation. Replaying a handled link would
+        // navigate away from the restored screen and reopen the import dialog.
+        if (!externalImportHandled) consumeActionIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(EXTERNAL_IMPORT_HANDLED, externalImportHandled)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        externalImportHandled = false
         consumeActionIntent(intent)
     }
 
@@ -69,5 +80,9 @@ class MainActivity : ComponentActivity() {
         ExternalImportParser.fromIntent(intent)?.let { request ->
             pendingExternalImport.value = request
         }
+    }
+
+    private companion object {
+        const val EXTERNAL_IMPORT_HANDLED = "external_import_handled"
     }
 }

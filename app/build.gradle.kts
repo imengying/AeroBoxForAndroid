@@ -99,8 +99,15 @@ android {
 androidComponents {
     beforeVariants(selector().all()) { variantBuilder ->
         variantBuilder.enableAndroidTest = false
-        variantBuilder.hostTests[HostTestBuilder.UNIT_TEST_TYPE]?.enable = false
+        variantBuilder.hostTests[HostTestBuilder.UNIT_TEST_TYPE]?.enable = variantBuilder.buildType == "debug"
     }
+}
+
+tasks.withType<Test>().configureEach {
+    systemProperty("aerobox.schemaDirectory", layout.projectDirectory.dir("schemas").asFile.absolutePath)
+    maxHeapSize = "512m"
+    maxParallelForks = 1
+    jvmArgs("-XX:ActiveProcessorCount=3")
 }
 
 ksp {
@@ -108,6 +115,10 @@ ksp {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    testImplementation("org.json:json:20260814")
+
     implementation("androidx.core:core-ktx:1.19.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")

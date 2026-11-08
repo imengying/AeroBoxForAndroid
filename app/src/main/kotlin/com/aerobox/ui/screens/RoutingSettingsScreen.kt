@@ -49,6 +49,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aerobox.viewmodel.AppViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
 import com.aerobox.core.geo.GeoAssetManager
@@ -69,6 +70,7 @@ import kotlinx.coroutines.launch
 fun RoutingSettingsScreen(
     onNavigateBack: () -> Unit,
     viewModel: SettingsViewModel = viewModel(
+        factory = AppViewModelFactory,
         viewModelStoreOwner = requireNotNull(LocalView.current.context.findComponentActivity()) {
             "RoutingSettingsScreen requires a ComponentActivity"
         }

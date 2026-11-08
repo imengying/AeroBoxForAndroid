@@ -41,8 +41,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6.4.1
-        with:
-          gradle-version: "9.8.2"
 
       - name: Set up Android SDK
         run: bash .github/scripts/setup-android-sdk.sh
@@ -50,7 +48,7 @@ jobs:
       - name: Install required Android SDK packages
         run: bash .github/scripts/install-android-packages.sh
 
-      - name: Resolve latest stable sing-box release
+      - name: Read pinned sing-box version
         run: bash .github/scripts/resolve-sing-box-version.sh
 
       - name: Build libbox.aar
@@ -112,6 +110,11 @@ jobs:
       - name: Prepare bundled routing rule-set assets
         run: bash .github/scripts/prepare-geo-assets.sh
 
+      - name: Run regression tests
+        run: |
+          set -euo pipefail
+          ./gradlew --stacktrace :app:testDebugUnitTest 2>&1 | tee build-logs/unit-tests.log
+
       - name: Build unsigned release APK
         env:
           AEROBOX_VERSION_NAME: ${{ env.AEROBOX_VERSION_NAME }}
@@ -122,7 +125,7 @@ jobs:
             "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}"
             "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}"
           )
-          gradle --stacktrace --warning-mode all :app:assembleRelease "${EXTRA_ARGS[@]}" \
+          ./gradlew --stacktrace --warning-mode all :app:assembleRelease "${EXTRA_ARGS[@]}" \
             2>&1 | tee build-logs/assemble-release.log
 
       - name: Run Android lint
@@ -133,7 +136,7 @@ jobs:
         run: |
           set -euo pipefail
           REPORT="app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt"
-          if ! gradle --stacktrace --warning-mode all :app:lintRelease \
+          if ! ./gradlew --stacktrace --warning-mode all :app:lintRelease \
             "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}" \
             "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}" \
             2>&1 | tee build-logs/lint-release.log; then

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_go_back">返回</string>
+    <string name="action_clear_search">清除搜尋</string>
+    <string name="per_app_proxy_none">沒有可設定的應用程式。</string>
+    <string name="per_app_proxy_system_hidden">目前只有系統應用程式，已被隱藏。</string>
+    <string name="per_app_proxy_system_matches_hidden">符合搜尋的系統應用程式已被隱藏，開啟顯示後即可查看。</string>
+    <string name="per_app_selection_load_failed">無法還原應用程式選擇，請重試後再修改。</string>
+    <string name="per_app_selection_draft_failed">無法儲存選擇草稿，請保持目前頁面並重試儲存。</string>
+</resources>

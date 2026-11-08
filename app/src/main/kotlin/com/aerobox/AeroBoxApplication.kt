@@ -5,12 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.net.ConnectivityManager
-import androidx.room.Room
-import com.aerobox.data.database.AppDatabase
 import com.aerobox.core.logging.CrashDiagnostics
+import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.native.SingBoxNative
-import com.aerobox.data.repository.SubscriptionRepository
-import com.aerobox.data.repository.VpnRepository
 import com.aerobox.service.VpnStateManager
 import com.aerobox.work.SubscriptionUpdateScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -20,17 +17,20 @@ import kotlinx.coroutines.launch
 
 class AeroBoxApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val container by lazy { AppContainer(this, applicationScope) }
 
     override fun onCreate() {
         super.onCreate()
         _appInstance = this
 
+        RuntimeLogBuffer.initialize(this, applicationScope)
         CrashDiagnostics.install(this, applicationScope)
         VpnStateManager.resetTrafficSession()
         createNotificationChannel()
         SingBoxNative.initialize(this, applicationScope)
 
         applicationScope.launch {
+            container.settingsStore.recover()
             SubscriptionUpdateScheduler.reconfigure(this@AeroBoxApplication)
         }
     }
@@ -55,22 +55,5 @@ class AeroBoxApplication : Application() {
         val connectivity: ConnectivityManager
             get() = _appInstance.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        val database: AppDatabase by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-            Room.databaseBuilder(
-                _appInstance,
-                AppDatabase::class.java,
-                "aerobox.db"
-            )
-                .addMigrations(AppDatabase.MIGRATION_1_2)
-                .build()
-        }
-
-        val vpnRepository: VpnRepository by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-            VpnRepository(_appInstance)
-        }
-
-        val subscriptionRepository: SubscriptionRepository by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-            SubscriptionRepository(_appInstance)
-        }
     }
 }

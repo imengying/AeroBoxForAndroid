@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_go_back">Назад</string>
+    <string name="action_clear_search">Очистить поиск</string>
+    <string name="per_app_proxy_none">Нет приложений для настройки.</string>
+    <string name="per_app_proxy_system_hidden">Доступны только системные приложения. Сейчас они скрыты.</string>
+    <string name="per_app_proxy_system_matches_hidden">Найденные системные приложения скрыты. Включите их отображение.</string>
+    <string name="per_app_selection_load_failed">Не удалось восстановить выбор приложений. Повторите попытку перед изменением.</string>
+    <string name="per_app_selection_draft_failed">Не удалось сохранить черновик выбора. Не закрывайте страницу и повторите сохранение.</string>
+</resources>

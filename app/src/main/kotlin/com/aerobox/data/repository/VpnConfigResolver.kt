@@ -2,7 +2,7 @@ package com.aerobox.data.repository
 
 import android.content.Context
 import android.util.Log
-import com.aerobox.AeroBoxApplication
+import com.aerobox.data.database.ProxyNodeDao
 import com.aerobox.R
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.errors.LocalizedException
@@ -15,13 +15,14 @@ import com.aerobox.data.model.RoutingMode
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.flow.first
 
-class VpnConfigResolver(private val context: Context) {
+class VpnConfigResolver(
+    private val context: Context,
+    private val nodeDao: ProxyNodeDao,
+    private val subscriptionRepository: SubscriptionRepository
+) {
     companion object {
         private const val TAG = "VpnConfigResolver"
     }
-
-    private val nodeDao = AeroBoxApplication.database.proxyNodeDao()
-    private val subscriptionRepository get() = AeroBoxApplication.subscriptionRepository
 
     suspend fun resolveSelectedNode(): ProxyNode? {
         val selectedId = PreferenceManager.lastSelectedNodeIdFlow(context).first()

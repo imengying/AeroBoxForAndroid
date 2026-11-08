@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="backup_restore_pending">داده‌ها وارد شدند، اما بازیابی تنظیمات هنوز کامل نشده است. برنامه را دوباره اجرا کنید؛ این نسخهٔ پشتیبان را دوباره وارد نکنید.</string>
+    <string name="backup_too_large">نسخهٔ پشتیبان از محدودیت عبور می‌کند: ۳۲ مگابایت، ۵۰٬۰۰۰ گره یا ۱۰٬۰۰۰ گروه.</string>
+    <string name="node_export_request_unavailable">اطلاعات صادرات در انتظار دیگر در دسترس نیست. گره‌ها را دوباره انتخاب و صادر کنید.</string>
     <string name="operation_complete">انجام شد</string>
     <string name="backup_invalid">نسخه پشتیبان نامعتبر یا پشتیبانی‌نشده است</string>
     <string name="backup_title">پشتیبان‌گیری و بازیابی</string>

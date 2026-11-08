@@ -13,14 +13,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -37,12 +42,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aerobox.viewmodel.AppViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
 import com.aerobox.data.model.RoutingMode
@@ -59,11 +66,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
+fun HomeScreen(viewModel: HomeViewModel = viewModel(factory = AppViewModelFactory)) {
     val context = LocalContext.current
     val vpnState by viewModel.vpnState.collectAsStateWithLifecycle()
     val trafficStats by viewModel.trafficStats.collectAsStateWithLifecycle()
-    val isConnecting by viewModel.isConnecting.collectAsStateWithLifecycle()
     val selectedNode by viewModel.selectedNode.collectAsStateWithLifecycle()
     val connectionDuration by viewModel.connectionDuration.collectAsStateWithLifecycle()
     val displayNodes by viewModel.displayNodes.collectAsStateWithLifecycle()
@@ -109,22 +115,26 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
             snackbarHostState.showSnackbar(message)
         }
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val compact = maxHeight < 600.dp
+        val stackCards = maxWidth < 360.dp || LocalDensity.current.fontScale > 1.3f
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 80.dp, start = 16.dp, end = 16.dp, bottom = 24.dp),
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(top = if (compact) 16.dp else 48.dp, start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 ConnectionCard(
-                    isConnected = vpnState.isConnected,
-                    isConnecting = isConnecting,
+                    state = vpnState,
                     connectionDuration = connectionDuration,
+                    buttonSize = if (compact) 128.dp else 160.dp,
                     onToggleConnection = {
-                        if (vpnState.isConnected || isConnecting) {
+                        if (vpnState.serviceActive) {
                             viewModel.toggleConnection(context)
                         } else {
                             val permissionIntent = VpnService.prepare(context)
@@ -150,48 +160,33 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel()) {
                 }
             }
 
-            Spacer(
-                modifier = Modifier.weight(1f, fill = true)
-            )
-
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    NodeSelectorCard(
-                        nodeName = selectedNode?.name ?: stringResource(R.string.node_not_selected),
-                        nodeAddress = selectedNode?.type?.displayName() ?: "--",
-                        onClick = { showNodeList = true },
-                        modifier = Modifier.weight(0.5f).height(92.dp)
-                    )
-                    TrafficStatsCard(
-                        stats = trafficStats,
-                        modifier = Modifier.weight(0.5f).height(92.dp)
-                    )
-                }
+                HomeCardPair(
+                    stacked = stackCards,
+                    first = { modifier ->
+                        NodeSelectorCard(
+                            nodeName = selectedNode?.name ?: stringResource(R.string.node_not_selected),
+                            nodeAddress = selectedNode?.type?.displayName() ?: "--",
+                            onClick = { showNodeList = true }, modifier = modifier
+                        )
+                    },
+                    second = { modifier -> TrafficStatsCard(stats = trafficStats, modifier = modifier) }
+                )
 
                 RoutingModeRow(
                     selected = routingMode,
                     onSelect = { viewModel.setRoutingMode(it) }
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    NetworkDetectCard(
-                        ip = detectedIp,
-                        onClick = { viewModel.refreshNetworkInfo() },
-                        modifier = Modifier.weight(0.5f).height(92.dp)
-                    )
-                    MemoryUsageCard(
-                        memoryUsage = memoryUsage,
-                        modifier = Modifier.weight(0.5f).height(92.dp)
-                    )
-                }
+                HomeCardPair(
+                    stacked = stackCards,
+                    first = { modifier ->
+                        NetworkDetectCard(ip = detectedIp, onClick = { viewModel.refreshNetworkInfo() }, modifier = modifier)
+                    },
+                    second = { modifier -> MemoryUsageCard(memoryUsage = memoryUsage, modifier = modifier) }
+                )
             }
         }
         AppSnackbarHost(
@@ -282,6 +277,28 @@ private fun ensureNotificationPermissionThenStart(
         onRequest(Manifest.permission.POST_NOTIFICATIONS)
     } else {
         onContinue()
+    }
+}
+
+@Composable
+private fun HomeCardPair(
+    stacked: Boolean,
+    first: @Composable (Modifier) -> Unit,
+    second: @Composable (Modifier) -> Unit
+) {
+    if (stacked) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            first(Modifier.fillMaxWidth().heightIn(min = 92.dp))
+            second(Modifier.fillMaxWidth().heightIn(min = 92.dp))
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            first(Modifier.weight(1f).fillMaxHeight().heightIn(min = 92.dp))
+            second(Modifier.weight(1f).fillMaxHeight().heightIn(min = 92.dp))
+        }
     }
 }
 

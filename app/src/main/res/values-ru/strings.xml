@@ -253,7 +253,9 @@
     <string name="per_app_proxy_chip_show_system">Системные</string>
     <string name="per_app_proxy_search_hint">Поиск по имени или пакету</string>
     <string name="per_app_proxy_loading">Загрузка</string>
-    <string name="per_app_proxy_empty">Не удалось загрузить список приложений; попробуйте позже</string>
+    <string name="per_app_proxy_empty">Не удалось прочитать список приложений. Проверьте доступ к списку в настройках системы и повторите попытку.</string>
+    <string name="per_app_proxy_retry">Повторить</string>
+    <string name="per_app_proxy_app_settings">Настройки приложения</string>
     <string name="per_app_proxy_no_match">Совпадений не найдено</string>
     <string name="per_app_proxy_no_internet">Нет разрешения на сеть</string>
 
@@ -322,7 +324,7 @@
     <string name="routing_custom_rule_name">Название</string>
     <string name="routing_custom_rule_name_empty">Название правила не может быть пустым</string>
     <string name="routing_custom_rule_url">Ссылка правила</string>
-    <string name="routing_custom_rule_url_hint">Поддерживаются ссылки rule-set http:// или https://</string>
+    <string name="routing_custom_rule_url_hint">Поддерживаются ссылки rule-set https://</string>
     <string name="routing_custom_rule_url_invalid">Ссылка правила некорректна</string>
     <string name="routing_custom_rule_action">Действие</string>
     <string name="routing_custom_rule_action_direct">Напрямую</string>
@@ -355,7 +357,7 @@
     <string name="node_edit_server">Сервер</string>
     <string name="node_edit_port">Порт</string>
     <string name="node_edit_required">Обязательное поле</string>
-    <string name="node_edit_conflict">Узел изменился. Вернитесь назад и откройте его заново для редактирования.</string>
+    <string name="node_edit_conflict">Узел изменился. Загрузите его заново перед сохранением; текущие правки будут отменены.</string>
     <string name="node_edit_method">Метод шифрования</string>
     <string name="node_edit_password">Пароль</string>
     <string name="node_edit_username">Имя пользователя</string>

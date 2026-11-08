@@ -7,7 +7,6 @@ import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.aerobox.R
-import com.aerobox.AeroBoxApplication
 import com.aerobox.core.subscription.ParseDiagnostics
 import com.aerobox.core.subscription.insecureOptionKeys
 import com.aerobox.data.model.Subscription
@@ -54,7 +53,7 @@ data class PendingSubscriptionLink(
     val updateInterval: Long
 )
 
-class SubscriptionViewModel(application: Application) : AndroidViewModel(application) {
+class SubscriptionViewModel(application: Application, private val repository: SubscriptionRepository) : AndroidViewModel(application) {
     private companion object {
         const val DEFAULT_CONFIG_ERROR = "Configuration error"
         const val DEFAULT_UNKNOWN_ERROR = "Unknown error"
@@ -74,7 +73,6 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private val appContext = application.applicationContext
-    private val repository = AeroBoxApplication.subscriptionRepository
     private val languageTag = PreferenceManager.languageTagFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppLocaleManager.SYSTEM_LANGUAGE_TAG)
 
@@ -106,7 +104,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         autoUpdate: Boolean,
         updateInterval: Long
     ) {
-        if (!isValidSubscriptionUrl(url)) {
+        if (!repository.isValidRemoteSubscriptionUrl(url)) {
             _uiMessage.tryEmit(appString(R.string.subscription_link_invalid))
             return
         }
@@ -157,7 +155,7 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
         updateInterval: Long
     ) {
         val isLocal = subscription.isLocalGroup()
-        if (!isLocal && !isValidSubscriptionUrl(url)) {
+        if (!isLocal && !repository.isValidRemoteSubscriptionUrl(url)) {
             _uiMessage.tryEmit(appString(R.string.subscription_link_invalid))
             return
         }
@@ -472,10 +470,6 @@ class SubscriptionViewModel(application: Application) : AndroidViewModel(applica
             is ImportGroupTarget.Existing -> ""
             is ImportGroupTarget.Ungrouped -> ""
         }
-    }
-
-    private fun isValidSubscriptionUrl(url: String): Boolean {
-        return repository.isValidRemoteSubscriptionUrl(url)
     }
 
     private fun shouldDeferToSubscriptionEntry(source: String): Boolean {

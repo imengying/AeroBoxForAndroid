@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_go_back">返回</string>
+    <string name="action_clear_search">清空搜索</string>
+    <string name="per_app_proxy_none">没有可配置的应用。</string>
+    <string name="per_app_proxy_system_hidden">当前只有系统应用，已被隐藏。</string>
+    <string name="per_app_proxy_system_matches_hidden">匹配的系统应用已被隐藏，开启显示后可查看。</string>
+    <string name="per_app_selection_load_failed">无法恢复应用选择，请重试后再修改。</string>
+    <string name="per_app_selection_draft_failed">无法保存选择草稿，请保持当前页面并重试保存。</string>
+</resources>

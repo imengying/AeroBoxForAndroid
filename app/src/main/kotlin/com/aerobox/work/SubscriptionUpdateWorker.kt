@@ -3,7 +3,7 @@ package com.aerobox.work
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.aerobox.AeroBoxApplication
+import com.aerobox.appContainer
 import kotlinx.coroutines.flow.first
 
 class SubscriptionUpdateWorker(
@@ -12,7 +12,7 @@ class SubscriptionUpdateWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        val repository = AeroBoxApplication.subscriptionRepository
+        val repository = applicationContext.appContainer.subscriptionRepository
         val subscriptions = repository.getAllSubscriptions().first()
         val results = repository.refreshDueSubscriptions(
             subscriptions = subscriptions,

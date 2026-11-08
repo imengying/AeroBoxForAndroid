@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aerobox.viewmodel.AppViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
 import com.aerobox.service.VpnStateManager
@@ -26,10 +27,11 @@ import com.aerobox.viewmodel.DataTransferViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BackupScreen(onNavigateBack: () -> Unit, viewModel: DataTransferViewModel = viewModel()) {
+fun BackupScreen(onNavigateBack: () -> Unit, viewModel: DataTransferViewModel = viewModel(factory = AppViewModelFactory)) {
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
-    val serviceActive by VpnStateManager.serviceActive.collectAsStateWithLifecycle()
+    val vpnState by VpnStateManager.vpnState.collectAsStateWithLifecycle()
+    val serviceActive = vpnState.serviceActive
     val snackbar = remember { SnackbarHostState() }
     var restoreUri by rememberSaveable { mutableStateOf<String?>(null) }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->

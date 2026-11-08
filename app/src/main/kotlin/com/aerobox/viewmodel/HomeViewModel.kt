@@ -8,7 +8,6 @@ import android.content.Intent
 import android.net.VpnService
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.aerobox.AeroBoxApplication
 import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.core.connection.ConnectionFixAction
 import com.aerobox.core.connection.ConnectionIssue
@@ -60,7 +59,12 @@ import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
+class HomeViewModel(
+    application: Application,
+    private val nodeDao: com.aerobox.data.database.ProxyNodeDao,
+    private val vpnRepository: com.aerobox.data.repository.VpnRepository,
+    private val subscriptionRepository: com.aerobox.data.repository.SubscriptionRepository
+) : AndroidViewModel(application) {
     private companion object {
         const val POST_CONNECT_IP_DETECT_DELAY_MS = 500L
         const val NODE_TEST_TIMEOUT_MS = 5000
@@ -76,21 +80,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private val appContext = application.applicationContext
-    private val nodeDao = AeroBoxApplication.database.proxyNodeDao()
-    private val vpnRepository = AeroBoxApplication.vpnRepository
-    private val subscriptionRepository = AeroBoxApplication.subscriptionRepository
     private val ipDetector = PublicIpDetector()
     private var latencyTestJob: Job? = null
     private val languageTag = PreferenceManager.languageTagFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppLocaleManager.SYSTEM_LANGUAGE_TAG)
 
     val vpnState: StateFlow<VpnState> = VpnStateManager.vpnState
-
-    private val isServiceActive: StateFlow<Boolean> = VpnStateManager.serviceActive
-
-    val isConnecting: StateFlow<Boolean> = combine(isServiceActive, vpnState) { serviceActive, state ->
-        serviceActive && !state.isConnected
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val routingMode: StateFlow<RoutingMode> = PreferenceManager.routingModeFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.GLOBAL_PROXY)
@@ -238,37 +233,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    private suspend fun applyRoutingMode(mode: RoutingMode): Boolean = vpnRepository.runtimeSettingsMutex.withLock {
-        val previousMode = PreferenceManager.routingModeFlow(appContext).first()
-        if (previousMode == mode) return@withLock true
-        val stopRevision = VpnStateManager.stopRevision.get()
-        PreferenceManager.setRoutingMode(appContext, mode)
-
-        val currentNode = vpnState.value.currentNode ?: selectedNode.value
-        if (!vpnState.value.isConnected || currentNode == null) {
-            return@withLock true
+    private suspend fun applyRoutingMode(mode: RoutingMode): Boolean {
+        val result = vpnRepository.runtimeSettings.update(
+            readCurrent = { PreferenceManager.routingModeFlow(appContext).first() },
+            persist = { PreferenceManager.setRoutingMode(appContext, it) }
+        ) { mode }
+        if (result.reloaded) {
+            _uiMessage.tryEmit(appString(com.aerobox.R.string.switched_to_mode, appString(mode.labelResId)))
         }
-
-        val result = vpnRepository.reloadActiveConnection(currentNode, stopRevision)
-        if (result is VpnConnectionResult.Success) {
-            _uiMessage.tryEmit(
-                appString(
-                    com.aerobox.R.string.switched_to_mode,
-                    appString(mode.labelResId)
-                )
-            )
-            return@withLock true
-        }
-        if (VpnStateManager.stopRevision.get() != stopRevision ||
-            (result is VpnConnectionResult.Failure && result.throwable is CancellationException)) return@withLock true
-        PreferenceManager.setRoutingMode(appContext, previousMode)
-        if (!vpnState.value.isConnected) vpnRepository.reloadActiveConnection(currentNode, stopRevision)
-        dispatchConnectionError(result)
-        false
+        result.failure?.let(::dispatchConnectionError)
+        return result.applied
     }
 
     fun toggleConnection(context: Context): Intent? {
-        if (!isServiceActive.value) {
+        if (!vpnState.value.serviceActive) {
             val permissionIntent = VpnService.prepare(context)
             if (permissionIntent != null) {
                 return permissionIntent
@@ -331,13 +309,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (vpnState.value.isConnected) {
                     return@launch
                 }
-                val rawError = VpnStateManager.lastError.value?.takeIf { it.isNotBlank() }
+                val rawError = VpnStateManager.vpnState.value.lastError?.takeIf { it.isNotBlank() }
                 if (rawError != null) {
                     handleConnectionFailure(rawError)
                     return@launch
                 }
                 if (SystemClock.elapsedRealtime() >= deadline) {
                     val timeoutError = "service start timeout"
+                    com.aerobox.core.logging.RuntimeLogBuffer.appendError("VPN service start timed out before a connection was established")
                     handleConnectionFailure(timeoutError)
                     return@launch
                 }

@@ -231,7 +231,11 @@ internal object DnsConfigBuilder {
     private fun isValidDnsHostOrIp(server: String): Boolean {
         val normalized = server.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
         if (normalized.isBlank() || normalized.any { it.isWhitespace() }) return false
-        if (ConfigGenerator.isIpLiteral(normalized)) return true
+        if (normalized.contains(':')) {
+            return runCatching { URI("dns://[$normalized]").host != null }.getOrDefault(false)
+        }
+        if (normalized.all { it.isDigit() || it == '.' }) return ConfigGenerator.isIpLiteral(normalized)
+        if (normalized.length > 253) return false
         return normalized.split('.').all { label ->
             label.isNotBlank() &&
                 label.length <= 63 &&
@@ -247,6 +251,7 @@ internal object DnsConfigBuilder {
             return "https://cloudflare-dns.com/dns-query"
         }
 
+        parseDnsServer(trimmed) // Validate before normalization can replace a host or default port.
         return when {
             trimmed.startsWith("https://") -> normalizeEncryptedDnsEndpoint(trimmed, "https")
             trimmed.startsWith("tls://") -> {
@@ -321,6 +326,7 @@ internal object DnsConfigBuilder {
             return if (nodeIsIpv6Only) "2400:3200::1" else "223.5.5.5"
         }
         if (trimmed.isBlank()) return "https://dns.alidns.com/dns-query"
+        parseDnsServer(trimmed)
         if (!nodeIsIpv6Only) return trimmed
 
         return when {
@@ -395,67 +401,55 @@ internal object DnsConfigBuilder {
         return trimmed.count { it == ':' } == 1 && trimmed.substringAfterLast(':').toIntOrNull() != null
     }
 
-    private fun parseDnsServer(dns: String): DnsServerSpec {
-        val trimmed = dns.trim()
-        return when {
-            trimmed.startsWith("https://") -> {
-                val uri = URI(trimmed)
-                val server = uri.host?.takeIf { it.isNotBlank() }
-                    ?: trimmed.removePrefix("https://").substringBefore('/').substringBefore(':')
-                DnsServerSpec(
-                    type = "https",
-                    server = server.removePrefix("[").removeSuffix("]"),
-                    serverPort = if (uri.port > 0) uri.port else 443,
-                    path = uri.rawPath?.takeIf { it.isNotBlank() } ?: "/dns-query"
-                )
-            }
-
-            trimmed.startsWith("tls://") -> {
-                val (server, port) = parseHostAndPort(trimmed.removePrefix("tls://"), 853)
-                DnsServerSpec("tls", server, port)
-            }
-
-            trimmed.startsWith("tcp://") -> {
-                val (server, port) = parseHostAndPort(trimmed.removePrefix("tcp://"), 53)
-                DnsServerSpec("tcp", server, port)
-            }
-
-            trimmed.startsWith("udp://") -> {
-                val (server, port) = parseHostAndPort(trimmed.removePrefix("udp://"), 53)
-                DnsServerSpec("udp", server, port)
-            }
-
-            trimmed.startsWith("quic://") -> {
-                val (server, port) = parseHostAndPort(trimmed.removePrefix("quic://"), 853)
-                DnsServerSpec("quic", server, port)
-            }
-
-            else -> {
-                val (server, port) = parseHostAndPort(trimmed, 53)
-                val safeServer = if (server == "[ipv4]" || server == "[ipv6]") "1.1.1.1" else server
-                DnsServerSpec("udp", safeServer, port)
-            }
+    internal fun parseDnsServer(dns: String): DnsServerSpec {
+        val value = dns.trim()
+        // Old backup placeholders are still supported as plain UDP addresses.
+        if (value == "[ipv4]" || value == "[ipv6]") return DnsServerSpec("udp", "1.1.1.1", 53)
+        val scheme = if (value.contains("://")) value.substringBefore("://").lowercase() else "udp"
+        requireDns(scheme in supportedDnsTypes)
+        val defaultPort = when (scheme) {
+            "https" -> 443
+            "tls", "quic" -> 853
+            else -> 53
         }
+        val spec = if (scheme == "https") {
+            val uri = parseDnsUri(value)
+            requireDns(uri.host != null && uri.rawUserInfo == null && uri.rawQuery == null && uri.rawFragment == null)
+            requireDns(uri.rawAuthority?.endsWith(":") == false)
+            DnsServerSpec(scheme, uri.host.removePrefix("[").removeSuffix("]"),
+                if (uri.port == -1) defaultPort else uri.port,
+                uri.rawPath?.takeIf { it.isNotBlank() } ?: "/dns-query")
+        } else {
+            val raw = if (value.contains("://")) value.substringAfter("://") else value
+            val (host, port) = parseHostAndPort(raw, defaultPort)
+            DnsServerSpec(scheme, host, port)
+        }
+        requireDns(spec.serverPort in 1..65535 && isValidDnsHostOrIp(spec.server))
+        return spec
     }
 
     private fun parseHostAndPort(raw: String, defaultPort: Int): Pair<String, Int> {
         val value = raw.trim()
-        val parsed = runCatching { URI("dns://$value") }.getOrNull()
-        val host = parsed?.host?.takeIf { it.isNotBlank() }
-        if (host != null) {
-            val port = if (parsed.port > 0) parsed.port else defaultPort
-            return host.removePrefix("[").removeSuffix("]") to port
+        // An unbracketed IPv6 literal has no explicit port.
+        if (!value.startsWith("[") && value.count { it == ':' } >= 2) {
+            requireDns(isValidDnsHostOrIp(value))
+            return value to defaultPort
         }
+        val uri = parseDnsUri("dns://$value")
+        requireDns(uri.host != null && uri.rawUserInfo == null && uri.rawQuery == null &&
+            uri.rawFragment == null && uri.rawPath.isNullOrEmpty() && !value.endsWith(":"))
+        return uri.host.removePrefix("[").removeSuffix("]") to
+            if (uri.port == -1) defaultPort else uri.port
+    }
 
-        if (value.count { it == ':' } == 1 && !value.startsWith("[")) {
-            val separator = value.lastIndexOf(':')
-            val port = value.substring(separator + 1).toIntOrNull()
-            if (port != null) {
-                return value.substring(0, separator) to port
-            }
-        }
+    private fun parseDnsUri(value: String): URI = try {
+        URI(value)
+    } catch (_: java.net.URISyntaxException) {
+        throw LocalizedException.of(R.string.error_dns_invalid_format_generic)
+    }
 
-        return value.removePrefix("[").removeSuffix("]") to defaultPort
+    private fun requireDns(valid: Boolean) {
+        if (!valid) throw LocalizedException.of(R.string.error_dns_invalid_format_generic)
     }
 
     private fun knownEncryptedDnsHost(value: String): String? {

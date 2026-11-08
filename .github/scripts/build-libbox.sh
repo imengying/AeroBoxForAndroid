@@ -6,7 +6,7 @@ set -euo pipefail
 : "${ANDROID_NDK_HOME:?ANDROID_NDK_HOME is required}"
 : "${GOMOBILE_VERSION:?GOMOBILE_VERSION is required}"
 : "${LIBBOX_BUILD_TAGS:?LIBBOX_BUILD_TAGS is required}"
-: "${SING_BOX_VERSION:?SING_BOX_VERSION is required}"
+source "${GITHUB_WORKSPACE}/.github/scripts/resolve-sing-box-version.sh"
 
 for disabled_tag in tailscale wireguard ssh; do
   if [[ ",${LIBBOX_BUILD_TAGS}," == *"${disabled_tag}"* ]]; then
@@ -26,7 +26,7 @@ go version
 go install github.com/sagernet/gomobile/cmd/gomobile@"${GOMOBILE_VERSION}"
 go install github.com/sagernet/gomobile/cmd/gobind@"${GOMOBILE_VERSION}"
 
-# Clone sing-box source at the resolved stable tag
+# Clone the version reviewed together with this repository's patches.
 git clone --depth 1 --branch "${SING_BOX_VERSION}" \
   https://github.com/SagerNet/sing-box.git "${RUNNER_TEMP}/sing-box"
 cd "${RUNNER_TEMP}/sing-box"

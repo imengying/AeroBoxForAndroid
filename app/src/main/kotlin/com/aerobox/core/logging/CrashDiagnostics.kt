@@ -5,7 +5,6 @@ import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
 import android.os.Process
-import android.system.OsConstants
 import android.util.AtomicFile
 import android.util.Log
 import com.aerobox.BuildConfig
@@ -121,25 +120,14 @@ object CrashDiagnostics {
         }
         for (exit in exits) {
             if (exit.timestamp <= lastExitTimestamp || exit.processName != context.packageName) continue
-            val source = when (exit.reason) {
-                ApplicationExitInfo.REASON_CRASH -> "JVM"
-                ApplicationExitInfo.REASON_CRASH_NATIVE -> "native"
-                ApplicationExitInfo.REASON_ANR -> "ANR"
-                ApplicationExitInfo.REASON_EXIT_SELF -> if (exit.status != 0) "nonzero process exit" else null
-                ApplicationExitInfo.REASON_SIGNALED -> when (exit.status) {
-                    OsConstants.SIGABRT, OsConstants.SIGSEGV, OsConstants.SIGBUS,
-                    OsConstants.SIGILL, OsConstants.SIGFPE -> "native signal"
-                    else -> null
-                }
-                else -> null
-            } ?: continue
+            val source = describeProcessExit(exit.reason, exit.status) ?: continue
             // Prefer our JVM stack summary over the system's duplicate record of the same exit.
             if (reports.any { it.pid == exit.pid && abs(it.timestamp - exit.timestamp) < 60_000L }) continue
             val versions = exit.processStateSummary?.toString(Charsets.UTF_8)?.take(128)
                 ?: "Version metadata unavailable"
             reports += Report(
                 exit.timestamp, exit.pid,
-                "Previous crash [$source]\n$versions\nreason=${exit.reason}, status=${exit.status}"
+                "Previous $source\n$versions\nreason=${exit.reason}, status=${exit.status}, importance=${exit.importance}"
             )
         }
         val retained = reports.distinctBy { it.timestamp to it.pid }
@@ -211,4 +199,22 @@ object CrashDiagnostics {
             throw error
         }
     }
+}
+
+// Keep system/user termination distinct from crashes; a signal alone does not identify its cause.
+internal fun describeProcessExit(reason: Int, status: Int): String? = when (reason) {
+    ApplicationExitInfo.REASON_CRASH -> "crash [JVM]"
+    ApplicationExitInfo.REASON_CRASH_NATIVE -> "crash [native]"
+    ApplicationExitInfo.REASON_ANR -> "process exit [ANR]"
+    ApplicationExitInfo.REASON_EXIT_SELF -> if (status != 0) "process exit [nonzero status]" else null
+    ApplicationExitInfo.REASON_SIGNALED -> "process exit [signal]"
+    ApplicationExitInfo.REASON_LOW_MEMORY -> "process exit [low memory]"
+    ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "process exit [initialization failure]"
+    ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "process exit [permission change]"
+    ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "process exit [excessive resource usage]"
+    ApplicationExitInfo.REASON_USER_REQUESTED -> "process exit [user requested]"
+    ApplicationExitInfo.REASON_USER_STOPPED -> "process exit [user stopped]"
+    ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "process exit [dependency died]"
+    ApplicationExitInfo.REASON_FREEZER -> "process exit [freezer]"
+    else -> null
 }

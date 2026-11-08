@@ -138,7 +138,9 @@ internal object JsonNodeParser {
             }
 
             result += ProxyNode(
-                name = obj.optString("name", obj.optString("ps", type.name)),
+                name = listOf("name", "ps", "tag")
+                    .map { obj.optString(it, "") }
+                    .firstOrNull { it.isNotBlank() } ?: type.name,
                 type = type,
                 server = server,
                 port = port,

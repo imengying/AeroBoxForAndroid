@@ -1,43 +1,25 @@
 package com.aerobox.data.repository
 
 import android.content.Context
-import android.net.Uri
-import androidx.core.net.toUri
 import androidx.room.withTransaction
-import com.aerobox.AeroBoxApplication
 import com.aerobox.R
 import com.aerobox.core.errors.LocalizedException
 import com.aerobox.core.subscription.ParseDiagnostics
 import com.aerobox.core.subscription.SubscriptionParser
+import com.aerobox.core.subscription.SubscriptionMetadataParser
 import com.aerobox.data.model.NodeLatencyState
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyNodeMatcher
 import com.aerobox.data.model.Subscription
 import com.aerobox.data.model.connectionFingerprint
 import com.aerobox.data.model.isLocalGroup
-import com.aerobox.utils.PreferenceManager
-import com.aerobox.work.SubscriptionUpdateScheduler
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.Headers
-import okhttp3.Request
-import com.aerobox.core.network.SharedHttpClient
-import okhttp3.Response
-import okhttp3.ResponseBody
-import okio.Buffer
-import java.io.IOException
-import java.util.Base64
 
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 data class SubscriptionImportResult(
     val subscriptionId: Long,
@@ -72,9 +54,14 @@ internal class NoValidNodesException(
     val diagnostics: ParseDiagnostics
 ) : IllegalStateException(SubscriptionRepository.NO_VALID_NODES_ERROR)
 
-class SubscriptionRepository(context: Context) {
+class SubscriptionRepository(
+    context: Context,
+    private val database: com.aerobox.data.database.AppDatabase,
+    private val downloader: SubscriptionDownloader,
+    private val selectedNodeStore: SelectedNodeStore,
+    private val rescheduleUpdates: suspend () -> Unit
+) {
     private val appContext = context.applicationContext
-    private val database = AeroBoxApplication.database
     private val subscriptionDao = database.subscriptionDao()
     private val proxyNodeDao = database.proxyNodeDao()
     private val subscriptionMutationLocks = Array(SUBSCRIPTION_LOCK_COUNT) { Mutex() }
@@ -85,29 +72,13 @@ class SubscriptionRepository(context: Context) {
         private const val MAX_REFRESH_SNAPSHOT_RETRIES = 3
         private const val SUBSCRIPTION_LOCK_COUNT = 32
         private const val NODE_QUERY_BATCH_SIZE = 500
-        private const val SUBSCRIPTION_USER_AGENT = "clash-verge/v1.3.8"
-        // Hard cap on subscription response body size. Aligned with Clash YAML
-        // codePointLimit so a malicious server cannot OOM the app by streaming
-        // an unbounded response into memory before parsing.
-        private const val MAX_SUBSCRIPTION_BYTES = 8L * 1024L * 1024L
         const val MIN_UPDATE_INTERVAL_MS = 15 * 60 * 1000L
         const val DEFAULT_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000L
         const val NO_VALID_NODES_ERROR = "NO_VALID_NODES"
         const val LOCAL_GROUP_TARGET_INVALID_ERROR = "LOCAL_GROUP_TARGET_INVALID"
         const val INVALID_SUBSCRIPTION_URL_ERROR = "INVALID_SUBSCRIPTION_URL"
-        const val SUBSCRIPTION_RESPONSE_TOO_LARGE_ERROR = "SUBSCRIPTION_RESPONSE_TOO_LARGE"
-        private val COMMENT_METADATA_REGEX =
-            Regex("""^\s*(#|//|;)\s*([A-Za-z-]+)\s*:\s*(.+?)\s*$""")
-        private val SUPPORTED_COMMENT_METADATA_KEYS = setOf(
-            "profile-title",
-            "profile-update-interval",
-            "subscription-userinfo",
-            "moved-permanently-to"
-        )
-        private val CONTENT_DISPOSITION_UTF8_REGEX =
-            Regex("""filename\*\s*=\s*UTF-8''([^;]+)""", RegexOption.IGNORE_CASE)
-        private val CONTENT_DISPOSITION_FILENAME_REGEX =
-            Regex("""filename\s*=\s*"?([^";]+)"?""", RegexOption.IGNORE_CASE)
+        const val SUBSCRIPTION_RESPONSE_TOO_LARGE_ERROR = HttpSubscriptionDownloader.RESPONSE_TOO_LARGE
+
     }
 
     private sealed interface RefreshCommitOutcome {
@@ -123,11 +94,6 @@ class SubscriptionRepository(context: Context) {
         data object Deleted : RefreshCommitOutcome
     }
 
-    private data class SubscriptionFetchResult(
-        val content: String,
-        val headers: Headers
-    )
-
     private data class PreparedSubscriptionImport(
         val nodes: List<ProxyNode>,
         val trafficBytes: Long,
@@ -137,32 +103,6 @@ class SubscriptionRepository(context: Context) {
         val resolvedName: String? = null,
         val resolvedUrl: String? = null,
         val resolvedUpdateInterval: Long? = null
-    )
-
-    private data class SubscriptionUserInfo(
-        val uploadBytes: Long? = null,
-        val downloadBytes: Long? = null,
-        val totalBytes: Long? = null,
-        val expireTimestamp: Long? = null
-    ) {
-        fun remainingBytes(): Long? {
-            val total = totalBytes ?: return null
-            val used = (uploadBytes ?: 0L) + (downloadBytes ?: 0L)
-            return (total - used).coerceAtLeast(0L)
-        }
-    }
-
-    private data class ImportMetadata(
-        val sanitizedContent: String,
-        val profileTitle: String? = null,
-        val canonicalUrl: String? = null,
-        val updateIntervalMs: Long? = null,
-        val userInfo: SubscriptionUserInfo? = null
-    )
-
-    private data class CommentMetadata(
-        val sanitizedContent: String,
-        val values: Map<String, String>
     )
 
     fun getAllSubscriptions() = subscriptionDao.getAllSubscriptions()
@@ -175,8 +115,6 @@ class SubscriptionRepository(context: Context) {
 
     fun observeNodesInGroup(subscriptionId: Long) =
         proxyNodeDao.observeNodesBySubscription(subscriptionId)
-
-    fun observeNodeById(nodeId: Long) = proxyNodeDao.observeNodeById(nodeId)
 
     suspend fun updateNode(node: ProxyNode, original: ProxyNode): NodeUpdateResult {
         require(node.id == original.id)
@@ -214,7 +152,7 @@ class SubscriptionRepository(context: Context) {
     suspend fun deleteNodes(nodeIds: List<Long>) {
         val ids = nodeIds.toSet()
         if (ids.isEmpty()) return
-        val selectedId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
+        val selectedId = selectedNodeStore.read()
         withMutationLocks(0) {
             database.withTransaction {
                 val nodes = ids.toList().chunked(500).flatMap { proxyNodeDao.getNodesByIds(it) }
@@ -222,7 +160,7 @@ class SubscriptionRepository(context: Context) {
                 nodes.map { it.subscriptionId }.distinct().filter { it > 0 }.forEach { recomputeLocalGroupCount(it) }
             }
         }
-        if (selectedId in ids) PreferenceManager.replaceSelectedNode(appContext, selectedId, 0L)
+        if (selectedId in ids) selectedNodeStore.replace(selectedId, 0L)
     }
 
     // Batch deletion spans groups; acquire stripes in a fixed order before opening the transaction.
@@ -264,7 +202,7 @@ class SubscriptionRepository(context: Context) {
         return runCatching {
             val prepared = prepareSubscriptionImport(trimmedUrl)
             val effectiveUrl = prepared.resolvedUrl ?: trimmedUrl
-            val effectiveName = name.ifBlank { prepared.resolvedName ?: deriveSubscriptionName(effectiveUrl) }
+            val effectiveName = name.ifBlank { prepared.resolvedName ?: SubscriptionMetadataParser.deriveSubscriptionName(effectiveUrl) }
                 ?: appContext.getString(R.string.import_subscription_default_name)
             val effectiveInterval = if (autoUpdate) {
                 prepared.resolvedUpdateInterval ?: normalizedInterval
@@ -298,7 +236,7 @@ class SubscriptionRepository(context: Context) {
                 )
                 insertedId
             }
-            SubscriptionUpdateScheduler.reconfigure(appContext)
+            rescheduleUpdates()
             SubscriptionImportResult(
                 subscriptionId = subscriptionId,
                 nodeCount = prepared.nodes.size,
@@ -319,7 +257,7 @@ class SubscriptionRepository(context: Context) {
     }
 
     suspend fun deleteSubscription(subscription: Subscription) {
-        val selectedNodeId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
+        val selectedNodeId = selectedNodeStore.read()
         val selectedNode = selectedNodeId
             .takeIf { it > 0L }
             ?.let { proxyNodeDao.getNodeById(it) }
@@ -347,9 +285,9 @@ class SubscriptionRepository(context: Context) {
             }
         }
         if (shouldMoveSelection) {
-            PreferenceManager.setLastSelectedNodeId(appContext, replacementSelectedNodeId ?: 0L)
+            selectedNodeStore.write(replacementSelectedNodeId ?: 0L)
         }
-        SubscriptionUpdateScheduler.reconfigure(appContext)
+        rescheduleUpdates()
     }
 
 
@@ -367,7 +305,7 @@ class SubscriptionRepository(context: Context) {
             throw IllegalStateException(appContext.getString(R.string.error_local_group_no_remote_refresh))
         }
         val result = updateSubscriptionInternal(subscription)
-        SubscriptionUpdateScheduler.reconfigure(appContext)
+        rescheduleUpdates()
         return result
     }
 
@@ -397,7 +335,7 @@ class SubscriptionRepository(context: Context) {
                 updateInterval = normalizeUpdateInterval(updateInterval)
             )
         }
-        SubscriptionUpdateScheduler.reconfigure(appContext)
+        rescheduleUpdates()
     }
 
     suspend fun renameLocalGroup(subscription: Subscription, name: String) {
@@ -414,7 +352,7 @@ class SubscriptionRepository(context: Context) {
         val refreshable = subscriptions.filterNot { it.isLocalGroup() }
         val results = refreshSubscriptions(refreshable)
         if (results.any { it.isSuccess }) {
-            SubscriptionUpdateScheduler.reconfigure(appContext)
+            rescheduleUpdates()
         }
         return results
     }
@@ -429,7 +367,7 @@ class SubscriptionRepository(context: Context) {
         }
         val results = refreshSubscriptions(dueSubscriptions)
         if (reconfigureSchedule && results.any { it.isSuccess }) {
-            SubscriptionUpdateScheduler.reconfigure(appContext)
+            rescheduleUpdates()
         }
         return results
     }
@@ -669,8 +607,8 @@ class SubscriptionRepository(context: Context) {
         if (!isValidRemoteSubscriptionUrl(trimmedUrl)) {
             throw IllegalArgumentException(INVALID_SUBSCRIPTION_URL_ERROR)
         }
-        val fetchResult = fetchSubscription(trimmedUrl)
-        val metadata = parseImportMetadata(
+        val fetchResult = downloader.fetch(trimmedUrl)
+        val metadata = SubscriptionMetadataParser.parse(
             source = fetchResult.content,
             sourceUrl = trimmedUrl,
             headers = fetchResult.headers
@@ -698,7 +636,7 @@ class SubscriptionRepository(context: Context) {
         source: String,
         nameHint: String
     ): PreparedSubscriptionImport {
-        val metadata = parseImportMetadata(
+        val metadata = SubscriptionMetadataParser.parse(
             source = source,
             sourceUrl = null,
             headers = null
@@ -716,70 +654,6 @@ class SubscriptionRepository(context: Context) {
             diagnostics = parsed.diagnostics,
             resolvedName = metadata.profileTitle ?: nameHint.takeIf { it.isNotBlank() }
         )
-    }
-
-    private suspend fun fetchSubscription(url: String): SubscriptionFetchResult =
-        suspendCancellableCoroutine { cont ->
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", SUBSCRIPTION_USER_AGENT)
-                .header("Accept-Encoding", "identity")
-                .header("Connection", "keep-alive")
-                .build()
-            val call = SharedHttpClient.base.newCall(request)
-            cont.invokeOnCancellation { call.cancel() }
-            call.enqueue(object : Callback {
-                override fun onResponse(call: Call, response: Response) {
-                    response.use {
-                        if (!cont.isActive) return
-                        val result = runCatching {
-                            if (!it.isSuccessful) {
-                                throw IOException("HTTP ${it.code}")
-                            }
-                            SubscriptionFetchResult(
-                                content = readBoundedBody(it.body, MAX_SUBSCRIPTION_BYTES),
-                                headers = it.headers
-                            )
-                        }
-                        if (!cont.isActive) return
-                        result
-                            .onSuccess { fetchResult ->
-                                cont.resume(fetchResult)
-                            }
-                            .onFailure { error ->
-                                cont.resumeWithException(error)
-                            }
-                    }
-                }
-                override fun onFailure(call: Call, e: IOException) {
-                    if (cont.isActive) {
-                        cont.resumeWithException(e)
-                    }
-                }
-            })
-        }
-
-    /**
-     * Read a [ResponseBody] into a UTF-8 string while enforcing an upper bound.
-     *
-     * Uses Okio to consume up to [maxBytes] from the source, then peeks one
-     * additional byte. If any data remains the body exceeded the limit and we
-     * abort instead of buffering the rest. This keeps memory usage bounded on
-     * a hostile server even when `Content-Length` is missing or lies.
-     */
-    private fun readBoundedBody(body: ResponseBody, maxBytes: Long): String {
-        val source = body.source()
-        val buffer = Buffer()
-        var remaining = maxBytes
-        while (remaining > 0) {
-            val read = source.read(buffer, remaining)
-            if (read == -1L) break
-            remaining -= read
-        }
-        if (source.request(1)) {
-            throw IOException(SUBSCRIPTION_RESPONSE_TOO_LARGE_ERROR)
-        }
-        return buffer.readString(Charsets.UTF_8)
     }
 
     private fun shouldAutoUpdate(subscription: Subscription, now: Long): Boolean {
@@ -802,7 +676,7 @@ class SubscriptionRepository(context: Context) {
                 }
 
                 val prepared = prepareSubscriptionImport(snapshot.url)
-                val selectedNodeId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
+                val selectedNodeId = selectedNodeStore.read()
                 val outcome = subscriptionMutationLock(snapshot.id).withLock {
                     val committed = database.withTransaction {
                         val current = subscriptionDao.getById(snapshot.id)
@@ -812,25 +686,15 @@ class SubscriptionRepository(context: Context) {
                         }
 
                         val existingNodes = proxyNodeDao.getNodesBySubscription(current.id)
-                        val stabilizedNodes = stabilizeSubscriptionNodes(
-                            existingNodes = existingNodes,
-                            freshNodes = prepared.nodes,
-                            subscriptionId = current.id
-                        )
-                        val summary = calculateUpdateSummary(existingNodes, stabilizedNodes)
-                        val existingById = existingNodes.associateBy { it.id }
-                        val retainedIds = stabilizedNodes.mapTo(mutableSetOf()) { it.id }
-                        val removed = existingNodes.filter { it.id !in retainedIds }
-                        val added = stabilizedNodes.filter { it.id == 0L }
-                        val changed = stabilizedNodes.filter { it.id > 0L && it != existingById[it.id] }
-                        if (removed.isNotEmpty()) proxyNodeDao.deleteAll(removed)
-                        if (changed.isNotEmpty()) proxyNodeDao.updateAll(changed)
-                        if (added.isNotEmpty()) proxyNodeDao.insertAll(added)
+                        val plan = SubscriptionUpdatePlanner.plan(existingNodes, prepared.nodes, current.id, System.currentTimeMillis())
+                        if (plan.removed.isNotEmpty()) proxyNodeDao.deleteAll(plan.removed)
+                        if (plan.changed.isNotEmpty()) proxyNodeDao.updateAll(plan.changed)
+                        if (plan.added.isNotEmpty()) proxyNodeDao.insertAll(plan.added)
                         val updatedRows = subscriptionDao.updateRefreshState(
                             id = current.id,
                             url = prepared.resolvedUrl ?: current.url,
                             updateTime = System.currentTimeMillis(),
-                            nodeCount = stabilizedNodes.size,
+                            nodeCount = plan.nodes.size,
                             trafficBytes = prepared.trafficBytes,
                             expireTimestamp = prepared.expireTimestamp,
                             updateInterval = prepared.resolvedUpdateInterval
@@ -843,10 +707,10 @@ class SubscriptionRepository(context: Context) {
                         RefreshCommitOutcome.Success(
                             subscription = current,
                             existingNodes = existingNodes,
-                            persistedNodes = if (added.isEmpty()) stabilizedNodes else {
+                            persistedNodes = if (plan.added.isEmpty()) plan.nodes else {
                                 proxyNodeDao.getNodesBySubscription(current.id)
                             },
-                            summary = summary
+                            summary = plan.summary
                         )
                     }
                     if (committed is RefreshCommitOutcome.Success) {
@@ -900,37 +764,7 @@ class SubscriptionRepository(context: Context) {
             ?: ProxyNodeMatcher(refreshedNodes).takeBestMatch(previouslySelected)
             ?: return
         if (replacement.id != selectedNodeId) {
-            PreferenceManager.setLastSelectedNodeId(appContext, replacement.id)
-        }
-    }
-
-    private fun stabilizeSubscriptionNodes(
-        existingNodes: List<ProxyNode>,
-        freshNodes: List<ProxyNode>,
-        subscriptionId: Long
-    ): List<ProxyNode> {
-        val matcher = ProxyNodeMatcher(existingNodes)
-        var previousOrder = (existingNodes.firstOrNull()?.createdAt ?: System.currentTimeMillis()) - 1L
-        return freshNodes.mapIndexed { index, freshNode ->
-            val matchedNode = matcher.takeBestMatch(freshNode)
-            val order = maxOf(
-                existingNodes.getOrNull(index)?.createdAt ?: previousOrder + 1L,
-                previousOrder + 1L
-            )
-            previousOrder = order
-            val latency = if (matchedNode != null &&
-                matchedNode.connectionFingerprint(includeName = false) == freshNode.connectionFingerprint(includeName = false)
-            ) {
-                matchedNode.latency
-            } else {
-                NodeLatencyState.UNTESTED
-            }
-            freshNode.copy(
-                id = matchedNode?.id ?: 0L,
-                subscriptionId = subscriptionId,
-                latency = latency,
-                createdAt = order
-            )
+            selectedNodeStore.write(replacement.id)
         }
     }
 
@@ -947,178 +781,8 @@ class SubscriptionRepository(context: Context) {
         }
     }
 
-    private fun calculateUpdateSummary(
-        existingNodes: List<ProxyNode>,
-        refreshedNodes: List<ProxyNode>
-    ): SubscriptionUpdateSummary {
-        val existingById = existingNodes.associateBy { it.id }
-        val matchedIds = mutableSetOf<Long>()
-        var addedCount = 0
-        var updatedCount = 0
-
-        refreshedNodes.forEach { node ->
-            val existingNode = node.id.takeIf { it > 0L }?.let { existingById[it] }
-            if (existingNode == null) {
-                addedCount++
-            } else {
-                matchedIds += existingNode.id
-                if (existingNode.connectionFingerprint() != node.connectionFingerprint()) {
-                    updatedCount++
-                }
-            }
-        }
-
-        val deletedCount = existingNodes.count { it.id !in matchedIds }
-        return SubscriptionUpdateSummary(
-            addedCount = addedCount,
-            updatedCount = updatedCount,
-            deletedCount = deletedCount
-        )
-    }
-
-    private fun parseSubscriptionUserInfo(value: String?): SubscriptionUserInfo? {
-        if (value.isNullOrBlank()) return null
-        val pairs = value.split(";")
-            .mapNotNull { entry ->
-                val separator = entry.indexOf('=')
-                if (separator <= 0 || separator >= entry.lastIndex) return@mapNotNull null
-                val key = entry.substring(0, separator).trim().lowercase()
-                val rawValue = entry.substring(separator + 1).trim()
-                key to rawValue
-            }
-            .toMap()
-
-        if (pairs.isEmpty()) return null
-
-        return SubscriptionUserInfo(
-            uploadBytes = pairs["upload"]?.toLongOrNull(),
-            downloadBytes = pairs["download"]?.toLongOrNull(),
-            totalBytes = pairs["total"]?.toLongOrNull() ?: pairs["totl"]?.toLongOrNull(),
-            expireTimestamp = pairs["expire"]?.toLongOrNull()?.let(::normalizeExpireTimestamp)
-        )
-    }
-
-    private fun parseImportMetadata(
-        source: String,
-        sourceUrl: String?,
-        headers: Headers?
-    ): ImportMetadata {
-        val commentMetadata = parseLeadingCommentMetadata(source)
-        val headerTitle = headers?.valueByName("Profile-Title")?.let(::decodeMetadataValue)
-        val commentTitle = commentMetadata.values["profile-title"]?.let(::decodeMetadataValue)
-        val contentDispositionTitle = headers?.valueByName("Content-Disposition")
-            ?.let(::extractFilenameFromContentDisposition)
-        val profileTitle = firstNonBlank(
-            headerTitle,
-            commentTitle,
-            contentDispositionTitle,
-            sourceUrl?.let(::deriveSubscriptionName)
-        )
-        val updateIntervalMs = headers?.valueByName("profile-update-interval")
-            ?.let(::parseProfileUpdateInterval)
-            ?: commentMetadata.values["profile-update-interval"]?.let(::parseProfileUpdateInterval)
-        val canonicalUrl = firstNonBlank(
-            headers?.valueByName("moved-permanently-to"),
-            commentMetadata.values["moved-permanently-to"],
-            sourceUrl
-        )?.takeIf(::isValidRemoteSubscriptionUrl)
-        val userInfo = parseSubscriptionUserInfo(
-            headers?.valueByName("Subscription-Userinfo")
-                ?: commentMetadata.values["subscription-userinfo"]
-        )
-        return ImportMetadata(
-            sanitizedContent = commentMetadata.sanitizedContent,
-            profileTitle = profileTitle,
-            canonicalUrl = canonicalUrl,
-            updateIntervalMs = updateIntervalMs,
-            userInfo = userInfo
-        )
-    }
-
-    private fun parseLeadingCommentMetadata(source: String): CommentMetadata {
-        val lines = source.lines()
-        if (lines.isEmpty()) {
-            return CommentMetadata(source, emptyMap())
-        }
-
-        val metadata = linkedMapOf<String, String>()
-        val sanitizedLines = lines.toMutableList()
-        val maxLines = minOf(lines.size, 10)
-        repeat(maxLines) { index ->
-            val line = lines[index]
-            val match = COMMENT_METADATA_REGEX.matchEntire(line) ?: return@repeat
-            val key = match.groupValues[2].trim().lowercase()
-            val value = match.groupValues[3].trim()
-            if (key in SUPPORTED_COMMENT_METADATA_KEYS && value.isNotBlank()) {
-                metadata[key] = value
-                sanitizedLines[index] = ""
-            }
-        }
-        return CommentMetadata(
-            sanitizedContent = sanitizedLines.joinToString("\n"),
-            values = metadata
-        )
-    }
-
-    private fun Headers.valueByName(name: String): String? {
-        return get(name)?.trim()?.takeIf { it.isNotBlank() }
-    }
-
-    private fun decodeMetadataValue(value: String): String {
-        val trimmed = value.trim()
-        val encodedValue = trimmed.substringAfter("base64:", "")
-        if (!trimmed.startsWith("base64:", ignoreCase = true) || encodedValue.isBlank()) {
-            return trimmed
-        }
-        return runCatching {
-            String(Base64.getDecoder().decode(encodedValue))
-        }.getOrDefault(trimmed)
-    }
-
-    private fun extractFilenameFromContentDisposition(value: String): String? {
-        CONTENT_DISPOSITION_UTF8_REGEX.find(value)?.let { match ->
-            return sanitizeProfileFileName(Uri.decode(match.groupValues[1]))
-        }
-        CONTENT_DISPOSITION_FILENAME_REGEX.find(value)?.let { match ->
-            return sanitizeProfileFileName(match.groupValues[1])
-        }
-        return null
-    }
-
-    private fun sanitizeProfileFileName(value: String): String? {
-        val trimmed = value.trim().trim('"').trim('\'')
-        if (trimmed.isBlank()) return null
-        return trimmed.substringBeforeLast('.').ifBlank { trimmed }
-    }
-
-    private fun deriveSubscriptionName(url: String): String? {
-        return runCatching {
-            val uri = url.toUri()
-            uri.fragment?.trim()?.takeIf { it.isNotBlank() }
-                ?: sanitizeProfileFileName(uri.lastPathSegment ?: uri.host.orEmpty())
-        }.getOrNull()
-    }
-
-    private fun parseProfileUpdateInterval(value: String): Long? {
-        val hours = value.trim().toLongOrNull() ?: return null
-        if (hours <= 0L) return null
-        return normalizeUpdateInterval(hours * 60L * 60L * 1000L)
-    }
-
-    fun isValidRemoteSubscriptionUrl(url: String): Boolean {
-        return runCatching {
-            val parsed = url.trim().toUri()
-            parsed.scheme.equals("https", ignoreCase = true) && !parsed.host.isNullOrBlank()
-        }.getOrDefault(false)
-    }
-
-    private fun firstNonBlank(vararg values: String?): String? {
-        return values.firstOrNull { !it.isNullOrBlank() }?.trim()?.takeIf { it.isNotEmpty() }
-    }
-
-    private fun normalizeExpireTimestamp(timestamp: Long): Long {
-        return if (timestamp >= 1_000_000_000_000L) timestamp else timestamp * 1000L
-    }
+    fun isValidRemoteSubscriptionUrl(url: String): Boolean =
+        SubscriptionMetadataParser.isValidRemoteSubscriptionUrl(url)
 
     private fun normalizeUpdateInterval(interval: Long): Long {
         return interval.coerceAtLeast(MIN_UPDATE_INTERVAL_MS)

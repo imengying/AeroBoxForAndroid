@@ -31,11 +31,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.res.stringResource
@@ -109,7 +109,7 @@ class NotificationSwitchActivity : ComponentActivity() {
         if (pendingNodeId.value != null) return
         pendingNodeId.value = node.id
         lifecycleScope.launch {
-            when (val result = AeroBoxApplication.vpnRepository.switchToNode(node)) {
+            when (val result = appContainer.vpnRepository.switchToNode(node)) {
                 is VpnConnectionResult.Success -> {
                     PreferenceManager.setLastSelectedNodeId(applicationContext, result.node.id)
                     finish()
@@ -142,18 +142,20 @@ private fun NotificationSwitchDialog(
     onDismiss: () -> Unit,
     onNodeSelected: (ProxyNode) -> Unit
 ) {
-    val allNodes by AeroBoxApplication.database.proxyNodeDao().getAllNodes()
+    val context = LocalContext.current
+    val database = context.appContainer.database
+    val allNodes by database.proxyNodeDao().getAllNodes()
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val subscriptions by AeroBoxApplication.database.subscriptionDao().getAllSubscriptions()
+    val subscriptions by database.subscriptionDao().getAllSubscriptions()
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val selectedNodeId by PreferenceManager.lastSelectedNodeIdFlow(AeroBoxApplication.appInstance)
+    val selectedNodeId by PreferenceManager.lastSelectedNodeIdFlow(context)
         .collectAsStateWithLifecycle(initialValue = -1L)
-    val groupedNodes = remember(allNodes, subscriptions) {
+    val ungroupedName = stringResource(R.string.group_ungrouped)
+    val groupedNodes = remember(allNodes, subscriptions, ungroupedName) {
         val nameMap = subscriptions.associate { it.id to it.name }
         val orderMap = subscriptions.withIndex().associate { it.value.id to it.index }
         allNodes
             .groupBy { it.subscriptionId }
-            .filterValues { it.isNotEmpty() }
             .toList()
             .sortedWith(
                 compareBy<Pair<Long, List<ProxyNode>>> { (subId, _) ->
@@ -161,7 +163,7 @@ private fun NotificationSwitchDialog(
                 }.thenBy { (subId, _) ->
                     if (subId == 0L || !nameMap.containsKey(subId)) 1 else 0
                 }.thenBy { (subId, _) ->
-                    nameMap[subId] ?: AeroBoxApplication.appInstance.getString(R.string.group_ungrouped)
+                    nameMap[subId] ?: ungroupedName
                 }
             )
     }

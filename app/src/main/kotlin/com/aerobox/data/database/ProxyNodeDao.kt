@@ -26,9 +26,6 @@ interface ProxyNodeDao {
     @Query("SELECT * FROM proxy_nodes WHERE id IN (:ids)")
     suspend fun getNodesByIds(ids: List<Long>): List<ProxyNode>
 
-    @Query("SELECT * FROM proxy_nodes WHERE id = :id LIMIT 1")
-    fun observeNodeById(id: Long): Flow<ProxyNode?>
-
     @Query("SELECT * FROM proxy_nodes ORDER BY subscriptionId ASC, createdAt ASC, id ASC LIMIT 1")
     suspend fun getFirstNode(): ProxyNode?
 

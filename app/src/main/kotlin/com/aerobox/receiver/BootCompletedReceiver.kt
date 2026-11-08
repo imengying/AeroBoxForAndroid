@@ -4,7 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.aerobox.AeroBoxApplication
+import com.aerobox.appContainer
+import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.service.AeroBoxVpnService
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
@@ -34,7 +35,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 // immediately stop when no node is available — that pollutes
                 // the user's notification shade with a transient AeroBox
                 // notification on every boot.
-                val hasAnyNode = AeroBoxApplication.database.proxyNodeDao()
+                val hasAnyNode = context.appContainer.database.proxyNodeDao()
                     .getFirstNode() != null
                 if (!hasAnyNode) {
                     Log.w(TAG, "Auto-connect skipped: no node configured")
@@ -51,6 +52,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 context.startForegroundService(startIntent)
             } catch (e: Exception) {
                 Log.w(TAG, "Auto-connect failed after boot", e)
+                RuntimeLogBuffer.appendError("Auto-connect failed after boot: ${e.javaClass.simpleName}: ${e.message.orEmpty()}")
             } finally {
                 pendingResult.finish()
             }

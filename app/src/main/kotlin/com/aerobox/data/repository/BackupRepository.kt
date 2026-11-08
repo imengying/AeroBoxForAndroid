@@ -5,40 +5,70 @@ import android.database.Cursor
 import android.net.Uri
 import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.aerobox.AeroBoxApplication
 import com.aerobox.BuildConfig
+import com.aerobox.data.database.AppDatabase
+import com.aerobox.data.database.PendingRestore
+import java.util.UUID
+import kotlinx.coroutines.sync.Mutex
 import com.aerobox.R
+import com.aerobox.core.errors.LocalizedException
 import com.aerobox.data.model.ProxyType
-import com.aerobox.service.VpnStateManager
 import com.aerobox.utils.PreferenceManager
-import com.aerobox.work.SubscriptionUpdateScheduler
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 /** Versioned, lossless row backup. SQL identifiers come only from our local Room schema. */
-class BackupRepository(private val context: Context) {
-    private val database get() = AeroBoxApplication.database
+class BackupRepository(
+    private val context: Context,
+    private val database: AppDatabase,
+    private val settingsStore: RecoveringSettingsStore,
+    private val runtimeMutex: Mutex,
+    private val vpnActive: () -> Boolean,
+    private val validSubscriptionUrl: (String) -> Boolean,
+    private val rescheduleUpdates: suspend () -> Unit
+) {
     private val tables = listOf("subscriptions", "proxy_nodes")
+    private val codec = BackupCodec()
 
     suspend fun export(uri: Uri) = withContext(Dispatchers.IO) {
-        AeroBoxApplication.vpnRepository.runtimeSettingsMutex.withLock {
-            val backup = database.withTransaction {
-                JSONObject().put("format", "aerobox-backup").put("version", 1)
-                    .put("schema", database.openHelper.readableDatabase.version)
-                    .put("appVersion", BuildConfig.VERSION_NAME)
-                    .put("settings", PreferenceManager.exportSettings(context))
-                    .apply { tables.forEach { put(it, readTable(it)) } }
-            }
-            DocumentIo.write(context, uri, backup.toString())
+        try {
+            BackupExporter(runtimeMutex).export(
+                capture = {
+                    val settings = PreferenceManager.exportSettings(context)
+                    database.withTransaction {
+                        val db = database.openHelper.readableDatabase
+                        // Own both cursors here so a size/count rejection also closes them.
+                        db.query("SELECT * FROM subscriptions ORDER BY id").use { subscriptions ->
+                            db.query("SELECT * FROM proxy_nodes ORDER BY id").use { nodes ->
+                                codec.encode(db.version, BuildConfig.VERSION_NAME, settings,
+                                    rows(subscriptions), rows(nodes))
+                            }
+                        }
+                    }
+                },
+                write = { DocumentIo.write(context, uri, it) }
+            )
+        } catch (error: BackupLimitExceededException) {
+            throw LocalizedException(R.string.backup_too_large, cause = error)
         }
     }
 
     suspend fun restore(uri: Uri): Int = withContext(Dispatchers.IO) {
-        val backup = JSONObject(DocumentIo.read(context, uri))
+        val backup = try {
+            BackupMigrations.upgrade(
+                DocumentIo.read(context, uri, codec::read), database.openHelper.readableDatabase.version
+            )
+        } catch (error: BackupLimitExceededException) {
+            throw LocalizedException(R.string.backup_too_large, cause = error)
+        } catch (error: JSONException) {
+            throw LocalizedException(R.string.backup_invalid, cause = error)
+        } catch (error: IllegalArgumentException) {
+            throw LocalizedException(R.string.backup_invalid, cause = error)
+        }
         require(backup.getString("format") == "aerobox-backup" && backup.getInt("version") == 1) {
             context.getString(R.string.backup_invalid)
         }
@@ -46,14 +76,11 @@ class BackupRepository(private val context: Context) {
         PreferenceManager.validateSettings(settings)
         val subscriptions = backup.getJSONArray("subscriptions")
         val nodes = backup.getJSONArray("proxy_nodes")
-        require(subscriptions.length() <= 10_000 && nodes.length() <= 50_000)
-        AeroBoxApplication.vpnRepository.runtimeSettingsMutex.withLock {
-            check(!VpnStateManager.serviceActive.value) { context.getString(R.string.backup_stop_vpn) }
+        runtimeMutex.withLock {
+            check(!vpnActive()) { context.getString(R.string.backup_stop_vpn) }
             val previousSettings = PreferenceManager.exportSettings(context)
-            // Room and DataStore have separate transactions. Complete or compensate the settings
-            // write even if the screen is closed while committing the database transaction.
-            withContext(NonCancellable) {
-                try {
+            try {
+                settingsStore.commitRestore {
                     database.withTransaction {
                         val db = database.openHelper.writableDatabase
                         require(backup.getInt("schema") == db.version) { context.getString(R.string.backup_invalid) }
@@ -61,7 +88,7 @@ class BackupRepository(private val context: Context) {
                         val groupIds = mutableMapOf(0L to 0L)
                         groupIds.putAll(insertRows(db, "subscriptions", subscriptions) { row ->
                             val url = row.getString("url")
-                            require(url.isBlank() || AeroBoxApplication.subscriptionRepository.isValidRemoteSubscriptionUrl(url))
+                            require(url.isBlank() || validSubscriptionUrl(url))
                             require(row.getLong("updateInterval") > 0L)
                             row.put("nodeCount", 0)
                         })
@@ -76,33 +103,28 @@ class BackupRepository(private val context: Context) {
                         }
                         val selectedId = nodeIds[settings.getLong("last_selected_node_id")]
                             ?: nodeIds.values.firstOrNull() ?: previousSettings.getLong("last_selected_node_id")
-                        PreferenceManager.restoreSettings(context, settings, selectedId)
+                        database.pendingRestoreDao().insert(PendingRestore(
+                            token = UUID.randomUUID().toString(), settings = settings.toString(), selectedNodeId = selectedId
+                        ))
                     }
-                } catch (error: Exception) {
-                    PreferenceManager.restoreSettings(context, previousSettings, previousSettings.getLong("last_selected_node_id"))
-                    throw error
                 }
-                SubscriptionUpdateScheduler.reconfigure(context)
+            } catch (error: RestoreCompletionException) {
+                throw LocalizedException(R.string.backup_restore_pending, cause = error)
             }
+            rescheduleUpdates()
         }
         nodes.length()
     }
 
-    private fun readTable(table: String): JSONArray {
-        return JSONArray().apply {
-            database.openHelper.readableDatabase.query("SELECT * FROM $table ORDER BY id").use { cursor ->
-                while (cursor.moveToNext()) {
-                    put(JSONObject().apply {
-                        cursor.columnNames.forEachIndexed { index, name ->
-                            put(name, when (cursor.getType(index)) {
-                                Cursor.FIELD_TYPE_NULL -> JSONObject.NULL
-                                Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(index)
-                                Cursor.FIELD_TYPE_STRING -> cursor.getString(index)
-                                else -> error("Unsupported backup column: $name")
-                            })
-                        }
-                    })
-                }
+    private fun rows(cursor: Cursor): Sequence<JSONObject> = generateSequence {
+        if (!cursor.moveToNext()) null else JSONObject().apply {
+            cursor.columnNames.forEachIndexed { index, name ->
+                put(name, when (cursor.getType(index)) {
+                    Cursor.FIELD_TYPE_NULL -> JSONObject.NULL
+                    Cursor.FIELD_TYPE_INTEGER -> cursor.getLong(index)
+                    Cursor.FIELD_TYPE_STRING -> cursor.getString(index)
+                    else -> error("Unsupported backup column: $name")
+                })
             }
         }
     }
@@ -157,27 +179,5 @@ class BackupRepository(private val context: Context) {
             }
         }
         return ids
-    }
-}
-
-internal object DocumentIo {
-    private const val MAX_BYTES = 32 * 1024 * 1024
-
-    fun read(context: Context, uri: Uri): String {
-        return requireNotNull(context.contentResolver.openInputStream(uri)).use { input ->
-            val output = java.io.ByteArrayOutputStream()
-            val buffer = ByteArray(8192)
-            while (true) {
-                val count = input.read(buffer)
-                if (count < 0) break
-                require(output.size() + count <= MAX_BYTES) { context.getString(R.string.backup_invalid) }
-                output.write(buffer, 0, count)
-            }
-            output.toString(Charsets.UTF_8.name())
-        }
-    }
-
-    fun write(context: Context, uri: Uri, content: String) {
-        requireNotNull(context.contentResolver.openOutputStream(uri, "wt")).bufferedWriter().use { it.write(content) }
     }
 }

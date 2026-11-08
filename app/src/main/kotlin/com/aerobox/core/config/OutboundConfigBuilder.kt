@@ -195,7 +195,9 @@ internal object OutboundConfigBuilder {
         if (supportsMultiplex(node) && !outbound.has("udp_over_tcp")) {
             applyMultiplex(outbound, node)
         }
-        if (!outbound.has("domain_resolver") && !ConfigGenerator.isIpLiteral(cleanServer)) {
+        if (!outbound.has("domain_resolver") &&
+            (node.type == ProxyType.NAIVE || !ConfigGenerator.isIpLiteral(cleanServer))) {
+            // Naive's Cronet dialer requires a resolver even for an IP server.
             // Resolve only the proxy server address locally. Applying a global
             // address strategy here would also resolve destination domains and
             // break DNS64/NAT64 setups on IPv6-only servers.

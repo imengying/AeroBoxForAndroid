@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="backup_restore_pending">数据已导入，设置尚未恢复完成。请重启应用继续恢复，勿重复导入此备份。</string>
     <string name="operation_complete">操作完成</string>
     <string name="backup_invalid">备份无效或版本不受支持</string>
+    <string name="backup_too_large">备份超出限制：最大 32 MiB、50,000 个节点、10,000 个分组。</string>
+    <string name="node_export_request_unavailable">待导出记录已失效，请重新选择节点并导出。</string>
     <string name="backup_title">备份与恢复</string>
     <string name="backup_credentials">备份包含明文订阅地址、节点密码和设置，请妥善保管。</string>
     <string name="backup_export">导出备份</string>

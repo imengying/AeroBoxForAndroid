@@ -41,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aerobox.viewmodel.AppViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.net.toUri
 import com.aerobox.R
@@ -65,6 +66,7 @@ fun SettingsScreen(
     onNavigateToBackup: () -> Unit = {},
     onNavigateToLicense: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(
+        factory = AppViewModelFactory,
         viewModelStoreOwner = requireNotNull(LocalView.current.context.findComponentActivity()) {
             "SettingsScreen requires a ComponentActivity"
         }

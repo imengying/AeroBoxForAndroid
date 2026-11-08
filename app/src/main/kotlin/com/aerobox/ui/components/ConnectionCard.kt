@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.aerobox.R
 
 /**
@@ -37,12 +38,16 @@ import com.aerobox.R
  */
 @Composable
 fun ConnectionCard(
-    isConnected: Boolean,
-    isConnecting: Boolean,
+    state: com.aerobox.data.model.VpnState,
     connectionDuration: String,
     onToggleConnection: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    buttonSize: Dp = 160.dp
 ) {
+    val isConnected = state.isConnected
+    val isConnecting = state.phase == com.aerobox.data.model.VpnPhase.STARTING
+    val isStopping = state.phase == com.aerobox.data.model.VpnPhase.STOPPING ||
+        (state.phase == com.aerobox.data.model.VpnPhase.FAILED && state.serviceActive)
     val isActive = isConnected || isConnecting
 
     // Pulse animation only when connected / connecting to save CPU
@@ -88,12 +93,12 @@ fun ConnectionCard(
     ) {
         // ── Large circular connect button ──
         Box(
-            modifier = Modifier.size(170.dp),
+            modifier = Modifier.size(buttonSize + 10.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(160.dp)
+                    .size(buttonSize)
                     .scale(pulseScale)
                     .clip(CircleShape)
                     .background(buttonColor)
@@ -102,24 +107,28 @@ fun ConnectionCard(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = if (isActive) 0.5f else 0.2f),
                         shape = CircleShape
                     )
-                    .clickable(onClick = onToggleConnection),
+                    .clickable(enabled = !isStopping, onClick = onToggleConnection),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = AppIcons.Flight,
-                    contentDescription = if (isActive) stringResource(R.string.disconnect)
-                        else stringResource(R.string.connect),
+                    contentDescription = when {
+                        isStopping -> stringResource(R.string.tile_status_stopping)
+                        isActive -> stringResource(R.string.disconnect)
+                        else -> stringResource(R.string.connect)
+                    },
                     tint = iconTint,
-                    modifier = Modifier.size(72.dp)
+                    modifier = Modifier.size(buttonSize * 0.45f)
                 )
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.size(16.dp))
 
         // ── Status text ──
         Text(
             text = when {
+                isStopping -> stringResource(R.string.tile_status_stopping)
                 isConnected -> stringResource(R.string.connected)
                 isConnecting -> stringResource(R.string.connecting)
                 else -> stringResource(R.string.disconnected)
@@ -147,7 +156,7 @@ fun ConnectionCard(
             },
             modifier = Modifier
                 .padding(top = 2.dp)
-                .height(20.dp)
+                .heightIn(min = 20.dp)
         )
 
     }

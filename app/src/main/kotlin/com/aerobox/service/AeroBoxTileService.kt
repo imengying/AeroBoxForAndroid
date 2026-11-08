@@ -10,7 +10,7 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import android.util.Log
-import com.aerobox.AeroBoxApplication
+import com.aerobox.appContainer
 import com.aerobox.R
 import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.data.model.VpnState
@@ -20,7 +20,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -60,24 +59,11 @@ class AeroBoxTileService : TileService() {
         super.onStartListening()
         tileStateJob?.cancel()
         tileStateJob = serviceScope.launch {
-            combine(
-                VpnStateManager.serviceActive,
-                VpnStateManager.vpnState
-            ) { serviceActive, vpnState ->
-                Pair(serviceActive, vpnState)
-            }.collect { (serviceActive, vpnState) ->
-                reconcilePendingAction(serviceActive, vpnState)
-                updateTileFromState(serviceActive, vpnState)
+            VpnStateManager.vpnState.collect { state ->
+                reconcilePendingAction(state)
+                updateTileFromState(state)
             }
         }
-        reconcilePendingAction(
-            serviceActive = VpnStateManager.serviceActive.value,
-            vpnState = VpnStateManager.vpnState.value
-        )
-        updateTileFromState(
-            serviceActive = VpnStateManager.serviceActive.value,
-            vpnState = VpnStateManager.vpnState.value
-        )
     }
 
     override fun onStopListening() {
@@ -96,15 +82,14 @@ class AeroBoxTileService : TileService() {
     }
 
     private fun handleToggle() {
-        val serviceActive = VpnStateManager.serviceActive.value
         val vpnState = VpnStateManager.vpnState.value
-        val shouldStop = serviceActive || vpnState.isConnected
+        val shouldStop = vpnState.serviceActive || vpnState.isConnected
 
         if (shouldStop) {
             toggleJob?.cancel()
             pendingAction = PendingAction.STOP
-            updateTileFromState(serviceActive, vpnState)
-            AeroBoxApplication.vpnRepository.stopVpn()
+            updateTileFromState(vpnState)
+            appContainer.vpnRepository.stopVpn()
             return
         }
 
@@ -119,10 +104,10 @@ class AeroBoxTileService : TileService() {
         }
 
         pendingAction = PendingAction.START
-        updateTileFromState(serviceActive = false, vpnState = vpnState)
+        updateTileFromState(vpnState)
         toggleJob?.cancel()
         toggleJob = serviceScope.launch(Dispatchers.IO) {
-            val result = AeroBoxApplication.vpnRepository.connectSelectedNode()
+            val result = appContainer.vpnRepository.connectSelectedNode()
             withContext(Dispatchers.Main.immediate) {
                 when (result) {
                     VpnConnectionResult.NoNodeAvailable -> {
@@ -178,24 +163,25 @@ class AeroBoxTileService : TileService() {
         }
     }
 
-    private fun reconcilePendingAction(serviceActive: Boolean, vpnState: VpnState) {
+    private fun reconcilePendingAction(vpnState: VpnState) {
         pendingAction = when (pendingAction) {
             PendingAction.START -> when {
                 vpnState.isConnected -> null
-                serviceActive -> PendingAction.START
+                vpnState.serviceActive -> PendingAction.START
                 toggleJob?.isActive == true -> PendingAction.START
                 else -> null
             }
-            PendingAction.STOP -> if (!serviceActive && !vpnState.isConnected) null else PendingAction.STOP
+            PendingAction.STOP -> if (!vpnState.serviceActive && !vpnState.isConnected) null else PendingAction.STOP
             null -> null
         }
     }
 
-    private fun updateTileFromState(serviceActive: Boolean, vpnState: VpnState) {
+    private fun updateTileFromState(vpnState: VpnState) {
         val visualState = when {
-            pendingAction == PendingAction.STOP && (serviceActive || vpnState.isConnected) -> VisualState.STOPPING
+            vpnState.phase == com.aerobox.data.model.VpnPhase.STOPPING -> VisualState.STOPPING
+            pendingAction == PendingAction.STOP && (vpnState.serviceActive || vpnState.isConnected) -> VisualState.STOPPING
             vpnState.isConnected -> VisualState.CONNECTED
-            pendingAction == PendingAction.START || serviceActive -> VisualState.CONNECTING
+            pendingAction == PendingAction.START || vpnState.serviceActive -> VisualState.CONNECTING
             else -> VisualState.INACTIVE
         }
         updateTile(visualState = visualState)
