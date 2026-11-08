@@ -41,6 +41,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -51,8 +52,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.InetAddress
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * AeroBox VPN Service — implements PlatformInterfaceWrapper so libbox
@@ -71,6 +74,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         const val EXTRA_CONFIG = "extra_config"
         const val EXTRA_NODE_ID = "extra_node_id"
         const val EXTRA_OPERATION_ID = "extra_operation_id"
+        const val EXTRA_STOP_REVISION = "extra_stop_revision"
         const val NOTIFICATION_ID = 1001
         private const val TAG = "AeroBoxVpnService"
         private const val MAX_RECONNECT_ATTEMPTS = 10
@@ -82,6 +86,28 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
         internal fun activePlatformInterface(): PlatformInterfaceWrapper? {
             return activeServiceReference?.get()
+        }
+
+        suspend fun connectionSnapshot(): String = withContext(Dispatchers.IO) {
+            val service = activeServiceReference?.get() ?: return@withContext "[]"
+            service.lifecycleMutex.withLock { service.commandServer?.connectionSnapshot() ?: "[]" }
+        }
+
+        suspend fun stopConnectionTracking() = withContext(Dispatchers.IO) {
+            val service = activeServiceReference?.get() ?: return@withContext
+            service.lifecycleMutex.withLock { service.commandServer?.stopConnectionTracking() }
+        }
+
+        suspend fun closeTrackedConnection(id: String) = withContext(Dispatchers.IO) {
+            val service = activeServiceReference?.get() ?: return@withContext
+            service.lifecycleMutex.withLock { service.commandServer?.closeTrackedConnection(id) }
+        }
+
+        suspend fun cancelStartOperation(id: Long) = withContext(Dispatchers.Main.immediate) {
+            val service = activeServiceReference?.get() ?: return@withContext
+            if (service.activeOperationId.compareAndSet(id, 0L)) {
+                service.requestStop("VPN reload timed out", userInitiated = false)
+            }
         }
     }
 
@@ -96,11 +122,13 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     @Volatile
     private var requestRevision = 0L
     private var runtimeRevision = 0L
+    private val activeOperationId = AtomicLong()
     private val configResolver by lazy {
         VpnConfigResolver(applicationContext)
     }
     private var vpnInterface: ParcelFileDescriptor? = null
     private var speedTickerJob: Job? = null
+    private val screenChanges = Channel<Unit>(Channel.CONFLATED)
     @Volatile
     private var reconnectJob: Job? = null
     private var notificationLanguageJob: Job? = null
@@ -170,6 +198,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     private val closeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_SCREEN_OFF -> screenChanges.trySend(Unit)
                 ACTION_STOP -> {
                     requestStop("Stopping service: notification action")
                 }
@@ -180,22 +209,31 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         latestStartId = startId
         when (intent?.action) {
-            ACTION_START, ACTION_SWITCH, ACTION_RELOAD -> {
+            ACTION_START, ACTION_SWITCH, ACTION_RELOAD, SERVICE_INTERFACE, null -> {
                 startNotificationLanguageObserver()
-                val config = intent.getStringExtra(EXTRA_CONFIG)?.takeIf { it.isNotBlank() }
-                val nodeId = intent.getLongExtra(EXTRA_NODE_ID, -1L).takeIf { it > 0L }
-                val operationId = intent.getLongExtra(EXTRA_OPERATION_ID, 0L)
+                if ((intent?.action == SERVICE_INTERFACE || intent == null) && VpnStateManager.serviceActive.value) {
+                    return START_NOT_STICKY
+                }
+                val config = intent?.getStringExtra(EXTRA_CONFIG)?.takeIf { it.isNotBlank() }
+                val nodeId = intent?.getLongExtra(EXTRA_NODE_ID, -1L)?.takeIf { it > 0L }
+                val operationId = intent?.getLongExtra(EXTRA_OPERATION_ID, 0L) ?: 0L
+                if (intent?.hasExtra(EXTRA_STOP_REVISION) == true &&
+                    intent.getLongExtra(EXTRA_STOP_REVISION, -1L) != VpnStateManager.stopRevision.get()) {
+                    VpnStateManager.reportServiceOperation(operationId, success = false, cancelled = true)
+                    if (!VpnStateManager.serviceActive.value) stopSelf(startId)
+                    return START_NOT_STICKY
+                }
                 startVpn(config, nodeId, operationId, resetReconnectAttempts = true)
             }
             ACTION_STOP -> {
-                requestStop("Stopping service: ACTION_STOP intent")
+                requestStop("Stopping service: ACTION_STOP intent", userInitiated = !intent.hasExtra(EXTRA_STOP_REVISION))
             }
             else -> {
                 Log.w(TAG, "Ignoring VPN service start without a supported action")
                 stopSelf(startId)
             }
         }
-        return START_NOT_STICKY
+        return if (isAlwaysOn && intent?.action != ACTION_STOP) START_STICKY else START_NOT_STICKY
     }
 
     // ─── VPN Lifecycle ───
@@ -212,7 +250,9 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         }
     }
 
-    private fun requestStop(reason: String) {
+    private fun requestStop(reason: String, userInitiated: Boolean = true) {
+        if (userInitiated) VpnStateManager.stopRevision.incrementAndGet()
+        activeOperationId.set(0L)
         val revision = ++requestRevision
         val startId = latestStartId
         userRequestedStop = true
@@ -240,6 +280,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         resetReconnectAttempts: Boolean = false
     ) {
         val revision = ++requestRevision
+        activeOperationId.set(operationId)
         reconnectJob?.cancel()
         reconnectJob = null
         if (!startJobs.isActive) startJobs = SupervisorJob(serviceJob)
@@ -277,6 +318,8 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
                 if (!receiverRegistered) {
                     val filter = IntentFilter(ACTION_STOP)
+                    filter.addAction(Intent.ACTION_SCREEN_ON)
+                    filter.addAction(Intent.ACTION_SCREEN_OFF)
                     ContextCompat.registerReceiver(
                         this@AeroBoxVpnService,
                         closeReceiver,
@@ -290,7 +333,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
                 val server = commandServer ?: CommandServer(this@AeroBoxVpnService, this@AeroBoxVpnService).also {
                     commandServer = it
-                    it.start()
                 }
 
                 val overrides = buildOverrideOptions()
@@ -318,6 +360,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 )
             }
         }.invokeOnCompletion { error ->
+            activeOperationId.compareAndSet(operationId, 0L)
             if (error != null) {
                 VpnStateManager.reportServiceOperation(
                     id = operationId,
@@ -735,9 +778,11 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
             var prevDownload = initialStats.downloadBytes
             var previousSampleTime = SystemClock.elapsedRealtime()
             var consecutiveStatsFailures = 0
+            val powerManager = getSystemService(android.os.PowerManager::class.java)
+            var lastNotificationText: String? = null
 
             while (isActive && VpnStateManager.serviceActive.value) {
-                delay(1000)
+                withTimeoutOrNull(if (powerManager.isInteractive) 1_000L else 15_000L) { screenChanges.receive() }
                 val currentStats = SingBoxNative.queryV2RayOutboundStats(
                     apiAddress = ConfigGenerator.V2RAY_API_LISTEN,
                     outboundTags = TRAFFIC_OUTBOUND_TAGS
@@ -786,9 +831,14 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                     previousSampleTime = sampleTime
                 }
 
-                val text = "↑ ${NetworkUtils.formatBytes(uploadSpeed)}/s  ↓ ${NetworkUtils.formatBytes(downloadSpeed)}/s"
-                val notification = buildNotification(contentText = text, connected = true)
-                notificationManager.notify(NOTIFICATION_ID, notification)
+                if (powerManager.isInteractive) {
+                    val text = "↑ ${NetworkUtils.formatBytes(uploadSpeed)}/s  ↓ ${NetworkUtils.formatBytes(downloadSpeed)}/s"
+                    val notificationKey = "$notificationLanguageTag:$text"
+                    if (notificationKey != lastNotificationText) {
+                        notificationManager.notify(NOTIFICATION_ID, buildNotification(contentText = text, connected = true))
+                        lastNotificationText = notificationKey
+                    }
+                }
             }
         }
     }

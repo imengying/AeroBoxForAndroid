@@ -89,10 +89,10 @@ object GeoAssetManager {
     private fun getGeoSiteVersionFile(context: Context): File = File(getGeoDir(context), GEOSITE_CN_VERSION_FILE)
     private fun getGeoAdsVersionFile(context: Context): File = File(getGeoDir(context), GEOSITE_ADS_VERSION_FILE)
 
-    fun hasLocalFiles(context: Context): Boolean {
-        return isValidRuleSetFile(getGeoIpFile(context)) &&
-            isValidRuleSetFile(getGeoSiteFile(context)) &&
-            isValidRuleSetFile(getGeoAdsFile(context))
+    fun hasLocalFiles(context: Context, targets: GeoUpdateTargets = GeoUpdateTargets()): Boolean {
+        return (!targets.geoIpCn || isValidRuleSetFile(getGeoIpFile(context))) &&
+            (!targets.geoSiteCn || isValidRuleSetFile(getGeoSiteFile(context))) &&
+            (!targets.geoAds || isValidRuleSetFile(getGeoAdsFile(context)))
     }
 
     fun getGeoIpSize(context: Context): String = formatFileSize(context, getGeoIpFile(context))
@@ -145,15 +145,21 @@ object GeoAssetManager {
         return GeoUpdateResult(geoIpOk = ipOk, geoSiteCnOk = cnOk, geoAdsOk = adsOk)
     }
 
-    suspend fun ensureRuleSetAssets(context: Context): Boolean = withContext(Dispatchers.IO) {
+    suspend fun ensureRuleSetAssets(context: Context, targets: GeoUpdateTargets): Boolean = withContext(Dispatchers.IO) {
+        if (!targets.hasAny) return@withContext true
         assetUpdateLock.withLock {
-            ensureBundledAssetsLocked(context)
-            if (hasLocalFiles(context)) {
+            ensureBundledAssetsLocked(context, targets)
+            if (hasLocalFiles(context, targets)) {
                 return@withLock true
             }
 
-            val result = updateAllLocked(context, GeoUpdateTargets())
-            val available = result.allOk && hasLocalFiles(context)
+            val missing = GeoUpdateTargets(
+                geoIpCn = targets.geoIpCn && !isValidRuleSetFile(getGeoIpFile(context)),
+                geoSiteCn = targets.geoSiteCn && !isValidRuleSetFile(getGeoSiteFile(context)),
+                geoAds = targets.geoAds && !isValidRuleSetFile(getGeoAdsFile(context))
+            )
+            val result = updateAllLocked(context, missing)
+            val available = result.allOk && hasLocalFiles(context, targets)
             if (!available) {
                 Log.w(TAG, RULE_SET_UNAVAILABLE_LOG_TAG)
             }
@@ -161,26 +167,20 @@ object GeoAssetManager {
         }
     }
 
-    fun ensureBundledAssets(context: Context) {
-        assetUpdateLock.withLock {
-            ensureBundledAssetsLocked(context)
-        }
-    }
-
-    private fun ensureBundledAssetsLocked(context: Context) {
+    private fun ensureBundledAssetsLocked(context: Context, targets: GeoUpdateTargets) {
         runCatching {
-            ensureBundledAsset(
+            if (targets.geoIpCn) ensureBundledAsset(
                 context = context,
                 fileName = GEOIP_CN_FILE,
                 versionFileName = GEOIP_VERSION_FILE
             )
-            ensureBundledAsset(
+            if (targets.geoSiteCn) ensureBundledAsset(
                 context = context,
                 fileName = GEOSITE_CN_FILE,
                 versionFileName = GEOSITE_CN_VERSION_FILE,
                 assetVersionFileName = GEOSITE_VERSION_FILE
             )
-            ensureBundledAsset(
+            if (targets.geoAds) ensureBundledAsset(
                 context = context,
                 fileName = GEOSITE_ADS_FILE,
                 versionFileName = GEOSITE_ADS_VERSION_FILE,

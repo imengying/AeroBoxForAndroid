@@ -49,11 +49,13 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 
@@ -94,7 +96,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RoutingMode.GLOBAL_PROXY)
 
     fun setRoutingMode(mode: RoutingMode) {
-        if (routingMode.value == mode) return
         viewModelScope.launch {
             applyRoutingMode(mode)
         }
@@ -104,8 +105,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         .map { it.traffic }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TrafficStats())
 
-    private val allNodes: StateFlow<List<ProxyNode>> = nodeDao.getAllNodes()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    private val allNodes = nodeDao.getAllNodes()
+        .shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
 
     private val _nodeLatencyOverrides = MutableStateFlow<Map<Long, Int>>(emptyMap())
     val displayNodes: StateFlow<List<ProxyNode>> = combine(allNodes, _nodeLatencyOverrides) { nodes, overrides ->
@@ -187,16 +188,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun observeSelectedNode() {
         viewModelScope.launch {
             combine(
-                nodeDao.getAllNodes(),
+                allNodes,
                 PreferenceManager.lastSelectedNodeIdFlow(appContext)
             ) { nodes, selectedId ->
                 (nodes.firstOrNull { it.id == selectedId } ?: nodes.firstOrNull()) to selectedId
             }.collect { (node, selectedId) ->
-                _selectedNode.value = node
-                if (node != null && node.id != selectedId) {
-                    PreferenceManager.setLastSelectedNodeId(appContext, node.id)
-                } else if (node == null && selectedId > 0L) {
-                    PreferenceManager.setLastSelectedNodeId(appContext, 0L)
+                vpnRepository.runtimeSettingsMutex.withLock {
+                    if (PreferenceManager.lastSelectedNodeIdFlow(appContext).first() != selectedId) return@withLock
+                    // A restored selection can arrive before Room publishes its committed rows.
+                    val resolved = if (node?.id == selectedId) node else {
+                        nodeDao.getNodeById(selectedId) ?: nodeDao.getFirstNode()
+                    }
+                    _selectedNode.value = resolved
+                    if (resolved?.id != selectedId) {
+                        PreferenceManager.replaceSelectedNode(appContext, selectedId, resolved?.id ?: 0L)
+                    }
                 }
             }
         }
@@ -232,16 +238,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
-    private suspend fun applyRoutingMode(mode: RoutingMode): Boolean {
-        val previousMode = routingMode.value
+    private suspend fun applyRoutingMode(mode: RoutingMode): Boolean = vpnRepository.runtimeSettingsMutex.withLock {
+        val previousMode = PreferenceManager.routingModeFlow(appContext).first()
+        if (previousMode == mode) return@withLock true
+        val stopRevision = VpnStateManager.stopRevision.get()
         PreferenceManager.setRoutingMode(appContext, mode)
 
         val currentNode = vpnState.value.currentNode ?: selectedNode.value
         if (!vpnState.value.isConnected || currentNode == null) {
-            return true
+            return@withLock true
         }
 
-        val result = vpnRepository.switchToNode(currentNode)
+        val result = vpnRepository.reloadActiveConnection(currentNode, stopRevision)
         if (result is VpnConnectionResult.Success) {
             _uiMessage.tryEmit(
                 appString(
@@ -249,11 +257,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     appString(mode.labelResId)
                 )
             )
-            return true
+            return@withLock true
         }
+        if (VpnStateManager.stopRevision.get() != stopRevision ||
+            (result is VpnConnectionResult.Failure && result.throwable is CancellationException)) return@withLock true
         PreferenceManager.setRoutingMode(appContext, previousMode)
+        if (!vpnState.value.isConnected) vpnRepository.reloadActiveConnection(currentNode, stopRevision)
         dispatchConnectionError(result)
-        return false
+        false
     }
 
     fun toggleConnection(context: Context): Intent? {
@@ -527,13 +538,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun loadUrlTestSettings(): UrlTestSettings {
         val preferences = PreferenceManager.readVpnConfigPreferences(appContext)
-        val safeDirectDns = if (preferences.directDns.contains("[")) {
-            PreferenceManager.DEFAULT_DIRECT_DNS
-        } else {
-            preferences.directDns
-        }
         return UrlTestSettings(
-            directDns = safeDirectDns,
+            directDns = preferences.directDns,
             ipv6Mode = preferences.ipv6Mode
         )
     }

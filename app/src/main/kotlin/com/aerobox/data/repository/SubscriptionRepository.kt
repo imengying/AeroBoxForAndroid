@@ -55,8 +55,6 @@ enum class NodeUpdateResult { SAVED, NOT_FOUND, CONFLICT }
 data class PreparedLocalImport(
     val nodes: List<ProxyNode>,
     val resolvedName: String?,
-    val trafficBytes: Long,
-    val expireTimestamp: Long,
     val metadataFromHeader: Boolean,
     val diagnostics: ParseDiagnostics
 )
@@ -182,6 +180,10 @@ class SubscriptionRepository(context: Context) {
 
     suspend fun updateNode(node: ProxyNode, original: ProxyNode): NodeUpdateResult {
         require(node.id == original.id)
+        val config = com.aerobox.core.config.ConfigGenerator.generateUrlTestConfig(node)
+        com.aerobox.core.native.SingBoxNative.checkConfig(config)?.let { error ->
+            throw IllegalArgumentException(error)
+        }
         val existing = proxyNodeDao.getNodeById(node.id) ?: return NodeUpdateResult.NOT_FOUND
         return subscriptionMutationLock(existing.subscriptionId).withLock {
             database.withTransaction {
@@ -209,22 +211,36 @@ class SubscriptionRepository(context: Context) {
         }
     }
 
-    suspend fun deleteNode(nodeId: Long) {
-        val initialNode = proxyNodeDao.getNodeById(nodeId) ?: return
-        val selectedNodeId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
-        val deleted = subscriptionMutationLock(initialNode.subscriptionId).withLock {
-            val node = proxyNodeDao.getNodeById(nodeId) ?: return@withLock false
+    suspend fun deleteNodes(nodeIds: List<Long>) {
+        val ids = nodeIds.toSet()
+        if (ids.isEmpty()) return
+        val selectedId = PreferenceManager.lastSelectedNodeIdFlow(appContext).first()
+        withMutationLocks(0) {
             database.withTransaction {
-                proxyNodeDao.deleteById(nodeId)
-                if (node.subscriptionId > 0L) {
-                    recomputeLocalGroupCount(node.subscriptionId)
-                }
+                val nodes = ids.toList().chunked(500).flatMap { proxyNodeDao.getNodesByIds(it) }
+                proxyNodeDao.deleteAll(nodes)
+                nodes.map { it.subscriptionId }.distinct().filter { it > 0 }.forEach { recomputeLocalGroupCount(it) }
             }
-            true
         }
-        if (deleted && selectedNodeId == nodeId) {
-            PreferenceManager.setLastSelectedNodeId(appContext, 0L)
-        }
+        if (selectedId in ids) PreferenceManager.replaceSelectedNode(appContext, selectedId, 0L)
+    }
+
+    // Batch deletion spans groups; acquire stripes in a fixed order before opening the transaction.
+    private suspend fun <T> withMutationLocks(index: Int, action: suspend () -> T): T {
+        if (index == subscriptionMutationLocks.size) return action()
+        return subscriptionMutationLocks[index].withLock { withMutationLocks(index + 1, action) }
+    }
+
+    suspend fun copyNodes(nodeIds: List<Long>, target: ImportGroupTarget): SubscriptionImportResult {
+        val nodes = nodeIds.distinct().chunked(500).flatMap { proxyNodeDao.getNodesByIds(it) }
+        return commitLocalImport(
+            PreparedLocalImport(
+                nodes = nodes.map { it.copy(id = 0L, subscriptionId = 0L) },
+                resolvedName = null,
+                metadataFromHeader = false,
+                diagnostics = ParseDiagnostics()
+            ), target
+        )
     }
 
     suspend fun addSubscription(
@@ -474,8 +490,6 @@ class SubscriptionRepository(context: Context) {
         return PreparedLocalImport(
             nodes = prepared.nodes,
             resolvedName = prepared.resolvedName,
-            trafficBytes = prepared.trafficBytes,
-            expireTimestamp = prepared.expireTimestamp,
             metadataFromHeader = prepared.metadataFromHeader,
             diagnostics = prepared.diagnostics
         )
@@ -487,7 +501,7 @@ class SubscriptionRepository(context: Context) {
     ): SubscriptionImportResult {
         return runCatching {
             when (target) {
-                is ImportGroupTarget.Ungrouped -> commitToUngrouped(prepared)
+                is ImportGroupTarget.Ungrouped -> subscriptionMutationLock(0L).withLock { commitToUngrouped(prepared) }
                 is ImportGroupTarget.Existing -> commitToExistingLocalGroup(prepared, target.subscriptionId)
                 is ImportGroupTarget.New -> commitToNewLocalGroup(prepared, target.name)
             }
@@ -1047,11 +1061,7 @@ class SubscriptionRepository(context: Context) {
     }
 
     private fun Headers.valueByName(name: String): String? {
-        return names()
-            .firstOrNull { it.equals(name, ignoreCase = true) }
-            ?.let { headerName -> get(headerName) }
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
+        return get(name)?.trim()?.takeIf { it.isNotBlank() }
     }
 
     private fun decodeMetadataValue(value: String): String {

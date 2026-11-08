@@ -13,12 +13,14 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 
 - 基于 sing-box / libbox 的 Android VPN 模式代理
 - 订阅管理、手动更新、自动更新
+- 节点编辑、搜索、批量删除、复制到本地分组、JSON 导出
+- 订阅、节点、设置和自定义规则的手动备份与合并恢复
 - 分应用代理
 - 路由模式切换：全局代理 / 规则分流 / 直连
 - 使用官方 Geo 规则集
 - DNS 自定义，支持 DNS over TLS / HTTPS
-- IPv6 支持、开机自连、断线自动重连
-- 节点延迟测试、运行日志、通知栏快捷切换
+- IPv6 支持、开机自连、系统始终开启 VPN、断线自动重连
+- 节点延迟测试、错误日志、按需连接详情、诊断导出、通知栏快捷切换
 - Material 3 + Jetpack Compose 界面
 
 ## 支持的代理协议 / Supported Proxy Protocols
@@ -47,6 +49,8 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 
 - 当前主要是导入节点信息
 - 订阅中的分流规则等信息不会直接照搬进应用配置
+- 远程订阅更新会覆盖节点编辑；需要保留的节点可复制到本地分组
+- 备份包含明文凭据；恢复保留现有节点并添加备份中的副本，设置按备份恢复
 
 ## 系统要求 / Requirements
 

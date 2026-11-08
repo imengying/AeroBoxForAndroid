@@ -305,8 +305,7 @@ internal object DnsConfigBuilder {
                     }
 
                     ConfigGenerator.isIpLiteral(host) -> {
-                        val portPart = if (port != 853) ":$port" else ""
-                        "$scheme://$host$portPart"
+                        buildDnsEndpoint(host, port, 853, scheme, hasExplicitPort(rawHost))
                     }
                     else -> value
                 }
@@ -405,7 +404,7 @@ internal object DnsConfigBuilder {
                     ?: trimmed.removePrefix("https://").substringBefore('/').substringBefore(':')
                 DnsServerSpec(
                     type = "https",
-                    server = server,
+                    server = server.removePrefix("[").removeSuffix("]"),
                     serverPort = if (uri.port > 0) uri.port else 443,
                     path = uri.rawPath?.takeIf { it.isNotBlank() } ?: "/dns-query"
                 )
@@ -445,7 +444,7 @@ internal object DnsConfigBuilder {
         val host = parsed?.host?.takeIf { it.isNotBlank() }
         if (host != null) {
             val port = if (parsed.port > 0) parsed.port else defaultPort
-            return host to port
+            return host.removePrefix("[").removeSuffix("]") to port
         }
 
         if (value.count { it == ':' } == 1 && !value.startsWith("[")) {

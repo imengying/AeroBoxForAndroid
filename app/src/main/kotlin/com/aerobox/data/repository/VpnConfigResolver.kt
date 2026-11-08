@@ -11,10 +11,9 @@ import com.aerobox.core.logging.RuntimeLogBuffer
 import com.aerobox.core.network.NodeAddressFamilyResolver
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.ProxyNode
+import com.aerobox.data.model.RoutingMode
 import com.aerobox.utils.PreferenceManager
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
 
 class VpnConfigResolver(private val context: Context) {
     companion object {
@@ -36,8 +35,7 @@ class VpnConfigResolver(private val context: Context) {
 
     suspend fun resolveNodeForAction(node: ProxyNode): ProxyNode? {
         subscriptionRepository.resolveNode(node)?.let { return it }
-        nodeDao.getNodeById(node.id)?.let { return it }
-        return node.takeIf { it.subscriptionId == 0L }
+        return node.takeIf { it.id == 0L && it.subscriptionId == 0L }
     }
 
     suspend fun resolveNodeById(
@@ -54,19 +52,21 @@ class VpnConfigResolver(private val context: Context) {
         val nodeName = node.name.ifBlank { "unnamed node" }
         Log.i(TAG, "Generating config for $nodeName [${node.type.name}]")
         val prefs = PreferenceManager.readVpnConfigPreferences(context)
-        if (prefs.enableGeoRules) {
-            if (!GeoAssetManager.ensureRuleSetAssets(context)) {
+        val useGeo = prefs.enableGeoRules && prefs.routingMode == RoutingMode.RULE_BASED
+        val targets = GeoAssetManager.GeoUpdateTargets(
+            geoIpCn = useGeo && prefs.enableGeoCnIpRule,
+            geoSiteCn = useGeo && prefs.enableGeoCnDomainRule,
+            geoAds = useGeo && prefs.enableGeoAdsBlock
+        )
+        if (targets.hasAny) {
+            if (!GeoAssetManager.ensureRuleSetAssets(context, targets)) {
                 val msg = context.getString(R.string.error_rule_set_unavailable)
                 Log.e(TAG, msg)
                 RuntimeLogBuffer.appendError(msg)
                 throw LocalizedException.of(R.string.error_rule_set_unavailable)
             }
-        } else {
-            withContext(Dispatchers.IO) {
-                GeoAssetManager.ensureBundledAssets(context)
-            }
         }
-        val geoIpCnRuleSetPath = if (prefs.enableGeoRules) {
+        val geoIpCnRuleSetPath = if (targets.geoIpCn) {
             GeoAssetManager
                 .getGeoIpFile(context)
                 .takeIf { it.exists() && it.length() > 0L }
@@ -74,7 +74,7 @@ class VpnConfigResolver(private val context: Context) {
         } else {
             null
         }
-        val geoSiteCnRuleSetPath = if (prefs.enableGeoRules) {
+        val geoSiteCnRuleSetPath = if (targets.geoSiteCn) {
             GeoAssetManager
                 .getGeoSiteFile(context)
                 .takeIf { it.exists() && it.length() > 0L }
@@ -82,7 +82,7 @@ class VpnConfigResolver(private val context: Context) {
         } else {
             null
         }
-        val geoSiteAdsRuleSetPath = if (prefs.enableGeoRules) {
+        val geoSiteAdsRuleSetPath = if (targets.geoAds) {
             GeoAssetManager
                 .getGeoAdsFile(context)
                 .takeIf { it.exists() && it.length() > 0L }

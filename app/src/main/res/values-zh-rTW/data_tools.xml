@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operation_complete">操作完成</string>
+    <string name="backup_invalid">備份無效或版本不受支援</string>
+    <string name="backup_title">備份與還原</string>
+    <string name="backup_credentials">備份包含明文訂閱位址、節點密碼和設定，請妥善保管。</string>
+    <string name="backup_export">匯出備份</string>
+    <string name="backup_restore">還原備份</string>
+    <string name="backup_stop_vpn">還原前請先中斷 VPN。</string>
+    <string name="backup_merge_confirm">將備份中的訂閱和節點加入現有資料？設定、自訂規則及選取節點將按備份還原。重複還原同一檔案會再次加入副本。</string>
+    <string name="backup_summary">訂閱、節點、設定及自訂規則</string>
+    <string name="search_nodes">搜尋節點</string>
+    <string name="nodes_selected">已選 %1$d 項</string>
+    <string name="copy_to_group">複製到本機群組</string>
+    <string name="export_nodes">匯出節點</string>
+    <string name="remote_nodes_overwritten">訂閱更新會覆蓋本機編輯，本機群組中的副本會保留。</string>
+    <plurals name="delete_nodes_confirm">
+        <item quantity="other">刪除選取的 %1$d 個節點？</item>
+    </plurals>
+    <string name="connections_title">連線詳情</string>
+    <string name="connections_empty">尚無擷取的連線。僅追蹤此頁面顯示期間新建的連線，最多顯示 500 筆。</string>
+    <string name="close_connection">關閉連線</string>
+    <string name="export_diagnostics">匯出診斷資訊</string>
+</resources>

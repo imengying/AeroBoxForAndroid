@@ -148,7 +148,6 @@
     <string name="dns_setting_failed">Failed to apply DNS settings</string>
     <string name="ipv6_setting_failed">Failed to apply IPv6 settings</string>
     <string name="dns_invalid_format">Invalid DNS settings: %1$s</string>
-    <string name="config_generation_failed">Failed to generate configuration</string>
     <string name="applying">Applying</string>
     <string name="current_node_unavailable">Current node is unavailable</string>
     <string name="setting_failed_with_error_format">%1$s: %2$s</string>

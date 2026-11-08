@@ -160,7 +160,6 @@
     <string name="dns_setting_failed">Не удалось применить настройки DNS</string>
     <string name="ipv6_setting_failed">Не удалось применить настройки IPv6</string>
     <string name="dns_invalid_format">Некорректные настройки DNS: %1$s</string>
-    <string name="config_generation_failed">Не удалось сгенерировать конфигурацию</string>
     <string name="applying">Применение</string>
     <string name="current_node_unavailable">Текущий узел недоступен</string>
     <string name="setting_failed_with_error_format">%1$s: %2$s</string>

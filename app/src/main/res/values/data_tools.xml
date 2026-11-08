@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operation_complete">Completed</string>
+    <string name="backup_invalid">Invalid or unsupported backup</string>
+    <string name="backup_title">Backup and restore</string>
+    <string name="backup_credentials">The backup contains subscription URLs, node passwords and settings in plain text. Keep it private.</string>
+    <string name="backup_export">Export backup</string>
+    <string name="backup_restore">Restore backup</string>
+    <string name="backup_stop_vpn">Disconnect the VPN before restoring.</string>
+    <string name="backup_merge_confirm">Add subscriptions and nodes from this backup, keeping existing data? Settings, custom rules and the selected node will be restored from the backup. Restoring the same file again adds another copy.</string>
+    <string name="backup_summary">Subscriptions, nodes, settings and custom rules</string>
+    <string name="search_nodes">Search nodes</string>
+    <string name="nodes_selected">Selected: %1$d</string>
+    <string name="copy_to_group">Copy to local group</string>
+    <string name="export_nodes">Export nodes</string>
+    <string name="remote_nodes_overwritten">Subscription updates replace local edits. Copies in local groups are preserved.</string>
+    <plurals name="delete_nodes_confirm">
+        <item quantity="one">Delete %1$d selected node?</item>
+        <item quantity="other">Delete %1$d selected nodes?</item>
+    </plurals>
+    <string name="connections_title">Connections</string>
+    <string name="connections_empty">No connections captured. Only connections opened while this screen is visible are tracked (up to 500 shown).</string>
+    <string name="close_connection">Close connection</string>
+    <string name="export_diagnostics">Export diagnostics</string>
+</resources>

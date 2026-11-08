@@ -145,12 +145,17 @@ class PublicIpDetector {
                 }
 
                 override fun onResponse(call: Call, response: Response) {
-                    response.use {
-                        val ip = if (it.isSuccessful) it.body.string().trim() else null
-                        val normalized = ip?.takeIf(::isLikelyIpAddress)
-                        if (continuation.isActive) {
-                            continuation.resume(normalized)
+                    val normalized = try {
+                        response.use {
+                            val source = it.body.source()
+                            if (!it.isSuccessful || source.request(257L)) null
+                            else source.readUtf8().trim().takeIf(::isLikelyIpAddress)
                         }
+                    } catch (_: IOException) {
+                        null
+                    }
+                    if (continuation.isActive) {
+                        continuation.resume(normalized)
                     }
                 }
             })

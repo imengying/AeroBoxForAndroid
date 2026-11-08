@@ -148,7 +148,6 @@
     <string name="dns_setting_failed">اعمال تنظیمات DNS ناموفق بود</string>
     <string name="ipv6_setting_failed">اعمال تنظیمات IPv6 ناموفق بود</string>
     <string name="dns_invalid_format">تنظیمات DNS نامعتبر: %1$s</string>
-    <string name="config_generation_failed">ایجاد پیکربندی ناموفق بود</string>
     <string name="applying">در حال اعمال</string>
     <string name="current_node_unavailable">گره فعلی در دسترس نیست</string>
     <string name="setting_failed_with_error_format">%1$s: %2$s</string>

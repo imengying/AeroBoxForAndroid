@@ -20,6 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -190,6 +193,16 @@ fun NodeListSheet(
                         }
                     }
 
+                    var search by rememberSaveable { mutableStateOf("") }
+                    OutlinedTextField(
+                        value = search, onValueChange = { search = it }, singleLine = true,
+                        label = { Text(stringResource(R.string.search_nodes)) },
+                        leadingIcon = { Icon(Icons.Filled.Search, null) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    val visibleNodes = remember(currentGroupNodes, search) {
+                        currentGroupNodes.filter { it.name.contains(search, true) || it.server.contains(search, true) || it.type.name.contains(search, true) }
+                    }
                     Spacer(Modifier.height(8.dp))
 
                     LazyColumn(
@@ -198,7 +211,7 @@ fun NodeListSheet(
                             .heightIn(min = 240.dp, max = listMaxHeight),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        items(currentGroupNodes, key = { it.id }) { node ->
+                        items(visibleNodes, key = { it.id }) { node ->
                             NodeItem(
                                 node = node,
                                 isSelected = node.id == selectedNodeId,

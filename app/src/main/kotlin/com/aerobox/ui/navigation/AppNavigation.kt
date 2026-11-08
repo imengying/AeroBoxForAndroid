@@ -33,6 +33,8 @@ import com.aerobox.ui.screens.GroupNodesScreen
 import com.aerobox.ui.screens.HomeScreen
 import com.aerobox.ui.screens.LicenseScreen
 import com.aerobox.ui.screens.LogScreen
+import com.aerobox.ui.screens.BackupScreen
+import com.aerobox.ui.screens.ConnectionsScreen
 import com.aerobox.ui.screens.NodeEditScreen
 import com.aerobox.ui.screens.PerAppProxyScreen
 import com.aerobox.ui.screens.RoutingSettingsScreen
@@ -133,6 +135,9 @@ fun AppNavigation(
                     onNavigateToLog = {
                         navController.navigate("log") { launchSingleTop = true }
                     },
+                    onNavigateToBackup = {
+                        navController.navigate("backup") { launchSingleTop = true }
+                    },
                     onNavigateToLicense = {
                         navController.navigate("license") { launchSingleTop = true }
                     }
@@ -180,8 +185,15 @@ fun AppNavigation(
             }
             composable("log") {
                 LogScreen(
-                    onNavigateBack = { navController.popBackStack() }
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToConnections = { navController.navigate("connections") { launchSingleTop = true } }
                 )
+            }
+            composable("connections") {
+                ConnectionsScreen(onNavigateBack = { navController.popBackStack() })
+            }
+            composable("backup") {
+                BackupScreen(onNavigateBack = { navController.popBackStack() })
             }
             composable("routing") {
                 RoutingSettingsScreen(
@@ -204,6 +216,7 @@ private fun MainScreen(
     onNavigateToPerAppProxy: () -> Unit,
     onNavigateToRouting: () -> Unit,
     onNavigateToLog: () -> Unit,
+    onNavigateToBackup: () -> Unit,
     onNavigateToLicense: () -> Unit
 ) {
     val pagerState = rememberPagerState(pageCount = { bottomNavItems.size })
@@ -248,6 +261,7 @@ private fun MainScreen(
                     onNavigateToPerAppProxy = onNavigateToPerAppProxy,
                     onNavigateToRouting = onNavigateToRouting,
                     onNavigateToLog = onNavigateToLog,
+                    onNavigateToBackup = onNavigateToBackup,
                     onNavigateToLicense = onNavigateToLicense
                 )
             }

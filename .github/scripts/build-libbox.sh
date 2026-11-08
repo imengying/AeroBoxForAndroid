@@ -40,14 +40,15 @@ fi
 
 # Current sing-box upstream treats `PlatformLogWriter != nil` as a reason to enable
 # extra services automatically. AeroBox only uses PlatformLogWriter for runtime log
-# callbacks, and does not depend on per-connection tracking, Clash mode management,
+# callbacks and on-demand connection tracking, without Clash mode management,
 # or implicit cache files. Keep these patches explicit and fail loudly if upstream refactors the
 # target blocks.
 python3 "${GITHUB_WORKSPACE}/.github/scripts/patch-sing-box-box-go.py"
 python3 "${GITHUB_WORKSPACE}/.github/scripts/patch-sing-box-libbox-slim.py"
 
 cp "${GITHUB_WORKSPACE}/.github/libbox/urltest_export.go" experimental/libbox/urltest_export.go
-gofmt -w experimental/libbox/urltest_export.go
+cp "${GITHUB_WORKSPACE}/.github/libbox/diagnostics_export.go" experimental/libbox/diagnostics_export.go
+gofmt -w experimental/libbox/urltest_export.go experimental/libbox/diagnostics_export.go common/trafficcontrol/manager.go common/trafficcontrol/tracker.go
 
 mkdir -p "${GITHUB_WORKSPACE}/app/build/libbox"
 "${GOBIN}/gomobile" bind \

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operation_complete">操作完成</string>
+    <string name="backup_invalid">备份无效或版本不受支持</string>
+    <string name="backup_title">备份与恢复</string>
+    <string name="backup_credentials">备份包含明文订阅地址、节点密码和设置，请妥善保管。</string>
+    <string name="backup_export">导出备份</string>
+    <string name="backup_restore">恢复备份</string>
+    <string name="backup_stop_vpn">恢复前请先断开 VPN。</string>
+    <string name="backup_merge_confirm">将备份中的订阅和节点添加到现有数据中？设置、自定义规则及选中节点将按备份恢复。重复恢复同一文件会再次添加副本。</string>
+    <string name="backup_summary">订阅、节点、设置及自定义规则</string>
+    <string name="search_nodes">搜索节点</string>
+    <string name="nodes_selected">已选 %1$d 项</string>
+    <string name="copy_to_group">复制到本地分组</string>
+    <string name="export_nodes">导出节点</string>
+    <string name="remote_nodes_overwritten">订阅更新会覆盖本地编辑，本地分组中的副本会保留。</string>
+    <plurals name="delete_nodes_confirm">
+        <item quantity="other">删除选中的 %1$d 个节点？</item>
+    </plurals>
+    <string name="connections_title">连接详情</string>
+    <string name="connections_empty">暂无捕获的连接。仅追踪此页面显示期间新建的连接，最多显示 500 条。</string>
+    <string name="close_connection">关闭连接</string>
+    <string name="export_diagnostics">导出诊断信息</string>
+</resources>

@@ -15,6 +15,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.aerobox.viewmodel.DataTransferViewModel
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,7 +59,9 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToConnections: () -> Unit,
+    viewModel: DataTransferViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val runtimeLines by RuntimeLogBuffer.lines.collectAsStateWithLifecycle()
@@ -65,6 +72,14 @@ fun LogScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val busy by viewModel.busy.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri?.let(viewModel::exportDiagnostics)
+    }
+    LaunchedEffect(message) {
+        message?.let { snackbarHostState.showSnackbar(it); viewModel.dismissMessage() }
+    }
 
     // Auto-scroll to bottom only when user is already near the bottom
     LaunchedEffect(logLines.size) {
@@ -90,6 +105,12 @@ fun LogScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onNavigateToConnections) {
+                        Icon(AppIcons.Route, contentDescription = stringResource(R.string.connections_title))
+                    }
+                    IconButton(onClick = { export.launch("AeroBox-diagnostics.json") }, enabled = !busy) {
+                        Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.export_diagnostics))
+                    }
                     val logCopiedMessage = stringResource(R.string.log_copied)
                     IconButton(
                         onClick = {

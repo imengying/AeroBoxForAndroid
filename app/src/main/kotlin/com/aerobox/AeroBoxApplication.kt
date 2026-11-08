@@ -7,7 +7,6 @@ import android.content.Context
 import android.net.ConnectivityManager
 import androidx.room.Room
 import com.aerobox.data.database.AppDatabase
-import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.logging.CrashDiagnostics
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.repository.SubscriptionRepository
@@ -30,10 +29,6 @@ class AeroBoxApplication : Application() {
         VpnStateManager.resetTrafficSession()
         createNotificationChannel()
         SingBoxNative.initialize(this, applicationScope)
-
-        applicationScope.launch(Dispatchers.IO) {
-            GeoAssetManager.ensureBundledAssets(this@AeroBoxApplication)
-        }
 
         applicationScope.launch {
             SubscriptionUpdateScheduler.reconfigure(this@AeroBoxApplication)

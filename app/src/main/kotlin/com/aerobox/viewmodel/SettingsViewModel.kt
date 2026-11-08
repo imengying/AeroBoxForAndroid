@@ -35,7 +35,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
@@ -44,7 +43,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val appListRepository = AppListRepository(appContext)
     private val appUpdateRepository = AppUpdateRepository()
     private val vpnRepository = AeroBoxApplication.vpnRepository
-    private val runtimeSettingsMutex = Mutex()
+    private val runtimeSettingsMutex get() = vpnRepository.runtimeSettingsMutex
+    private var runtimeChangeStopRevision = 0L
 
     private val _installedApps = MutableStateFlow<List<InstalledAppInfo>>(emptyList())
     val installedApps: StateFlow<List<InstalledAppInfo>> = _installedApps.asStateFlow()
@@ -457,9 +457,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         rollback: suspend () -> Unit
     ) {
         rollback()
-        if (activeNode == null || VpnStateManager.vpnState.value.isConnected) return
+        if (activeNode == null || VpnStateManager.vpnState.value.isConnected ||
+            runtimeChangeStopRevision != VpnStateManager.stopRevision.get()) return
 
-        val restoreResult = vpnRepository.reloadActiveConnection(activeNode)
+        val restoreResult = vpnRepository.reloadActiveConnection(activeNode, runtimeChangeStopRevision)
         if (restoreResult !is VpnConnectionResult.Success) {
             val details = when (restoreResult) {
                 is VpnConnectionResult.InvalidConfig -> restoreResult.error
@@ -476,11 +477,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private suspend fun refreshActiveConnectionForRuntimeChange(
         failurePrefix: String
     ): Boolean {
+        runtimeChangeStopRevision = VpnStateManager.stopRevision.get()
         val state = VpnStateManager.vpnState.value
         val currentNode = state.currentNode ?: return true
         if (!state.isConnected) return true
 
-        return when (val result = vpnRepository.reloadActiveConnection(currentNode)) {
+        return when (val result = vpnRepository.reloadActiveConnection(currentNode, runtimeChangeStopRevision)) {
             is VpnConnectionResult.Success -> {
                 _uiMessage.tryEmit(appString(R.string.applying))
                 true

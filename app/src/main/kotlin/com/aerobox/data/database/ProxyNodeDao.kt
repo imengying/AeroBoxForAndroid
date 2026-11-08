@@ -56,9 +56,6 @@ interface ProxyNodeDao {
     @Query("UPDATE proxy_nodes SET subscriptionId = :targetSubscriptionId WHERE subscriptionId = :fromSubscriptionId")
     suspend fun reassignBySubscription(fromSubscriptionId: Long, targetSubscriptionId: Long)
 
-    @Query("DELETE FROM proxy_nodes WHERE id = :id")
-    suspend fun deleteById(id: Long)
-
     @Query("DELETE FROM proxy_nodes WHERE subscriptionId = :subscriptionId")
     suspend fun deleteBySubscription(subscriptionId: Long)
 }

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operation_complete">انجام شد</string>
+    <string name="backup_invalid">نسخه پشتیبان نامعتبر یا پشتیبانی‌نشده است</string>
+    <string name="backup_title">پشتیبان‌گیری و بازیابی</string>
+    <string name="backup_credentials">نسخه پشتیبان شامل نشانی اشتراک‌ها، رمزهای گره‌ها و تنظیمات به صورت متن ساده است. آن را خصوصی نگه دارید.</string>
+    <string name="backup_export">صدور نسخه پشتیبان</string>
+    <string name="backup_restore">بازیابی نسخه پشتیبان</string>
+    <string name="backup_stop_vpn">پیش از بازیابی، VPN را قطع کنید.</string>
+    <string name="backup_merge_confirm">اشتراک‌ها و گره‌های نسخه پشتیبان به داده‌های موجود افزوده شوند؟ تنظیمات، قواعد سفارشی و گره انتخاب‌شده از نسخه پشتیبان بازیابی می‌شوند. بازیابی دوباره فایل، موارد تکراری اضافه می‌کند.</string>
+    <string name="backup_summary">اشتراک‌ها، گره‌ها، تنظیمات و قواعد سفارشی</string>
+    <string name="search_nodes">جستجوی گره‌ها</string>
+    <string name="nodes_selected">انتخاب‌شده: %1$d</string>
+    <string name="copy_to_group">کپی به گروه محلی</string>
+    <string name="export_nodes">صدور گره‌ها</string>
+    <string name="remote_nodes_overwritten">به‌روزرسانی اشتراک، ویرایش‌های محلی را جایگزین می‌کند. نسخه‌های گروه‌های محلی حفظ می‌شوند.</string>
+    <plurals name="delete_nodes_confirm">
+        <item quantity="one">%1$d گره انتخاب‌شده حذف شود؟</item>
+        <item quantity="other">%1$d گره انتخاب‌شده حذف شوند؟</item>
+    </plurals>
+    <string name="connections_title">اتصال‌ها</string>
+    <string name="connections_empty">اتصالی ثبت نشده است. فقط اتصال‌های جدید هنگام نمایش این صفحه ردیابی می‌شوند (حداکثر ۵۰۰ مورد).</string>
+    <string name="close_connection">بستن اتصال</string>
+    <string name="export_diagnostics">صدور اطلاعات عیب‌یابی</string>
+</resources>

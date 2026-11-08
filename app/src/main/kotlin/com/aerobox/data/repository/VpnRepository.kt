@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface VpnConnectionResult {
@@ -38,6 +40,7 @@ class VpnRepository(private val context: Context) {
     }
 
     private val configResolver = VpnConfigResolver(context)
+    val runtimeSettingsMutex = Mutex()
     private val subscriptionRepository get() = AeroBoxApplication.subscriptionRepository
 
     suspend fun connectSelectedNode(): VpnConnectionResult {
@@ -46,8 +49,11 @@ class VpnRepository(private val context: Context) {
     }
 
     suspend fun connectNode(node: ProxyNode): VpnConnectionResult {
-        val result = launchNodeAction(node) { config, resolvedNode ->
-            startServiceWithAction(AeroBoxVpnService.ACTION_START, config, resolvedNode.id)
+        val stopRevision = VpnStateManager.stopRevision.get()
+        val result = runtimeSettingsMutex.withLock {
+            launchNodeAction(node) { config, resolvedNode ->
+                startServiceWithAction(AeroBoxVpnService.ACTION_START, config, resolvedNode.id, stopRevision = stopRevision)
+            }
         }
         val triggerNode = (result as? VpnConnectionResult.Success)?.node ?: node
         refreshDueSubscriptionsInBackground(triggerNode)
@@ -55,36 +61,37 @@ class VpnRepository(private val context: Context) {
     }
 
     suspend fun switchToNode(node: ProxyNode): VpnConnectionResult {
-        val currentNode = VpnStateManager.vpnState.value.currentNode
-        if (currentNode != null) {
-            val currentIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(currentNode)
-            val targetIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(node)
-            if (currentIsIpv6Only != targetIsIpv6Only) {
-                stopVpn()
-                waitForServiceStop()
-                return launchNodeAction(node) { config, resolvedNode ->
-                    startServiceWithAction(AeroBoxVpnService.ACTION_START, config, resolvedNode.id)
-                }
+        val stopRevision = VpnStateManager.stopRevision.get()
+        return runtimeSettingsMutex.withLock {
+            if (VpnStateManager.stopRevision.get() != stopRevision) {
+                VpnConnectionResult.Failure(CancellationException("VPN switch cancelled"))
+            } else {
+                reloadActiveConnection(node, stopRevision)
             }
-        }
-
-        return launchNodeAction(node) { config, resolvedNode ->
-            startServiceWithAction(AeroBoxVpnService.ACTION_SWITCH, config, resolvedNode.id)
         }
     }
 
-    suspend fun reloadActiveConnection(node: ProxyNode): VpnConnectionResult {
+    suspend fun reloadActiveConnection(
+        node: ProxyNode,
+        stopRevision: Long = VpnStateManager.stopRevision.get()
+    ): VpnConnectionResult {
         val operation = VpnStateManager.registerServiceOperation()
         try {
             val launchResult = launchNodeAction(node) { config, resolvedNode ->
-                startServiceWithAction(AeroBoxVpnService.ACTION_RELOAD, config, resolvedNode.id, operation.id)
+                check(VpnStateManager.stopRevision.get() == stopRevision) { "VPN operation cancelled" }
+                startServiceWithAction(AeroBoxVpnService.ACTION_RELOAD, config, resolvedNode.id, operation.id, stopRevision)
             }
             if (launchResult !is VpnConnectionResult.Success) return launchResult
 
             val result = withTimeoutOrNull(30_000L) { operation.result.await() }
-                ?: return VpnConnectionResult.Failure(
+                ?: if (operation.result.isCompleted) operation.result.await() else null
+            if (result == null) {
+                AeroBoxVpnService.cancelStartOperation(operation.id)
+                withTimeoutOrNull(5_000L) { VpnStateManager.serviceActive.first { !it } }
+                return VpnConnectionResult.Failure(
                     IllegalStateException("Timed out waiting for VPN reload")
                 )
+            }
             val connectedNode = result.node
             return if (result.success && connectedNode != null) {
                 VpnConnectionResult.Success(connectedNode)
@@ -112,7 +119,9 @@ class VpnRepository(private val context: Context) {
                 val activeNode = VpnStateManager.vpnState.value.currentNode
                 if (activeNode?.id != triggerNode.id) return@launch
 
-                reloadActiveConnection(triggerNode)
+                runtimeSettingsMutex.withLock {
+                    if (VpnStateManager.vpnState.value.currentNode?.id == triggerNode.id) reloadActiveConnection(triggerNode)
+                }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -149,30 +158,27 @@ class VpnRepository(private val context: Context) {
         }
     }
 
-    private fun startServiceWithAction(action: String, config: String, nodeId: Long, operationId: Long = 0L) {
+    private fun startServiceWithAction(
+        action: String, config: String, nodeId: Long,
+        operationId: Long = 0L, stopRevision: Long
+    ) {
         val intent = Intent(context, AeroBoxVpnService::class.java).apply {
             this.action = action
             putExtra(AeroBoxVpnService.EXTRA_CONFIG, config)
             putExtra(AeroBoxVpnService.EXTRA_NODE_ID, nodeId)
             putExtra(AeroBoxVpnService.EXTRA_OPERATION_ID, operationId)
+            putExtra(AeroBoxVpnService.EXTRA_STOP_REVISION, stopRevision)
         }
         context.startForegroundService(intent)
     }
 
     fun stopVpn() {
+        val stopRevision = VpnStateManager.stopRevision.incrementAndGet()
         val intent = Intent(context, AeroBoxVpnService::class.java).apply {
             action = AeroBoxVpnService.ACTION_STOP
+            putExtra(AeroBoxVpnService.EXTRA_STOP_REVISION, stopRevision)
         }
         context.startForegroundService(intent)
-    }
-
-    private suspend fun waitForServiceStop(timeoutMs: Long = 5_000L) {
-        withTimeoutOrNull(timeoutMs) {
-            VpnStateManager.serviceActive.first { !it }
-        } ?: Log.w(
-            TAG,
-            "Timed out waiting for VPN service to stop before restart"
-        )
     }
 
     suspend fun urlTestNode(
@@ -190,15 +196,10 @@ class VpnRepository(private val context: Context) {
             }
             val resolvedDirectDns = directDns ?: preferences?.directDns ?: PreferenceManager.DEFAULT_DIRECT_DNS
             val resolvedIpv6Mode = ipv6Mode ?: preferences?.ipv6Mode ?: IPv6Mode.DISABLE
-            val safeDirectDns = if (resolvedDirectDns.contains("[")) {
-                PreferenceManager.DEFAULT_DIRECT_DNS
-            } else {
-                resolvedDirectDns
-            }
             val nodeIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(node)
             val config = ConfigGenerator.generateUrlTestConfig(
                 node = node,
-                directDns = safeDirectDns,
+                directDns = resolvedDirectDns,
                 ipv6Mode = resolvedIpv6Mode,
                 nodeIsIpv6OnlyOverride = nodeIsIpv6Only
             )

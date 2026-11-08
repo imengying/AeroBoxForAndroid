@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operation_complete">Готово</string>
+    <string name="backup_invalid">Неверный или неподдерживаемый файл резервной копии</string>
+    <string name="backup_title">Резервное копирование</string>
+    <string name="backup_credentials">Копия содержит адреса подписок, пароли узлов и настройки в открытом виде. Храните её в защищённом месте.</string>
+    <string name="backup_export">Экспортировать копию</string>
+    <string name="backup_restore">Восстановить копию</string>
+    <string name="backup_stop_vpn">Отключите VPN перед восстановлением.</string>
+    <string name="backup_merge_confirm">Добавить подписки и узлы из копии, сохранив текущие данные? Настройки, правила и выбранный узел будут восстановлены из копии. Повторное восстановление создаёт дубликаты.</string>
+    <string name="backup_summary">Подписки, узлы, настройки и правила</string>
+    <string name="search_nodes">Поиск узлов</string>
+    <string name="nodes_selected">Выбрано: %1$d</string>
+    <string name="copy_to_group">Копировать в локальную группу</string>
+    <string name="export_nodes">Экспортировать узлы</string>
+    <string name="remote_nodes_overwritten">Обновление подписки заменяет изменения. Копии в локальных группах сохраняются.</string>
+    <plurals name="delete_nodes_confirm">
+        <item quantity="one">Удалить %1$d выбранный узел?</item>
+        <item quantity="few">Удалить %1$d выбранных узла?</item>
+        <item quantity="many">Удалить %1$d выбранных узлов?</item>
+        <item quantity="other">Удалить %1$d выбранных узлов?</item>
+    </plurals>
+    <string name="connections_title">Соединения</string>
+    <string name="connections_empty">Соединений нет. Отслеживаются новые соединения, пока открыт этот экран (до 500 записей).</string>
+    <string name="close_connection">Закрыть соединение</string>
+    <string name="export_diagnostics">Экспорт диагностики</string>
+</resources>

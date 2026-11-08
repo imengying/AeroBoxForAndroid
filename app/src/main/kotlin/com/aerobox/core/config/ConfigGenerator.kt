@@ -26,6 +26,21 @@ object ConfigGenerator {
     private const val DEFAULT_TUN_MTU = 9000
     const val V2RAY_API_LISTEN = "127.0.0.1:10085"
 
+    fun exportNodes(nodes: List<ProxyNode>): String {
+        val tags = mutableSetOf<String>()
+        val outbounds = JSONArray()
+        nodes.forEach { node ->
+            val name = node.name.ifBlank { node.type.name }
+            var tag = name
+            var suffix = 2
+            while (!tags.add(tag)) tag = "$name (${suffix++})"
+            val outbound = OutboundConfigBuilder.buildProxyOutbound(node, IPv6Mode.ENABLE, isIpv6Literal(node.server))
+            outbound.remove("domain_resolver")
+            outbounds.put(outbound.put("tag", tag))
+        }
+        return JSONObject().put("outbounds", outbounds).toString(2)
+    }
+
     fun validateDnsSettings(
         context: Context,
         remoteDns: String,

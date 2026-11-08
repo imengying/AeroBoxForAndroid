@@ -62,6 +62,7 @@ fun SettingsScreen(
     onNavigateToPerAppProxy: () -> Unit = {},
     onNavigateToRouting: () -> Unit = {},
     onNavigateToLog: () -> Unit = {},
+    onNavigateToBackup: () -> Unit = {},
     onNavigateToLicense: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(
         viewModelStoreOwner = requireNotNull(LocalView.current.context.findComponentActivity()) {
@@ -113,6 +114,16 @@ fun SettingsScreen(
                     icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                     title = stringResource(R.string.subscription_management),
                     supporting = stringResource(R.string.settings_subscription_summary),
+                    trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
+                )
+            }
+
+            item {
+                SettingItem(
+                    onClick = onNavigateToBackup,
+                    icon = { Icon(com.aerobox.ui.icons.AppIcons.ContentCopy, contentDescription = null) },
+                    title = stringResource(R.string.backup_title),
+                    supporting = stringResource(R.string.backup_summary),
                     trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
                 )
             }

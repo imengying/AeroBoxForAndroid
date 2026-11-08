@@ -139,8 +139,8 @@ private fun NodeEditForm(
                                 }
                             } catch (error: CancellationException) {
                                 throw error
-                            } catch (_: Exception) {
-                                snackbarHostState.showSnackbar(saveError)
+                            } catch (error: Exception) {
+                                snackbarHostState.showSnackbar("$saveError: ${error.message.orEmpty()}")
                             } finally {
                                 saving = false
                             }

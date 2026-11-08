@@ -33,6 +33,7 @@ object VpnStateManager {
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
     private val nextOperationId = AtomicLong()
+    val stopRevision = AtomicLong()
     private val pendingOperations = ConcurrentHashMap<Long, CompletableDeferred<ServiceOperationResult>>()
 
     fun updateServiceActive(active: Boolean) {

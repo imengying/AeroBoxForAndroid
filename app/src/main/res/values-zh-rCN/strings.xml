@@ -142,7 +142,6 @@
     <string name="dns_setting_failed">应用 DNS 设置失败</string>
     <string name="ipv6_setting_failed">应用 IPv6 设置失败</string>
     <string name="dns_invalid_format">DNS 设置无效：%1$s</string>
-    <string name="config_generation_failed">配置生成失败</string>
     <string name="applying">正在应用</string>
     <string name="current_node_unavailable">当前节点不可用</string>
     <string name="setting_failed_with_error_format">%1$s：%2$s</string>

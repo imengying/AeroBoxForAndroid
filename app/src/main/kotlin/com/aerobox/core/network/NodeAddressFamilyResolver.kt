@@ -1,14 +1,17 @@
 package com.aerobox.core.network
 
-import android.net.Network
+import android.net.DnsResolver
+import android.net.NetworkCapabilities
+import android.os.CancellationSignal
 import com.aerobox.AeroBoxApplication
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.service.DefaultNetworkMonitor
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import java.net.InetAddress
+import java.util.concurrent.Executor
+import kotlin.coroutines.resume
 
 object NodeAddressFamilyResolver {
     private const val LOOKUP_TIMEOUT_MS = 1_500L
@@ -31,16 +34,30 @@ object NodeAddressFamilyResolver {
         return hasIpv6 && !hasIpv4
     }
 
-    private suspend fun resolveAddresses(host: String): List<InetAddress> = withContext(Dispatchers.IO) {
-        val activeNetwork = DefaultNetworkMonitor.defaultNetwork ?: AeroBoxApplication.connectivity.activeNetwork
-        val networkResolved = activeNetwork?.resolveAll(host).orEmpty()
-        if (networkResolved.isNotEmpty()) {
-            return@withContext networkResolved
-        }
-        runCatching { InetAddress.getAllByName(host).toList() }.getOrElse { emptyList() }
-    }
+    @Suppress("DEPRECATION") // Context-based acquisition is not available on all supported Android versions.
+    private suspend fun resolveAddresses(host: String): List<InetAddress> =
+        suspendCancellableCoroutine { continuation ->
+            val connectivity = AeroBoxApplication.connectivity
+            val network = DefaultNetworkMonitor.defaultNetwork ?: connectivity.activeNetwork?.takeIf {
+                connectivity.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) == true
+            }
+            val cancellation = CancellationSignal()
+            continuation.invokeOnCancellation { cancellation.cancel() }
+            try {
+                DnsResolver.getInstance().query(
+                    network, host, DnsResolver.FLAG_EMPTY, Executor { it.run() }, cancellation,
+                    object : DnsResolver.Callback<List<InetAddress>> {
+                        override fun onAnswer(answer: List<InetAddress>, rcode: Int) {
+                            if (continuation.isActive) continuation.resume(if (rcode == 0) answer else emptyList())
+                        }
 
-    private fun Network.resolveAll(host: String): List<InetAddress> {
-        return runCatching { getAllByName(host).toList() }.getOrElse { emptyList() }
-    }
+                        override fun onError(error: DnsResolver.DnsException) {
+                            if (continuation.isActive) continuation.resume(emptyList())
+                        }
+                    }
+                )
+            } catch (_: Exception) {
+                if (continuation.isActive) continuation.resume(emptyList())
+            }
+        }
 }

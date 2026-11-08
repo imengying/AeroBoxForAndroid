@@ -15,6 +15,8 @@ import com.aerobox.data.model.RoutingMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONArray
+import org.json.JSONObject
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
@@ -46,6 +48,56 @@ object PreferenceManager {
     private val ENABLE_GEO_BLOCK_QUIC = booleanPreferencesKey("enable_geo_block_quic")
     private val CUSTOM_RULE_SETS = stringPreferencesKey("custom_rule_sets")
     private val PER_APP_SHOW_SYSTEM = booleanPreferencesKey("per_app_show_system")
+
+    private val backupStrings = listOf(DARK_MODE, LANGUAGE_TAG, ROUTING_MODE, REMOTE_DNS, DIRECT_DNS,
+        PER_APP_PROXY_MODE, IPV6_MODE, CUSTOM_RULE_SETS)
+    private val backupBooleans = listOf(DYNAMIC_COLOR, AUTO_CONNECT, PER_APP_PROXY_ENABLED,
+        ENABLE_SOCKS_INBOUND, ENABLE_HTTP_INBOUND, AUTO_RECONNECT, ENABLE_GEO_RULES,
+        ENABLE_GEO_CN_DOMAIN_RULE, ENABLE_GEO_CN_IP_RULE, ENABLE_GEO_ADS_BLOCK,
+        ENABLE_GEO_BLOCK_QUIC, PER_APP_SHOW_SYSTEM)
+
+    suspend fun exportSettings(context: Context): JSONObject {
+        val prefs = context.dataStore.data.first()
+        return JSONObject().apply {
+            backupStrings.forEach { key -> prefs[key]?.let { put(key.name, it) } }
+            backupBooleans.forEach { key -> prefs[key]?.let { put(key.name, it) } }
+            put(LAST_SELECTED_NODE_ID.name, prefs[LAST_SELECTED_NODE_ID] ?: 0L)
+            put(PER_APP_PROXY_PACKAGES.name, JSONArray(prefs[PER_APP_PROXY_PACKAGES].orEmpty().sorted()))
+        }
+    }
+
+    fun validateSettings(settings: JSONObject) {
+        backupStrings.forEach { require(!settings.has(it.name) || settings.get(it.name) is String) }
+        backupBooleans.forEach { require(!settings.has(it.name) || settings.get(it.name) is Boolean) }
+        val selected = settings.get(LAST_SELECTED_NODE_ID.name)
+        require(selected is Int || selected is Long)
+        val packages = settings.getJSONArray(PER_APP_PROXY_PACKAGES.name)
+        require(packages.length() <= 10_000)
+        repeat(packages.length()) { require(packages.get(it) is String) }
+        if (settings.has(ROUTING_MODE.name)) RoutingMode.valueOf(settings.getString(ROUTING_MODE.name))
+        if (settings.has(IPV6_MODE.name)) IPv6Mode.valueOf(settings.getString(IPV6_MODE.name))
+        if (settings.has(DARK_MODE.name)) require(settings.getString(DARK_MODE.name) in setOf("system", "light", "dark"))
+        if (settings.has(PER_APP_PROXY_MODE.name)) require(settings.getString(PER_APP_PROXY_MODE.name) in setOf("whitelist", "blacklist"))
+        if (settings.has(CUSTOM_RULE_SETS.name)) {
+            val raw = settings.getString(CUSTOM_RULE_SETS.name)
+            require(CustomRuleSetCodec.decode(raw).size == JSONArray(raw).length())
+        }
+    }
+
+    suspend fun restoreSettings(context: Context, settings: JSONObject, selectedNodeId: Long) {
+        validateSettings(settings)
+        context.dataStore.edit { prefs ->
+            backupStrings.forEach { key ->
+                if (settings.has(key.name)) prefs[key] = settings.getString(key.name) else prefs.remove(key)
+            }
+            backupBooleans.forEach { key ->
+                if (settings.has(key.name)) prefs[key] = settings.getBoolean(key.name) else prefs.remove(key)
+            }
+            val packages = settings.getJSONArray(PER_APP_PROXY_PACKAGES.name)
+            prefs[PER_APP_PROXY_PACKAGES] = (0 until packages.length()).map { packages.getString(it) }.toSet()
+            prefs[LAST_SELECTED_NODE_ID] = selectedNodeId
+        }
+    }
 
     fun darkModeFlow(context: Context): Flow<String> =
         context.dataStore.data.map { it[DARK_MODE] ?: "system" }
@@ -138,6 +190,12 @@ object PreferenceManager {
     suspend fun setLastSelectedNodeId(context: Context, nodeId: Long) {
         context.dataStore.edit { preferences: MutablePreferences ->
             preferences[LAST_SELECTED_NODE_ID] = nodeId
+        }
+    }
+
+    suspend fun replaceSelectedNode(context: Context, expectedId: Long, nodeId: Long) {
+        context.dataStore.edit {
+            if ((it[LAST_SELECTED_NODE_ID] ?: -1L) == expectedId) it[LAST_SELECTED_NODE_ID] = nodeId
         }
     }
 
