@@ -19,12 +19,22 @@ internal object SubscriptionUpdatePlanner {
         val nodes = stabilize(existing, fresh, subscriptionId, now)
         val byId = existing.associateBy { it.id }
         val retained = nodes.mapTo(mutableSetOf()) { it.id }
+        val added = nodes.filter { it.id == 0L }
+        val changed = nodes.filter { it.id > 0L && it != byId[it.id] }
+        val removed = existing.filter { it.id !in retained }
         return SubscriptionUpdatePlan(
             nodes = nodes,
-            added = nodes.filter { it.id == 0L },
-            changed = nodes.filter { it.id > 0L && it != byId[it.id] },
-            removed = existing.filter { it.id !in retained },
-            summary = calculateUpdateSummary(existing, nodes)
+            added = added,
+            changed = changed,
+            removed = removed,
+            summary = SubscriptionUpdateSummary(
+                addedCount = added.size,
+                // Order and latency changes need persistence, but are not connection changes.
+                updatedCount = changed.count { node ->
+                    byId.getValue(node.id).connectionFingerprint() != node.connectionFingerprint()
+                },
+                deletedCount = removed.size
+            )
         )
     }
 
@@ -58,34 +68,4 @@ internal object SubscriptionUpdatePlanner {
             )
         }
     }
-
-    private fun calculateUpdateSummary(
-        existingNodes: List<ProxyNode>,
-        refreshedNodes: List<ProxyNode>
-    ): SubscriptionUpdateSummary {
-        val existingById = existingNodes.associateBy { it.id }
-        val matchedIds = mutableSetOf<Long>()
-        var addedCount = 0
-        var updatedCount = 0
-
-        refreshedNodes.forEach { node ->
-            val existingNode = node.id.takeIf { it > 0L }?.let { existingById[it] }
-            if (existingNode == null) {
-                addedCount++
-            } else {
-                matchedIds += existingNode.id
-                if (existingNode.connectionFingerprint() != node.connectionFingerprint()) {
-                    updatedCount++
-                }
-            }
-        }
-
-        val deletedCount = existingNodes.count { it.id !in matchedIds }
-        return SubscriptionUpdateSummary(
-            addedCount = addedCount,
-            updatedCount = updatedCount,
-            deletedCount = deletedCount
-        )
-    }
-
 }

@@ -1,9 +1,7 @@
 package com.aerobox.viewmodel
 
+import com.aerobox.utils.writeAtomically
 import java.io.File
-import java.io.FileOutputStream
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -43,13 +41,7 @@ class AppSelectionDraftStore(private val file: File) {
                 .put("selected", JSONArray(draft.selected.toList()))
                 .toString().toByteArray(Charsets.UTF_8)
             require(data.size <= MAX_BYTES)
-            val parent = requireNotNull(file.parentFile)
-            check(parent.isDirectory || parent.mkdirs())
-            val temporary = File(parent, "${file.name}.tmp")
-            try {
-                FileOutputStream(temporary).use { stream -> stream.write(data); stream.fd.sync() }
-                Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-            } finally { temporary.delete() }
+            file.writeAtomically { it.write(data) }
         }
     }
 

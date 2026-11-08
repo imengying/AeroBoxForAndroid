@@ -39,14 +39,11 @@ class VpnConfigResolver(
         return node.takeIf { it.id == 0L && it.subscriptionId == 0L }
     }
 
-    suspend fun resolveNodeById(
-        nodeId: Long?,
-        fallbackToSelected: Boolean = true
-    ): ProxyNode? {
+    suspend fun resolveNodeById(nodeId: Long?): ProxyNode? {
         if (nodeId != null && nodeId > 0L) {
             nodeDao.getNodeById(nodeId)?.let { return it }
         }
-        return if (fallbackToSelected) resolveSelectedNode() else null
+        return resolveSelectedNode()
     }
 
     suspend fun buildConfig(node: ProxyNode): String {

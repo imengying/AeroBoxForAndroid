@@ -21,11 +21,10 @@ class AppListRepositoryTest {
         val repository = AppListRepository { installed }
         assertEquals(installed, repository.getInstalledApps())
         installed = listOf(app.copy(packageName = "test.new"))
-        assertEquals(listOf(app), repository.getInstalledApps())
-        assertEquals(installed, repository.getInstalledApps(forceRefresh = true))
+        assertEquals(installed, repository.getInstalledApps())
     }
 
-    @Test fun failedRefreshDoesNotDestroySuccessfulCache() = runBlocking {
+    @Test fun failedQueryIsReportedAndCanBeRetried() = runBlocking {
         var queryFails = false
         val repository = AppListRepository {
             if (queryFails) throw SecurityException("access restricted")
@@ -34,11 +33,12 @@ class AppListRepositoryTest {
         repository.getInstalledApps()
         queryFails = true
         try {
-            repository.getInstalledApps(forceRefresh = true)
+            repository.getInstalledApps()
             fail("Expected the query failure to reach the caller")
         } catch (_: SecurityException) {
-            assertEquals(listOf(app), repository.getInstalledApps())
+            queryFails = false
         }
+        assertEquals(listOf(app), repository.getInstalledApps())
     }
 
     @Test fun brokenLabelFallsBackToPackageName() {

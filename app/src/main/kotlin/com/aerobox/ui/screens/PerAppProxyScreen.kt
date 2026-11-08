@@ -158,7 +158,7 @@ fun PerAppProxyScreen(
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         // Also refresh after returning from system settings or installing/removing apps.
-        viewModel.loadInstalledApps(forceRefresh = true)
+        viewModel.loadInstalledApps()
     }
 
     val filteredApps = remember(
@@ -216,7 +216,7 @@ fun PerAppProxyScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { viewModel.loadInstalledApps(forceRefresh = true) },
+                        onClick = viewModel::loadInstalledApps,
                         enabled = !isLoadingApps
                     ) {
                         Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.refresh))
@@ -315,7 +315,7 @@ fun PerAppProxyScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
                 Row(modifier = Modifier.padding(horizontal = 8.dp)) {
-                    TextButton(onClick = { viewModel.loadInstalledApps(forceRefresh = true) }) {
+                    TextButton(onClick = viewModel::loadInstalledApps) {
                         Text(stringResource(R.string.per_app_proxy_retry))
                     }
                     TextButton(onClick = {

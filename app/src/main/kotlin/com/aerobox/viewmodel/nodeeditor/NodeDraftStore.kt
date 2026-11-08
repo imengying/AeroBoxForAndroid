@@ -2,10 +2,8 @@ package com.aerobox.viewmodel.nodeeditor
 
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.connectionFingerprint
+import com.aerobox.utils.writeAtomically
 import java.io.File
-import java.io.FileOutputStream
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -44,13 +42,7 @@ class NodeDraftStore(private val file: File) {
                 .put("fingerprint", draft.sourceFingerprint).put("edits", JSONObject(draft.edits))
                 .toString().toByteArray(Charsets.UTF_8)
             require(data.size <= MAX_BYTES)
-            val parent = requireNotNull(file.parentFile)
-            check(parent.isDirectory || parent.mkdirs())
-            val temporary = File(parent, "${file.name}.tmp")
-            try {
-                FileOutputStream(temporary).use { stream -> stream.write(data); stream.fd.sync() }
-                Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-            } finally { temporary.delete() }
+            file.writeAtomically { it.write(data) }
         }
     }
 

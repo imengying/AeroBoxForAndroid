@@ -286,14 +286,13 @@ class SettingsViewModel(
         return showRuntimeSettingsResult(result, appString(R.string.geo_setting_failed))
     }
 
-    fun loadInstalledApps(forceRefresh: Boolean = false) {
+    fun loadInstalledApps() {
         if (_isLoadingInstalledApps.value) return
-        if (!forceRefresh && _installedApps.value.isNotEmpty()) return
         _isLoadingInstalledApps.value = true
         _installedAppsLoadFailed.value = false
         viewModelScope.launch {
             try {
-                val apps = appListRepository.getInstalledApps(forceRefresh = forceRefresh)
+                val apps = appListRepository.getInstalledApps()
                 if (apps.isEmpty()) {
                     _installedAppsLoadFailed.value = true
                     RuntimeLogBuffer.appendError("Installed app query returned no selectable packages")

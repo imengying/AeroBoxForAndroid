@@ -416,8 +416,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         requestedNodeId: Long?
     ): StartRequest {
         val node = configResolver.resolveNodeById(
-            nodeId = requestedNodeId ?: lastNodeId.takeIf { it > 0L },
-            fallbackToSelected = true
+            nodeId = requestedNodeId ?: lastNodeId.takeIf { it > 0L }
         )
         if (node == null) {
             val error = "No node available"
@@ -458,8 +457,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
 
     private suspend fun resolveCurrentNode(): ProxyNode? {
         return configResolver.resolveNodeById(
-            nodeId = lastNodeId.takeIf { it > 0L },
-            fallbackToSelected = true
+            nodeId = lastNodeId.takeIf { it > 0L }
         )
     }
 

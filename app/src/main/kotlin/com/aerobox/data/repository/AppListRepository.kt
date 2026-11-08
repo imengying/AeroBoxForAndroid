@@ -7,8 +7,6 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import com.aerobox.data.model.InstalledAppInfo
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
@@ -19,25 +17,9 @@ class AppListRepository internal constructor(
         { loadInstalledApps(appContext) }
     })
 
-    private val cacheMutex = Mutex()
-
-    @Volatile
-    private var cachedApps: List<InstalledAppInfo>? = null
-
-    suspend fun getInstalledApps(
-        forceRefresh: Boolean = false
-    ): List<InstalledAppInfo> {
-        cachedApps?.takeIf { !forceRefresh }?.let { return it }
-        return cacheMutex.withLock {
-            cachedApps?.takeIf { !forceRefresh }?.let { return@withLock it }
-            val loadedApps = withContext(Dispatchers.IO) {
-                loadApps()
-            }
-            // Some systems temporarily return no packages while access is restricted.
-            // A later attempt must query PackageManager again instead of caching that failure.
-            cachedApps = loadedApps.takeIf { it.isNotEmpty() }
-            loadedApps
-        }
+    // Each refresh queries the system; the ViewModel retains the last usable list.
+    suspend fun getInstalledApps(): List<InstalledAppInfo> = withContext(Dispatchers.IO) {
+        loadApps()
     }
 
     companion object {
