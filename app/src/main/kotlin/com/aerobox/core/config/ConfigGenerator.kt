@@ -146,9 +146,7 @@ object ConfigGenerator {
                 directDns = directDns,
                 routingMode = RoutingMode.DIRECT,
                 enableGeoCnDomainRule = false,
-                ipv6Mode = ipv6Mode,
-                serverDomainHint = normalizeOutboundServer(node.server)
-                    .takeUnless { it.isBlank() || isIpLiteral(it) }
+                ipv6Mode = ipv6Mode
             )
         )
         config.put("inbounds", JSONArray())

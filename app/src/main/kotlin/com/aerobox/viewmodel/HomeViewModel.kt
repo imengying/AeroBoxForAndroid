@@ -551,12 +551,10 @@ class HomeViewModel(
      */
     private fun dispatchConnectionError(result: VpnConnectionResult) {
         when (result) {
-            is VpnConnectionResult.InvalidConfig -> handleConnectionFailure(result.error)
-            is VpnConnectionResult.Failure -> {
-                val details = result.throwable.message?.takeIf { it.isNotBlank() }
-                    ?: result.throwable.toString()
-                handleConnectionFailure(details)
-            }
+            is VpnConnectionResult.InvalidConfig,
+            is VpnConnectionResult.Failure -> handleConnectionFailure(
+                ConnectionDiagnostics.failureMessage(result, "")
+            )
             VpnConnectionResult.NoNodeAvailable -> {
                 _uiMessage.tryEmit(appString(com.aerobox.R.string.add_node_first))
             }

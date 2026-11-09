@@ -118,9 +118,9 @@ class NotificationSwitchActivity : ComponentActivity() {
                 is VpnConnectionResult.InvalidConfig,
                 is VpnConnectionResult.Failure -> {
                     uiMessage.tryEmit(
-                        ConnectionDiagnostics.userFacingFailureMessage(
+                        ConnectionDiagnostics.failureMessage(
                             result = result,
-                            operationFailedText = appString(R.string.operation_failed)
+                            fallback = appString(R.string.operation_failed)
                         )
                     )
                     pendingNodeId.value = null

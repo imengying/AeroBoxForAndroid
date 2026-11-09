@@ -3,12 +3,8 @@ package libbox
 import (
 	"os"
 	"runtime/debug"
-	"time"
 
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/experimental/locale"
-	"github.com/sagernet/sing-box/log"
-	"github.com/sagernet/sing/common/byteformats"
 )
 
 var (
@@ -57,26 +53,6 @@ func Setup(options *SetupOptions) error {
 	return nil
 }
 
-func SetLocale(localeID string) {
-	locale.Set(localeID)
-}
-
 func Version() string {
 	return C.Version
-}
-
-func FormatBytes(length int64) string {
-	return byteformats.FormatKBytes(uint64(length))
-}
-
-func FormatMemoryBytes(length int64) string {
-	return byteformats.FormatMemoryKBytes(uint64(length))
-}
-
-func FormatDuration(duration int64) string {
-	return log.FormatDuration(time.Duration(duration) * time.Millisecond)
-}
-
-func ProxyDisplayType(proxyType string) string {
-	return C.ProxyDisplayName(proxyType)
 }

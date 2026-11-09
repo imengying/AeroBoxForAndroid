@@ -30,7 +30,8 @@ object CrashDiagnostics {
     private const val MAX_FILE_BYTES = 64 * 1024
     private val historyMutex = Mutex()
     private val recordingCrash = AtomicBoolean(false)
-    private lateinit var context: Context
+    private var activityManager: ActivityManager? = null
+    private lateinit var packageName: String
     private lateinit var historyFile: AtomicFile
     private lateinit var pendingFile: AtomicFile
     private var lastExitTimestamp = 0L
@@ -48,9 +49,10 @@ object CrashDiagnostics {
 
     @Synchronized
     fun install(context: Context, scope: CoroutineScope) {
-        if (this::context.isInitialized) return
-        this.context = context.applicationContext
-        val directory = File(context.applicationInfo.dataDir, "no_backup/crash-diagnostics")
+        if (this::historyFile.isInitialized) return
+        activityManager = context.applicationContext.getSystemService(ActivityManager::class.java)
+        packageName = context.packageName
+        val directory = File(context.noBackupFilesDir, "crash-diagnostics")
         historyFile = AtomicFile(File(directory, "history.json"))
         pendingFile = AtomicFile(File(directory, "pending-jvm.json"))
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
@@ -86,7 +88,7 @@ object CrashDiagnostics {
     fun setCoreVersion(version: String) {
         coreVersion = safeVersion(version)
         runCatching {
-            checkNotNull(context.getSystemService(ActivityManager::class.java))
+            checkNotNull(activityManager)
                 .setProcessStateSummary(versionSummary().toByteArray(Charsets.UTF_8))
         }.onFailure { Log.w(TAG, "Unable to attach crash version metadata", it) }
     }
@@ -112,14 +114,14 @@ object CrashDiagnostics {
         if (pending != null && pending.timestamp > lastExitTimestamp) reports += pending
 
         val exits = runCatching {
-            checkNotNull(context.getSystemService(ActivityManager::class.java))
-                .getHistoricalProcessExitReasons(context.packageName, 0, 8)
+            checkNotNull(activityManager)
+                .getHistoricalProcessExitReasons(packageName, 0, 8)
         }.getOrElse {
             Log.w(TAG, "Unable to read process exit history", it)
             emptyList()
         }
         for (exit in exits) {
-            if (exit.timestamp <= lastExitTimestamp || exit.processName != context.packageName) continue
+            if (exit.timestamp <= lastExitTimestamp || exit.processName != packageName) continue
             val source = describeProcessExit(exit.reason, exit.status) ?: continue
             // Prefer our JVM stack summary over the system's duplicate record of the same exit.
             if (reports.any { it.pid == exit.pid && abs(it.timestamp - exit.timestamp) < 60_000L }) continue

@@ -70,9 +70,9 @@ class VpnPermissionActivity : ComponentActivity() {
                     }
                     is VpnConnectionResult.InvalidConfig,
                     is VpnConnectionResult.Failure -> {
-                        val message = ConnectionDiagnostics.userFacingFailureMessage(
+                        val message = ConnectionDiagnostics.failureMessage(
                             result = result,
-                            operationFailedText = appString(R.string.operation_failed)
+                            fallback = appString(R.string.operation_failed)
                         )
                         Toast.makeText(this@VpnPermissionActivity, message, Toast.LENGTH_LONG).show()
                     }

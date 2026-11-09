@@ -174,10 +174,6 @@
     <string name="error_unsupported_proxy_protocol">%1$s is not a supported proxy protocol</string>
     <string name="error_no_new_nodes_imported">No new nodes imported; identical configurations may already exist</string>
     <string name="imported_node_default_name_format">Imported node %1$d</string>
-    <string name="error_dns_address_invalid_format">%1$s address is invalid</string>
-    <string name="error_dns_port_invalid_format">%1$s port is invalid</string>
-    <string name="error_dns_protocol_invalid_format">%1$s protocol is invalid</string>
-    <string name="error_dns_path_invalid_format">%1$s path is invalid</string>
     <string name="error_dns_invalid_format_generic">DNS address format is invalid</string>
     <string name="dns_label_remote">Remote DNS</string>
     <string name="dns_label_direct">Direct DNS</string>

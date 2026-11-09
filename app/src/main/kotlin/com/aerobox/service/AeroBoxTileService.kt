@@ -121,7 +121,7 @@ class AeroBoxTileService : TileService() {
                         pendingAction = null
                         Log.e(
                             TAG,
-                            ConnectionDiagnostics.logFailureMessage(
+                            ConnectionDiagnostics.failureMessage(
                                 result,
                                 "Config error"
                             )
@@ -132,7 +132,7 @@ class AeroBoxTileService : TileService() {
                         pendingAction = null
                         Log.e(
                             TAG,
-                            ConnectionDiagnostics.logFailureMessage(
+                            ConnectionDiagnostics.failureMessage(
                                 result,
                                 "Failed to start VPN from tile"
                             ),

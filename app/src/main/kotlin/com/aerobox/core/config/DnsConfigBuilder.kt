@@ -130,16 +130,9 @@ internal object DnsConfigBuilder {
         directDns: String
     ): String? {
         return runCatching {
-            val normalizedRemote = normalizeRemoteDnsAddress(remoteDns)
-            val normalizedDirect = normalizeDirectDnsAddress(directDns)
-            validateDnsServerSpec(
-                label = context.getString(R.string.dns_label_remote),
-                spec = parseDnsServer(normalizedRemote)
-            )
-            validateDnsServerSpec(
-                label = context.getString(R.string.dns_label_direct),
-                spec = parseDnsServer(normalizedDirect)
-            )
+            // Normalization validates through the same parser used to build the config.
+            normalizeRemoteDnsAddress(remoteDns)
+            normalizeDirectDnsAddress(directDns)
             null
         }.getOrElse { error ->
             when (error) {
@@ -190,29 +183,6 @@ internal object DnsConfigBuilder {
                     )
                 }
             }
-    }
-
-    private fun validateDnsServerSpec(
-        label: String,
-        spec: DnsServerSpec
-    ) {
-        if (spec.server.isBlank()) {
-            throw LocalizedException.of(R.string.error_dns_address_invalid_format, label)
-        }
-        if (spec.serverPort !in 1..65535) {
-            throw LocalizedException.of(R.string.error_dns_port_invalid_format, label)
-        }
-        if (spec.type !in supportedDnsTypes) {
-            throw LocalizedException.of(R.string.error_dns_protocol_invalid_format, label)
-        }
-        if (!isValidDnsHostOrIp(spec.server)) {
-            throw LocalizedException.of(R.string.error_dns_address_invalid_format, label)
-        }
-        if (spec.type == "https" &&
-            (spec.path.isNullOrBlank() || !spec.path.startsWith("/"))
-        ) {
-            throw LocalizedException.of(R.string.error_dns_path_invalid_format, label)
-        }
     }
 
     private fun isValidDnsHostOrIp(server: String): Boolean {

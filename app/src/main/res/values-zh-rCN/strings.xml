@@ -168,10 +168,6 @@
     <string name="error_unsupported_proxy_protocol">%1$s 不是受支持的代理协议</string>
     <string name="error_no_new_nodes_imported">未导入新节点，可能已存在相同配置</string>
     <string name="imported_node_default_name_format">导入节点 %1$d</string>
-    <string name="error_dns_address_invalid_format">%1$s 地址无效</string>
-    <string name="error_dns_port_invalid_format">%1$s 端口无效</string>
-    <string name="error_dns_protocol_invalid_format">%1$s 协议无效</string>
-    <string name="error_dns_path_invalid_format">%1$s 路径无效</string>
     <string name="error_dns_invalid_format_generic">DNS 地址格式无效</string>
     <string name="dns_label_remote">远程 DNS</string>
     <string name="dns_label_direct">直连 DNS</string>

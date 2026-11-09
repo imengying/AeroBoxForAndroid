@@ -61,10 +61,6 @@ type WIFIState struct {
 	BSSID string
 }
 
-func NewWIFIState(wifiSSID string, wifiBSSID string) *WIFIState {
-	return &WIFIState{wifiSSID, wifiBSSID}
-}
-
 type NetworkInterfaceIterator interface {
 	Next() *NetworkInterface
 	HasNext() bool
@@ -78,18 +74,4 @@ type Notification struct {
 	Subtitle   string
 	Body       string
 	OpenURL    string
-}
-
-type OnDemandRule interface {
-	Target() int32
-	DNSSearchDomainMatch() StringIterator
-	DNSServerAddressMatch() StringIterator
-	InterfaceTypeMatch() int32
-	SSIDMatch() StringIterator
-	ProbeURL() string
-}
-
-type OnDemandRuleIterator interface {
-	Next() OnDemandRule
-	HasNext() bool
 }

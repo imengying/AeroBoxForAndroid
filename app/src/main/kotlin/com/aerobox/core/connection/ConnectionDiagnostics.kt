@@ -89,45 +89,18 @@ object ConnectionDiagnostics {
         }
     }
 
-    fun issueFromResult(result: VpnConnectionResult): ConnectionIssue? {
-        return when (result) {
-            is VpnConnectionResult.InvalidConfig -> classify(result.error)
-            is VpnConnectionResult.Failure -> {
-                val rawError = result.throwable.message?.takeIf { it.isNotBlank() }
-                    ?: result.throwable.toString()
-                classify(rawError)
-            }
-            VpnConnectionResult.NoNodeAvailable,
-            is VpnConnectionResult.Success -> null
-        }
-    }
-
-    /**
-     * Compose a snackbar-style failure message. Prefer the un-translated raw
-     * core error because it is more useful for diagnostics and should not vary
-     * with the device/app language.
-     */
-    fun userFacingFailureMessage(
-        result: VpnConnectionResult,
-        operationFailedText: String
-    ): String {
-        val issue = issueFromResult(result) ?: return operationFailedText
-        return issue.rawError.takeIf { it.isNotBlank() } ?: operationFailedText
-    }
-
-    /**
-     * Build a developer-facing log line using the raw core error. Logs should
-     * stay language-neutral so they are easy to search and compare.
-     */
-    fun logFailureMessage(
+    /** Preserve the same underlying error in UI feedback and logs. */
+    fun failureMessage(
         result: VpnConnectionResult,
         fallback: String
     ): String {
-        val issue = issueFromResult(result)
-        return when {
-            issue?.rawError?.isNotBlank() == true -> issue.rawError
-            result is VpnConnectionResult.Failure -> result.throwable.message ?: fallback
-            else -> fallback
+        val message = when (result) {
+            is VpnConnectionResult.InvalidConfig -> result.error
+            is VpnConnectionResult.Failure -> result.throwable.message?.takeIf { it.isNotBlank() }
+                ?: result.throwable.toString()
+            VpnConnectionResult.NoNodeAvailable,
+            is VpnConnectionResult.Success -> null
         }
+        return message?.takeIf { it.isNotBlank() } ?: fallback
     }
 }

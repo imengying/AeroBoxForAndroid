@@ -33,16 +33,8 @@ type urlTestPlatformInterface struct {
 	platformInterface PlatformInterface
 }
 
-func (i *urlTestPlatformInterface) UsePlatformAutoDetectInterfaceControl() bool {
-	return true
-}
-
 func (i *urlTestPlatformInterface) AutoDetectInterfaceControl(fd int) error {
 	return i.platformInterface.AutoDetectInterfaceControl(int32(fd))
-}
-
-func (i *urlTestPlatformInterface) UsePlatformDefaultInterfaceMonitor() bool {
-	return true
 }
 
 func (i *urlTestPlatformInterface) CreateDefaultInterfaceMonitor(logger logger.Logger) tun.DefaultInterfaceMonitor {

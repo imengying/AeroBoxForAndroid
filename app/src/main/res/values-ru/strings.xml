@@ -186,10 +186,6 @@
     <string name="error_unsupported_proxy_protocol">%1$s не является поддерживаемым прокси-протоколом</string>
     <string name="error_no_new_nodes_imported">Новые узлы не импортированы; идентичные конфигурации, возможно, уже существуют</string>
     <string name="imported_node_default_name_format">Импортированный узел %1$d</string>
-    <string name="error_dns_address_invalid_format">Адрес «%1$s» некорректен</string>
-    <string name="error_dns_port_invalid_format">Порт «%1$s» некорректен</string>
-    <string name="error_dns_protocol_invalid_format">Протокол «%1$s» некорректен</string>
-    <string name="error_dns_path_invalid_format">Путь «%1$s» некорректен</string>
     <string name="error_dns_invalid_format_generic">Формат DNS-адреса некорректен</string>
     <string name="dns_label_remote">Удалённый DNS</string>
     <string name="dns_label_direct">Прямой DNS</string>
