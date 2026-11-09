@@ -13,6 +13,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.net.Inet6Address
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
@@ -23,7 +25,9 @@ import kotlin.coroutines.resume
  * sockets per detection, avoiding stale connections from before VPN routing
  * changed. Callers must call [shutdown] when the detector is no longer needed.
  */
-class PublicIpDetector {
+class PublicIpDetector internal constructor(
+    private val endpointProvider: (IpFamily, Boolean) -> List<String> = ::endpoints
+) {
 
     private companion object {
         val IPV4_REGEX = Regex("""^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$""")
@@ -45,6 +49,11 @@ class PublicIpDetector {
             "https://api6.ipify.org",
             "https://v6.ident.me"
         )
+
+        fun endpoints(family: IpFamily, proxied: Boolean): List<String> = when (family) {
+            IpFamily.IPV4 -> if (proxied) PROXIED_IPV4_ENDPOINTS else DIRECT_IPV4_ENDPOINTS + PROXIED_IPV4_ENDPOINTS
+            IpFamily.IPV6 -> if (proxied) PROXIED_IPV6_ENDPOINTS else DIRECT_IPV6_ENDPOINTS + PROXIED_IPV6_ENDPOINTS
+        }
     }
 
     // Standalone instance — intentionally NOT derived from SharedHttpClient so that
@@ -56,47 +65,22 @@ class PublicIpDetector {
         .readTimeout(3, TimeUnit.SECONDS)
         .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
         .retryOnConnectionFailure(false)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 
     /**
-     * Detect the public IP address.
+     * Test one exit address family independently through the application's network.
      *
-     * @param preferIpv6Only true when the current proxy node is IPv6-only
      * @param useProxyFriendlyEndpoints true when VPN is connected (avoids
      *   China-only endpoints that may be unreachable through the proxy)
      * @return the detected IP address string, or null if detection fails
      */
     suspend fun detect(
-        preferIpv6Only: Boolean,
+        family: IpFamily,
         useProxyFriendlyEndpoints: Boolean
     ): String? = withContext(Dispatchers.IO) {
-        val ipv4Endpoints = if (useProxyFriendlyEndpoints) {
-            PROXIED_IPV4_ENDPOINTS
-        } else {
-            DIRECT_IPV4_ENDPOINTS + PROXIED_IPV4_ENDPOINTS
-        }
-        val ipv6Endpoints = if (useProxyFriendlyEndpoints) {
-            PROXIED_IPV6_ENDPOINTS
-        } else {
-            DIRECT_IPV6_ENDPOINTS + PROXIED_IPV6_ENDPOINTS
-        }
-        val endpointGroups = if (preferIpv6Only) {
-            listOf(ipv6Endpoints)
-        } else {
-            listOf(ipv4Endpoints, ipv6Endpoints)
-        }
-
-        for (group in endpointGroups) {
-            val detected = raceEndpoints(group)
-            if (!detected.isNullOrBlank()) {
-                return@withContext detected
-            }
-        }
-
-        // NOTE: do NOT call dispatcher.cancelAll() here — a new detection round
-        // may already be in-flight on the same client. Individual OkHttp calls
-        // are cancelled via invokeOnCancellation in fetchIpFromEndpoint.
-        null
+        raceEndpoints(endpointProvider(family, useProxyFriendlyEndpoints), family)
     }
 
     /** Release resources held by the internal HTTP client. */
@@ -105,12 +89,12 @@ class PublicIpDetector {
         client.connectionPool.evictAll()
     }
 
-    private suspend fun raceEndpoints(endpoints: List<String>): String? = supervisorScope {
+    private suspend fun raceEndpoints(endpoints: List<String>, family: IpFamily): String? = supervisorScope {
         val uniqueEndpoints = endpoints.distinct()
         val resultChannel = Channel<String?>(capacity = uniqueEndpoints.size)
         val jobs = uniqueEndpoints.map { endpoint ->
             launch {
-                resultChannel.trySend(fetchIpFromEndpoint(endpoint))
+                resultChannel.trySend(fetchIpFromEndpoint(endpoint, family))
             }
         }
 
@@ -128,7 +112,7 @@ class PublicIpDetector {
         }
     }
 
-    private suspend fun fetchIpFromEndpoint(endpoint: String): String? =
+    private suspend fun fetchIpFromEndpoint(endpoint: String, family: IpFamily): String? =
         suspendCancellableCoroutine { continuation ->
             val request = Request.Builder()
                 .url(endpoint)
@@ -149,7 +133,7 @@ class PublicIpDetector {
                         response.use {
                             val source = it.body.source()
                             if (!it.isSuccessful || source.request(257L)) null
-                            else source.readUtf8().trim().takeIf(::isLikelyIpAddress)
+                            else source.readUtf8().trim().takeIf { address -> matchesFamily(address, family) }
                         }
                     } catch (_: IOException) {
                         null
@@ -161,8 +145,11 @@ class PublicIpDetector {
             })
         }
 
-    private fun isLikelyIpAddress(value: String): Boolean {
-        val text = value.trim()
-        return IPV4_REGEX.matches(text) || (text.contains(':') && IPV6_REGEX.matches(text))
+    private fun matchesFamily(value: String, family: IpFamily): Boolean {
+        return when (family) {
+            IpFamily.IPV4 -> IPV4_REGEX.matches(value)
+            IpFamily.IPV6 -> value.contains(':') && IPV6_REGEX.matches(value) &&
+                runCatching { InetAddress.getByName(value) is Inet6Address }.getOrDefault(false)
+        }
     }
 }

@@ -42,15 +42,15 @@ class DnsConfigBuilderTest {
         }
     }
 
-    @Test fun normalizationDoesNotHideBadPortsOrSchemesAndStillSupportsIpv6Bootstrap() {
-        for (ipv6Only in listOf(false, true)) {
+    @Test fun normalizationDoesNotHideBadPortsOrSchemesOrRewriteDirectDns() {
+        for (fakeDns in listOf(false, true)) {
             for (address in listOf("https://1.1.1.1:0/dns-query", "tls://1.1.1.1:0", "invalid://dns")) {
                 for (remote in listOf(false, true)) {
                     try {
                         DnsConfigBuilder.buildDns(
                             if (remote) address else "https://cloudflare-dns.com/dns-query",
                             if (remote) "udp://223.5.5.5" else address,
-                            RoutingMode.GLOBAL_PROXY, false, IPv6Mode.ENABLE, ipv6Only
+                            RoutingMode.GLOBAL_PROXY, false, IPv6Mode.ENABLE, fakeDns
                         )
                         fail("Normalization accepted $address")
                     } catch (_: LocalizedException) { }
@@ -60,7 +60,7 @@ class DnsConfigBuilderTest {
         val dns = DnsConfigBuilder.buildDns("https://1.1.1.1/dns-query", "udp://223.5.5.5:5353",
             RoutingMode.GLOBAL_PROXY, false, IPv6Mode.ENABLE, true)
         assertEquals("cloudflare-dns.com", dns.getJSONArray("servers").getJSONObject(0).getString("server"))
-        assertEquals("2400:3200::1", dns.getJSONArray("servers").getJSONObject(1).getString("server"))
+        assertEquals("223.5.5.5", dns.getJSONArray("servers").getJSONObject(1).getString("server"))
         assertEquals(5353, dns.getJSONArray("servers").getJSONObject(1).getInt("server_port"))
     }
 }

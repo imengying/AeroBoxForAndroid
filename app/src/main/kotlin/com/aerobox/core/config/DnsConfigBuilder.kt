@@ -31,71 +31,49 @@ internal object DnsConfigBuilder {
         routingMode: RoutingMode,
         enableGeoCnDomainRule: Boolean,
         ipv6Mode: IPv6Mode,
-        nodeIsIpv6Only: Boolean = false,
+        enableFakeDns: Boolean = false,
         serverDomainHint: String? = null
     ): JSONObject {
-        // IPv6-only proxies need IPv6-first bootstrap resolution for remote DNS.
-        val remoteDnsStrategy = if (nodeIsIpv6Only) "prefer_ipv6" else ipv6Mode.domainStrategy()
         val localResolverServer = buildLocalPlatformDnsServer(
             tag = ConfigGenerator.DNS_LOCAL_TAG
         )
 
-        val normalizedDirectDns = normalizeDirectDnsAddress(directDns, nodeIsIpv6Only)
+        val normalizedDirectDns = normalizeDirectDnsAddress(directDns)
         val directServer = buildDnsServer(
             tag = ConfigGenerator.DNS_DIRECT_TAG,
             dns = normalizedDirectDns,
-            resolverTag = ConfigGenerator.DNS_LOCAL_TAG,
-            ipv6Mode = ipv6Mode
-        )
-
-        val bootstrapServer = buildDnsServer(
-            tag = ConfigGenerator.DNS_BOOTSTRAP_TAG,
-            dns = buildBootstrapDnsAddress(nodeIsIpv6Only),
-            resolverTag = ConfigGenerator.DNS_LOCAL_TAG,
-            ipv6Mode = ipv6Mode
+            resolverTag = ConfigGenerator.DNS_LOCAL_TAG
         )
 
         if (routingMode == RoutingMode.DIRECT) {
             return JSONObject()
-                .put("servers", JSONArray().put(directServer).put(localResolverServer).put(bootstrapServer))
+                .put("servers", JSONArray().put(directServer).put(localResolverServer))
                 .put("final", ConfigGenerator.DNS_DIRECT_TAG)
                 .put("strategy", ipv6Mode.domainStrategy())
         }
 
         val remoteServer = buildDnsServer(
             tag = ConfigGenerator.DNS_REMOTE_TAG,
-            dns = normalizeRemoteDnsAddress(remoteDns, nodeIsIpv6Only),
+            dns = normalizeRemoteDnsAddress(remoteDns),
             detour = "proxy",
-            resolverTag = ConfigGenerator.DNS_DIRECT_TAG,
-            ipv6Mode = ipv6Mode,
-            dialStrategyOverride = remoteDnsStrategy
+            resolverTag = ConfigGenerator.DNS_DIRECT_TAG
         )
 
         val servers = JSONArray().apply {
             put(remoteServer)
             put(directServer)
             put(localResolverServer)
-            put(bootstrapServer)
-            if (nodeIsIpv6Only) {
-                put(buildFakeIpDnsServer())
+            if (enableFakeDns) {
+                put(buildFakeIpDnsServer(ipv6Mode))
             }
         }
 
         val dns = JSONObject()
             .put("servers", servers)
             .put("final", ConfigGenerator.DNS_REMOTE_TAG)
-            .put("strategy", if (nodeIsIpv6Only) "prefer_ipv6" else ipv6Mode.domainStrategy())
+            .put("strategy", ipv6Mode.domainStrategy())
 
         val dnsRules = JSONArray()
-        if (nodeIsIpv6Only) {
-            dnsRules.put(
-                JSONObject()
-                    .put("inbound", JSONArray().put("tun-in"))
-                    .put("action", "route")
-                    .put("server", ConfigGenerator.DNS_FAKE_TAG)
-                    .put("disable_cache", true)
-            )
-        }
         serverDomainHint
             ?.lowercase()
             ?.takeIf { it.isNotBlank() }
@@ -115,6 +93,30 @@ internal object DnsConfigBuilder {
                     .put("server", ConfigGenerator.DNS_DIRECT_TAG)
             )
         }
+        if (enableFakeDns) {
+            // Keep local names on real DNS; retain other VPN domain names until routing.
+            dnsRules.put(
+                JSONObject()
+                    .put("domain_suffix", JSONArray().put(".lan").put(".local").put(".home.arpa"))
+                    .put("action", "route")
+                    .put("server", ConfigGenerator.DNS_DIRECT_TAG)
+            )
+            dnsRules.put(
+                JSONObject()
+                    .put("inbound", JSONArray().put("tun-in"))
+                    .put("query_type", JSONArray().put("A").put("AAAA"))
+                    .put("action", "route")
+                    .put("server", ConfigGenerator.DNS_FAKE_TAG)
+            )
+            // Real address hints in HTTPS/SVCB records would bypass the FakeIP mapping.
+            dnsRules.put(
+                JSONObject()
+                    .put("inbound", JSONArray().put("tun-in"))
+                    .put("query_type", JSONArray().put("HTTPS").put("SVCB"))
+                    .put("action", "predefined")
+                    .put("rcode", "NOERROR")
+            )
+        }
         if (dnsRules.length() > 0) {
             dns.put("rules", dnsRules)
         }
@@ -125,22 +127,18 @@ internal object DnsConfigBuilder {
     fun validateDnsSettings(
         context: Context,
         remoteDns: String,
-        directDns: String,
-        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
-        nodeIsIpv6Only: Boolean = false
+        directDns: String
     ): String? {
         return runCatching {
-            val normalizedRemote = normalizeRemoteDnsAddress(remoteDns, nodeIsIpv6Only)
-            val normalizedDirect = normalizeDirectDnsAddress(directDns, nodeIsIpv6Only)
+            val normalizedRemote = normalizeRemoteDnsAddress(remoteDns)
+            val normalizedDirect = normalizeDirectDnsAddress(directDns)
             validateDnsServerSpec(
                 label = context.getString(R.string.dns_label_remote),
-                spec = parseDnsServer(normalizedRemote),
-                ipv6Mode = ipv6Mode
+                spec = parseDnsServer(normalizedRemote)
             )
             validateDnsServerSpec(
                 label = context.getString(R.string.dns_label_direct),
-                spec = parseDnsServer(normalizedDirect),
-                ipv6Mode = ipv6Mode
+                spec = parseDnsServer(normalizedDirect)
             )
             null
         }.getOrElse { error ->
@@ -154,16 +152,12 @@ internal object DnsConfigBuilder {
 
     // ── Private helpers ──────────────────────────────────────────────
 
-    private fun buildFakeIpDnsServer(): JSONObject {
+    private fun buildFakeIpDnsServer(ipv6Mode: IPv6Mode): JSONObject {
         return JSONObject()
             .put("type", "fakeip")
             .put("tag", ConfigGenerator.DNS_FAKE_TAG)
             .put("inet4_range", "198.18.0.0/15")
-            .put("inet6_range", "fc00::/18")
-    }
-
-    private fun buildBootstrapDnsAddress(nodeIsIpv6Only: Boolean): String {
-        return if (nodeIsIpv6Only) "2606:4700:4700::1111" else "1.1.1.1"
+            .apply { if (ipv6Mode.enablesIpv6Tun()) put("inet6_range", "fc00::/18") }
     }
 
     private fun buildLocalPlatformDnsServer(tag: String): JSONObject {
@@ -176,9 +170,7 @@ internal object DnsConfigBuilder {
         tag: String,
         dns: String,
         detour: String? = null,
-        resolverTag: String? = null,
-        ipv6Mode: IPv6Mode,
-        dialStrategyOverride: String? = null
+        resolverTag: String? = null
     ): JSONObject {
         val spec = parseDnsServer(dns)
         return JSONObject()
@@ -190,12 +182,11 @@ internal object DnsConfigBuilder {
                 detour?.let { put("detour", it) }
                 spec.path?.let { put("path", it) }
                 if (!ConfigGenerator.isIpLiteral(spec.server)) {
-                    val strategy = dialStrategyOverride ?: ipv6Mode.domainStrategy()
                     put(
                         "domain_resolver",
                         JSONObject()
-                            .put("server", resolverTag ?: ConfigGenerator.DNS_BOOTSTRAP_TAG)
-                            .put("strategy", strategy)
+                            .put("server", resolverTag ?: ConfigGenerator.DNS_LOCAL_TAG)
+                            .put("strategy", "prefer_ipv4")
                     )
                 }
             }
@@ -203,8 +194,7 @@ internal object DnsConfigBuilder {
 
     private fun validateDnsServerSpec(
         label: String,
-        spec: DnsServerSpec,
-        ipv6Mode: IPv6Mode
+        spec: DnsServerSpec
     ) {
         if (spec.server.isBlank()) {
             throw LocalizedException.of(R.string.error_dns_address_invalid_format, label)
@@ -222,9 +212,6 @@ internal object DnsConfigBuilder {
             (spec.path.isNullOrBlank() || !spec.path.startsWith("/"))
         ) {
             throw LocalizedException.of(R.string.error_dns_path_invalid_format, label)
-        }
-        if (ipv6Mode == IPv6Mode.DISABLE && ConfigGenerator.isIpv6Literal(spec.server)) {
-            throw LocalizedException.of(R.string.error_dns_no_ipv6_format, label)
         }
     }
 
@@ -245,43 +232,14 @@ internal object DnsConfigBuilder {
         }
     }
 
-    private fun normalizeRemoteDnsAddress(remoteDns: String, nodeIsIpv6Only: Boolean = false): String {
-        val trimmed = remoteDns.trim()
-        if (trimmed.isBlank()) {
-            return "https://cloudflare-dns.com/dns-query"
-        }
-
-        parseDnsServer(trimmed) // Validate before normalization can replace a host or default port.
+    private fun normalizeRemoteDnsAddress(remoteDns: String): String {
+        val trimmed = remoteDns.trim().ifBlank { "https://cloudflare-dns.com/dns-query" }
+        parseDnsServer(trimmed) // Validate before normalizing a known encrypted DNS hostname.
         return when {
             trimmed.startsWith("https://") -> normalizeEncryptedDnsEndpoint(trimmed, "https")
-            trimmed.startsWith("tls://") -> {
-                normalizeEncryptedDnsEndpoint(trimmed, "tls")
-            }
-            trimmed.startsWith("quic://") -> {
-                normalizeEncryptedDnsEndpoint(trimmed, "quic")
-            }
-            trimmed.startsWith("tcp://") -> normalizeIpv6OnlyDnsEndpoint(
-                value = trimmed,
-                scheme = "tcp",
-                defaultPort = 53
-            ).takeIf { nodeIsIpv6Only } ?: trimmed
-            trimmed.startsWith("udp://") -> normalizeIpv6OnlyDnsEndpoint(
-                value = trimmed,
-                scheme = "udp",
-                defaultPort = 53
-            ).takeIf { nodeIsIpv6Only } ?: trimmed
-            else -> if (nodeIsIpv6Only) knownIpv6DnsAddress(trimmed) ?: trimmed else trimmed
-        }
-    }
-
-    private fun knownIpv6DnsAddress(ipv4Dns: String): String? {
-        return when (ipv4Dns.removePrefix("[").removeSuffix("]")) {
-            "1.1.1.1", "1.0.0.1" -> "2606:4700:4700::1111"
-            "8.8.8.8", "8.8.4.4" -> "2001:4860:4860::8888"
-            "9.9.9.9" -> "2620:fe::fe"
-            "223.5.5.5", "223.6.6.6" -> "2400:3200::1"
-            "119.29.29.29" -> "2402:4e00::"
-            else -> null
+            trimmed.startsWith("tls://") -> normalizeEncryptedDnsEndpoint(trimmed, "tls")
+            trimmed.startsWith("quic://") -> normalizeEncryptedDnsEndpoint(trimmed, "quic")
+            else -> trimmed
         }
     }
 
@@ -320,77 +278,24 @@ internal object DnsConfigBuilder {
         }
     }
 
-    private fun normalizeDirectDnsAddress(directDns: String, nodeIsIpv6Only: Boolean = false): String {
+    private fun normalizeDirectDnsAddress(directDns: String): String {
         val trimmed = directDns.trim()
-        if (trimmed == "[ipv4]" || trimmed == "[ipv6]") {
-            return if (nodeIsIpv6Only) "2400:3200::1" else "223.5.5.5"
-        }
-        if (trimmed.isBlank()) return "https://dns.alidns.com/dns-query"
-        parseDnsServer(trimmed)
-        if (!nodeIsIpv6Only) return trimmed
-
-        return when {
-            trimmed.startsWith("https://") -> normalizeEncryptedDnsEndpoint(trimmed, "https")
-            trimmed.startsWith("tls://") -> normalizeIpv6OnlyDnsEndpoint(
-                value = trimmed,
-                scheme = "tls",
-                defaultPort = 853,
-                preferKnownEncryptedHost = true
-            )
-            trimmed.startsWith("quic://") -> normalizeIpv6OnlyDnsEndpoint(
-                value = trimmed,
-                scheme = "quic",
-                defaultPort = 853,
-                preferKnownEncryptedHost = true
-            )
-            trimmed.startsWith("tcp://") -> normalizeIpv6OnlyDnsEndpoint(
-                value = trimmed,
-                scheme = "tcp",
-                defaultPort = 53
-            )
-            trimmed.startsWith("udp://") -> normalizeIpv6OnlyDnsEndpoint(
-                value = trimmed,
-                scheme = "udp",
-                defaultPort = 53
-            )
-            else -> normalizeIpv6OnlyDnsHostPort(trimmed, defaultPort = 53)
-        }
-    }
-
-    private fun normalizeIpv6OnlyDnsEndpoint(
-        value: String,
-        scheme: String,
-        defaultPort: Int,
-        preferKnownEncryptedHost: Boolean = false
-    ): String {
-        val rawHost = value.removePrefix("$scheme://")
-        val hadExplicitPort = hasExplicitPort(rawHost)
-        val (host, port) = parseHostAndPort(rawHost, defaultPort)
-        val mappedHost = if (preferKnownEncryptedHost) {
-            knownEncryptedDnsHost(host) ?: knownIpv6DnsAddress(host)
-        } else {
-            knownIpv6DnsAddress(host)
-        } ?: return value
-        return buildDnsEndpoint(mappedHost, port, defaultPort, scheme, hadExplicitPort)
-    }
-
-    private fun normalizeIpv6OnlyDnsHostPort(value: String, defaultPort: Int): String {
-        val hadExplicitPort = hasExplicitPort(value)
-        val (host, port) = parseHostAndPort(value, defaultPort)
-        val mappedHost = knownIpv6DnsAddress(host) ?: return value
-        return buildDnsEndpoint(mappedHost, port, defaultPort, scheme = null, hadExplicitPort = hadExplicitPort)
+        // Preserve old backup values without guessing the proxy exit family.
+        if (trimmed == "[ipv4]") return "223.5.5.5"
+        if (trimmed == "[ipv6]") return "2400:3200::1"
+        return trimmed.ifBlank { "https://dns.alidns.com/dns-query" }.also { parseDnsServer(it) }
     }
 
     private fun buildDnsEndpoint(
         host: String,
         port: Int,
         defaultPort: Int,
-        scheme: String?,
+        scheme: String,
         hadExplicitPort: Boolean
     ): String {
         val formattedHost = if (host.contains(':')) "[$host]" else host
         val authority = if (hadExplicitPort || port != defaultPort) "$formattedHost:$port" else formattedHost
-        return if (scheme != null) "$scheme://$authority" else authority
+        return "$scheme://$authority"
     }
 
     private fun hasExplicitPort(value: String): Boolean {
@@ -404,7 +309,8 @@ internal object DnsConfigBuilder {
     internal fun parseDnsServer(dns: String): DnsServerSpec {
         val value = dns.trim()
         // Old backup placeholders are still supported as plain UDP addresses.
-        if (value == "[ipv4]" || value == "[ipv6]") return DnsServerSpec("udp", "1.1.1.1", 53)
+        if (value == "[ipv4]") return DnsServerSpec("udp", "1.1.1.1", 53)
+        if (value == "[ipv6]") return DnsServerSpec("udp", "2606:4700:4700::1111", 53)
         val scheme = if (value.contains("://")) value.substringBefore("://").lowercase() else "udp"
         requireDns(scheme in supportedDnsTypes)
         val defaultPort = when (scheme) {

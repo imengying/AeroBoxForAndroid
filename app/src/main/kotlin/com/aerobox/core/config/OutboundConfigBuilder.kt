@@ -2,7 +2,6 @@ package com.aerobox.core.config
 
 import com.aerobox.R
 import com.aerobox.core.errors.LocalizedException
-import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
 import com.aerobox.data.model.effectiveEnabledNetwork
@@ -21,9 +20,7 @@ internal object OutboundConfigBuilder {
     private val supportedMuxProtocols = setOf("smux", "yamux", "h2mux")
 
     fun buildProxyOutbound(
-        node: ProxyNode,
-        ipv6Mode: IPv6Mode,
-        nodeIsIpv6Only: Boolean
+        node: ProxyNode
     ): JSONObject {
         validateTlsServerNameRequirements(node)
         val cleanServer = ConfigGenerator.normalizeOutboundServer(node.server)
@@ -205,14 +202,8 @@ internal object OutboundConfigBuilder {
                 "domain_resolver",
                 JSONObject()
                     .put("server", ConfigGenerator.DNS_DIRECT_TAG)
-                    .put(
-                        "strategy",
-                        if (nodeIsIpv6Only || ipv6Mode.enablesIpv6Tun()) {
-                            "prefer_ipv6"
-                        } else {
-                            "ipv4_only"
-                        }
-                    )
+                    // Resolves the proxy entrance, independently of website IPv6 support.
+                    .put("strategy", "prefer_ipv4")
             )
         }
         return outbound

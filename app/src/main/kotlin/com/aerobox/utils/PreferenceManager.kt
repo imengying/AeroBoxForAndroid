@@ -40,6 +40,7 @@ object PreferenceManager {
     private val PER_APP_PROXY_PACKAGES = stringSetPreferencesKey("per_app_proxy_packages")
     private val ENABLE_SOCKS_INBOUND = booleanPreferencesKey("enable_socks_inbound")
     private val ENABLE_HTTP_INBOUND = booleanPreferencesKey("enable_http_inbound")
+    private val ENABLE_FAKE_DNS = booleanPreferencesKey("enable_fake_dns")
     private val IPV6_MODE = stringPreferencesKey("ipv6_mode")
     private val AUTO_RECONNECT = booleanPreferencesKey("auto_reconnect")
     private val ENABLE_GEO_RULES = booleanPreferencesKey("enable_geo_rules")
@@ -55,7 +56,7 @@ object PreferenceManager {
     private val backupBooleans = listOf(DYNAMIC_COLOR, AUTO_CONNECT, PER_APP_PROXY_ENABLED,
         ENABLE_SOCKS_INBOUND, ENABLE_HTTP_INBOUND, AUTO_RECONNECT, ENABLE_GEO_RULES,
         ENABLE_GEO_CN_DOMAIN_RULE, ENABLE_GEO_CN_IP_RULE, ENABLE_GEO_ADS_BLOCK,
-        ENABLE_GEO_BLOCK_QUIC, PER_APP_SHOW_SYSTEM)
+        ENABLE_GEO_BLOCK_QUIC, PER_APP_SHOW_SYSTEM, ENABLE_FAKE_DNS)
 
     suspend fun exportSettings(context: Context): JSONObject {
         val prefs = context.dataStore.data.first()
@@ -154,6 +155,13 @@ object PreferenceManager {
         context.dataStore.data.map {
             runCatching { IPv6Mode.valueOf(it[IPV6_MODE] ?: "") }.getOrDefault(IPv6Mode.DISABLE)
         }
+
+    fun enableFakeDnsFlow(context: Context): Flow<Boolean> =
+        context.dataStore.data.map { it[ENABLE_FAKE_DNS] ?: false }
+
+    suspend fun setEnableFakeDns(context: Context, enabled: Boolean) {
+        context.dataStore.edit { it[ENABLE_FAKE_DNS] = enabled }
+    }
 
     fun autoReconnectFlow(context: Context): Flow<Boolean> =
         context.dataStore.data.map { it[AUTO_RECONNECT] ?: true }
@@ -285,6 +293,7 @@ object PreferenceManager {
         val enableSocksInbound: Boolean,
         val enableHttpInbound: Boolean,
         val ipv6Mode: IPv6Mode,
+        val enableFakeDns: Boolean,
         val enableGeoRules: Boolean,
         val enableGeoCnDomainRule: Boolean,
         val enableGeoCnIpRule: Boolean,
@@ -306,6 +315,7 @@ object PreferenceManager {
             enableSocksInbound = prefs[ENABLE_SOCKS_INBOUND] ?: false,
             enableHttpInbound = prefs[ENABLE_HTTP_INBOUND] ?: false,
             ipv6Mode = ipv6Mode,
+            enableFakeDns = prefs[ENABLE_FAKE_DNS] ?: false,
             enableGeoRules = prefs[ENABLE_GEO_RULES] ?: false,
             enableGeoCnDomainRule = prefs[ENABLE_GEO_CN_DOMAIN_RULE] ?: false,
             enableGeoCnIpRule = prefs[ENABLE_GEO_CN_IP_RULE] ?: false,

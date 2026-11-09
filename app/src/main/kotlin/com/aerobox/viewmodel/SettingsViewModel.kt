@@ -96,6 +96,9 @@ class SettingsViewModel(
     val ipv6Mode: StateFlow<IPv6Mode> = PreferenceManager.ipv6ModeFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), IPv6Mode.DISABLE)
 
+    val enableFakeDns: StateFlow<Boolean> = PreferenceManager.enableFakeDnsFlow(appContext)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     val autoReconnect: StateFlow<Boolean> = PreferenceManager.autoReconnectFlow(appContext)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
@@ -190,6 +193,15 @@ class SettingsViewModel(
             readCurrent = { PreferenceManager.ipv6ModeFlow(appContext).first() },
             persist = { PreferenceManager.setIPv6Mode(appContext, it) },
             failurePrefix = appString(R.string.ipv6_setting_failed)
+        )
+    }
+
+    fun setEnableFakeDns(enabled: Boolean) = viewModelScope.launch {
+        applyRuntimeSetting(
+            newValue = enabled,
+            readCurrent = { PreferenceManager.enableFakeDnsFlow(appContext).first() },
+            persist = { PreferenceManager.setEnableFakeDns(appContext, it) },
+            failurePrefix = appString(R.string.dns_setting_failed)
         )
     }
 
@@ -356,14 +368,12 @@ class SettingsViewModel(
 
     private fun validateDnsSettings(
         remoteDns: String,
-        directDns: String,
-        ipv6Mode: IPv6Mode
+        directDns: String
     ): Boolean {
         val syntaxError = ConfigGenerator.validateDnsSettings(
             context = AppLocaleManager.localizedContext(appContext, languageTag.value),
             remoteDns = remoteDns,
-            directDns = directDns,
-            ipv6Mode = ipv6Mode
+            directDns = directDns
         )
         if (syntaxError != null) {
             _uiMessage.tryEmit(appString(R.string.dns_invalid_format, syntaxError))
@@ -380,8 +390,7 @@ class SettingsViewModel(
             },
             persist = { (remote, direct) -> PreferenceManager.setDnsServers(appContext, remote, direct) },
             transform = { previous ->
-                val ipv6Mode = PreferenceManager.readVpnConfigPreferences(appContext).ipv6Mode
-                if (validateDnsSettings(remoteDns, directDns, ipv6Mode)) remoteDns to directDns else previous
+                if (validateDnsSettings(remoteDns, directDns)) remoteDns to directDns else previous
             }
         )
         showRuntimeSettingsResult(result, appString(R.string.dns_setting_failed))

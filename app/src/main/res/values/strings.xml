@@ -59,7 +59,6 @@
     <string name="connection_fix_success">Fixed; please retry the connection</string>
     <string name="connection_fix_failed">Fix failed; check your network and try again</string>
     <string name="detecting_ip">Detecting…</string>
-    <string name="detecting_ip_later">Will detect automatically…</string>
     <string name="import_choose_group">Choose group</string>
     <plurals name="import_node_count">
         <item quantity="one">%1$d node will be imported</item>
@@ -82,8 +81,6 @@
     <string name="delete_node_confirm">Delete node “%1$s”?</string>
     <string name="group_empty_nodes">No nodes</string>
     <string name="switch_node_title">Switch node</string>
-    <string name="detect_failed_tap_retry">Detection failed; tap to retry</string>
-    <string name="tap_detect_exit_ip">Tap to detect exit IP</string>
     <string name="switched_to_mode">Switched to %1$s</string>
     <string name="subscription_refreshed_new_node">Subscription refreshed; using matching new node: %1$s</string>
     <string name="node_current_suffix"> · current</string>
@@ -181,7 +178,6 @@
     <string name="error_dns_port_invalid_format">%1$s port is invalid</string>
     <string name="error_dns_protocol_invalid_format">%1$s protocol is invalid</string>
     <string name="error_dns_path_invalid_format">%1$s path is invalid</string>
-    <string name="error_dns_no_ipv6_format">%1$s cannot be an IPv6 address</string>
     <string name="error_dns_invalid_format_generic">DNS address format is invalid</string>
     <string name="dns_label_remote">Remote DNS</string>
     <string name="dns_label_direct">Direct DNS</string>
@@ -278,7 +274,7 @@
     <string name="settings_inbound_http">HTTP inbound</string>
     <string name="settings_inbound_port_format">Port %1$d</string>
     <string name="settings_auto_connect_summary">Auto-connect after boot</string>
-    <string name="settings_ipv6_summary">Enable IPv6 networking support</string>
+    <string name="settings_ipv6_summary">Allow apps to access IPv6 websites; requires a working IPv6 exit</string>
     <string name="settings_auto_reconnect">Auto-reconnect on drop</string>
     <string name="settings_auto_reconnect_summary">Reconnect automatically when the VPN drops unexpectedly</string>
     <string name="settings_log">Runtime log</string>
@@ -381,4 +377,9 @@
     <string name="node_edit_fingerprint">Client fingerprint</string>
     <string name="node_edit_reality_public_key">Reality public key</string>
     <string name="node_edit_reality_short_id">Reality short ID</string>
+    <string name="network_probe_not_tested">Not tested</string>
+    <string name="network_probe_disabled">Disabled</string>
+    <string name="network_probe_failed">No response; tap to retry</string>
+    <string name="settings_fake_dns_title">Domain compatibility (FakeIP)</string>
+    <string name="settings_fake_dns_summary">Let the proxy core select website addresses; applies in proxy modes</string>
 </resources>

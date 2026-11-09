@@ -8,7 +8,6 @@ import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.errors.LocalizedException
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.logging.RuntimeLogBuffer
-import com.aerobox.core.network.NodeAddressFamilyResolver
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.RoutingMode
@@ -82,7 +81,6 @@ class VpnConfigResolver(
         } else {
             null
         }
-        val nodeIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(node)
 
         val config = ConfigGenerator.generateSingBoxConfig(
             node = node,
@@ -100,7 +98,7 @@ class VpnConfigResolver(
             geoSiteCnRuleSetPath = geoSiteCnRuleSetPath,
             geoSiteAdsRuleSetPath = geoSiteAdsRuleSetPath,
             customRuleSets = prefs.customRuleSets,
-            nodeIsIpv6OnlyOverride = nodeIsIpv6Only
+            enableFakeDns = prefs.enableFakeDns
         )
         return config
     }

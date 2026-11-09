@@ -21,7 +21,6 @@ object ConfigGenerator {
     internal const val DNS_LOCAL_TAG = "dns-local"
     internal const val DNS_DIRECT_TAG = "dns-direct"
     internal const val DNS_REMOTE_TAG = "dns-remote"
-    internal const val DNS_BOOTSTRAP_TAG = "dns-bootstrap"
     internal const val DNS_FAKE_TAG = "dns-fake"
     private const val DEFAULT_TUN_MTU = 9000
     const val V2RAY_API_LISTEN = "127.0.0.1:10085"
@@ -34,7 +33,7 @@ object ConfigGenerator {
             var tag = name
             var suffix = 2
             while (!tags.add(tag)) tag = "$name (${suffix++})"
-            val outbound = OutboundConfigBuilder.buildProxyOutbound(node, IPv6Mode.ENABLE, isIpv6Literal(node.server))
+            val outbound = OutboundConfigBuilder.buildProxyOutbound(node)
             outbound.remove("domain_resolver")
             outbounds.put(outbound.put("tag", tag))
         }
@@ -44,11 +43,9 @@ object ConfigGenerator {
     fun validateDnsSettings(
         context: Context,
         remoteDns: String,
-        directDns: String,
-        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
-        nodeIsIpv6Only: Boolean = false
+        directDns: String
     ): String? {
-        return DnsConfigBuilder.validateDnsSettings(context, remoteDns, directDns, ipv6Mode, nodeIsIpv6Only)
+        return DnsConfigBuilder.validateDnsSettings(context, remoteDns, directDns)
     }
 
     fun generateSingBoxConfig(
@@ -67,7 +64,7 @@ object ConfigGenerator {
         geoSiteCnRuleSetPath: String? = null,
         geoSiteAdsRuleSetPath: String? = null,
         customRuleSets: List<CustomRuleSet> = emptyList(),
-        nodeIsIpv6OnlyOverride: Boolean? = null
+        enableFakeDns: Boolean = false
     ): String {
         val config = JSONObject()
         val hasGeoSiteCn = !geoSiteCnRuleSetPath.isNullOrBlank()
@@ -83,7 +80,6 @@ object ConfigGenerator {
                 .put("timestamp", true)
         )
 
-        val nodeIsIpv6Only = nodeIsIpv6OnlyOverride ?: isIpv6Literal(node.server)
         config.put(
             "dns",
             DnsConfigBuilder.buildDns(
@@ -92,7 +88,7 @@ object ConfigGenerator {
                 routingMode = routingMode,
                 enableGeoCnDomainRule = enableGeoCnDomainRule && hasGeoSiteCn,
                 ipv6Mode = ipv6Mode,
-                nodeIsIpv6Only = nodeIsIpv6Only,
+                enableFakeDns = enableFakeDns && routingMode != RoutingMode.DIRECT,
                 serverDomainHint = normalizeOutboundServer(node.server)
                     .takeUnless { it.isBlank() || isIpLiteral(it) }
             )
@@ -102,7 +98,7 @@ object ConfigGenerator {
         val outboundsArray = JSONArray()
             .put(
                 OutboundConfigBuilder
-                    .buildProxyOutbound(node, ipv6Mode, nodeIsIpv6Only)
+                    .buildProxyOutbound(node)
                     .put("tag", PROXY_OUTBOUND_TAG)
             )
         outboundsArray.put(JSONObject().put("type", "direct").put("tag", "direct"))
@@ -113,7 +109,6 @@ object ConfigGenerator {
             RouteConfigBuilder.buildRoute(
                 routingMode = routingMode,
                 ipv6Mode = ipv6Mode,
-                nodeIsIpv6Only = nodeIsIpv6Only,
                 geoIpCnRuleSetPath = geoIpCnRuleSetPath,
                 geoSiteCnRuleSetPath = geoSiteCnRuleSetPath,
                 geoSiteAdsRuleSetPath = geoSiteAdsRuleSetPath,
@@ -124,7 +119,10 @@ object ConfigGenerator {
                 customRuleSets = enabledCustomRuleSets
             )
         )
-        config.put("experimental", buildExperimental(enableCacheFile = enabledCustomRuleSets.isNotEmpty()))
+        config.put("experimental", buildExperimental(
+            enableCacheFile = enabledCustomRuleSets.isNotEmpty(),
+            storeFakeIp = enableFakeDns && routingMode != RoutingMode.DIRECT
+        ))
 
         return config.toString(2)
     }
@@ -132,11 +130,9 @@ object ConfigGenerator {
     fun generateUrlTestConfig(
         node: ProxyNode,
         directDns: String = "udp://223.5.5.5",
-        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE,
-        nodeIsIpv6OnlyOverride: Boolean? = null
+        ipv6Mode: IPv6Mode = IPv6Mode.ENABLE
     ): String {
         val config = JSONObject()
-        val nodeIsIpv6Only = nodeIsIpv6OnlyOverride ?: isIpv6Literal(node.server)
         config.put(
             "log",
             JSONObject()
@@ -151,7 +147,6 @@ object ConfigGenerator {
                 routingMode = RoutingMode.DIRECT,
                 enableGeoCnDomainRule = false,
                 ipv6Mode = ipv6Mode,
-                nodeIsIpv6Only = nodeIsIpv6Only,
                 serverDomainHint = normalizeOutboundServer(node.server)
                     .takeUnless { it.isBlank() || isIpLiteral(it) }
             )
@@ -161,7 +156,7 @@ object ConfigGenerator {
         val urlTestOutbounds = JSONArray()
             .put(
                 OutboundConfigBuilder
-                    .buildProxyOutbound(node, ipv6Mode, nodeIsIpv6Only)
+                    .buildProxyOutbound(node)
                     .put("tag", PROXY_OUTBOUND_TAG)
             )
         urlTestOutbounds.put(JSONObject().put("type", "direct").put("tag", "direct"))
@@ -203,20 +198,14 @@ object ConfigGenerator {
             normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
     }
 
-    internal fun isIpv6Literal(server: String): Boolean {
-        val normalized = server.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
-        return normalized.contains(':') &&
-            normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' || it == ':' || it == '.' }
-    }
-
     // ── Private helpers ─────────────────────────────────────────────
 
-    private fun buildExperimental(enableCacheFile: Boolean): JSONObject {
+    private fun buildExperimental(enableCacheFile: Boolean, storeFakeIp: Boolean): JSONObject {
         return JSONObject().apply {
-            if (enableCacheFile) {
+            if (enableCacheFile || storeFakeIp) {
                 put(
                     "cache_file",
-                    JSONObject().put("enabled", true)
+                    JSONObject().put("enabled", true).put("store_fakeip", storeFakeIp)
                 )
             }
             put(

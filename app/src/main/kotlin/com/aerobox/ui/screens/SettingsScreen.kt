@@ -88,6 +88,7 @@ fun SettingsScreen(
     val enableSocksInbound by viewModel.enableSocksInbound.collectAsStateWithLifecycle()
     val enableHttpInbound by viewModel.enableHttpInbound.collectAsStateWithLifecycle()
     val ipv6Mode by viewModel.ipv6Mode.collectAsStateWithLifecycle()
+    val enableFakeDns by viewModel.enableFakeDns.collectAsStateWithLifecycle()
     val autoReconnect by viewModel.autoReconnect.collectAsStateWithLifecycle()
     val isCheckingAppUpdate by viewModel.isCheckingAppUpdate.collectAsStateWithLifecycle()
     val availableAppUpdate by viewModel.availableAppUpdate.collectAsStateWithLifecycle()
@@ -272,6 +273,20 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_dns_server),
                 supporting = stringResource(R.string.settings_dns_summary),
                 trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
+            )
+        }
+
+        item {
+            SettingItem(
+                icon = { Icon(AppIcons.Public, contentDescription = null) },
+                title = stringResource(R.string.settings_fake_dns_title),
+                supporting = stringResource(R.string.settings_fake_dns_summary),
+                trailing = {
+                    Switch(
+                        checked = enableFakeDns,
+                        onCheckedChange = viewModel::setEnableFakeDns
+                    )
+                }
             )
         }
 

@@ -59,7 +59,6 @@
     <string name="connection_fix_success">修復已完成，請重試連線</string>
     <string name="connection_fix_failed">修復失敗，請檢查網路後重試</string>
     <string name="detecting_ip">偵測中…</string>
-    <string name="detecting_ip_later">稍後自動偵測…</string>
     <string name="import_choose_group">選擇分組</string>
     <plurals name="import_node_count">
         <item quantity="other">將匯入 %1$d 個節點</item>
@@ -80,8 +79,6 @@
     <string name="delete_node_confirm">確定要刪除節點「%1$s」嗎？</string>
     <string name="group_empty_nodes">尚無節點</string>
     <string name="switch_node_title">切換節點</string>
-    <string name="detect_failed_tap_retry">偵測失敗，點擊重試</string>
-    <string name="tap_detect_exit_ip">點擊偵測出口 IP</string>
     <string name="switched_to_mode">已切換為%1$s</string>
     <string name="subscription_refreshed_new_node">訂閱更新後，已使用相符的新節點：%1$s</string>
     <string name="node_current_suffix"> · 目前</string>
@@ -175,7 +172,6 @@
     <string name="error_dns_port_invalid_format">%1$s 連接埠無效</string>
     <string name="error_dns_protocol_invalid_format">%1$s 通訊協定無效</string>
     <string name="error_dns_path_invalid_format">%1$s 路徑無效</string>
-    <string name="error_dns_no_ipv6_format">%1$s 不能是 IPv6 位址</string>
     <string name="error_dns_invalid_format_generic">DNS 位址格式無效</string>
     <string name="dns_label_remote">遠端 DNS</string>
     <string name="dns_label_direct">直連 DNS</string>
@@ -272,7 +268,7 @@
     <string name="settings_inbound_http">HTTP 入站</string>
     <string name="settings_inbound_port_format">連接埠 %1$d</string>
     <string name="settings_auto_connect_summary">開機後自動連線</string>
-    <string name="settings_ipv6_summary">啟用 IPv6 網路支援</string>
+    <string name="settings_ipv6_summary">允許應用程式存取 IPv6 網站，需要可用的 IPv6 出口</string>
     <string name="settings_auto_reconnect">斷線自動重連</string>
     <string name="settings_auto_reconnect_summary">VPN 意外斷線時自動重新連線</string>
     <string name="settings_log">執行日誌</string>
@@ -375,4 +371,9 @@
     <string name="node_edit_fingerprint">用戶端指紋</string>
     <string name="node_edit_reality_public_key">Reality 公鑰</string>
     <string name="node_edit_reality_short_id">Reality Short ID</string>
+    <string name="network_probe_not_tested">未檢測</string>
+    <string name="network_probe_disabled">已關閉</string>
+    <string name="network_probe_failed">本次未連通，點按重試</string>
+    <string name="settings_fake_dns_title">網域相容模式 (FakeIP)</string>
+    <string name="settings_fake_dns_summary">由代理核心選擇網站位址，僅在代理模式生效</string>
 </resources>

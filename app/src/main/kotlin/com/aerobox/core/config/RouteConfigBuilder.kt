@@ -18,7 +18,6 @@ internal object RouteConfigBuilder {
     fun buildRoute(
         routingMode: RoutingMode,
         ipv6Mode: IPv6Mode,
-        nodeIsIpv6Only: Boolean = false,
         geoIpCnRuleSetPath: String? = null,
         geoSiteCnRuleSetPath: String? = null,
         geoSiteAdsRuleSetPath: String? = null,
@@ -53,13 +52,13 @@ internal object RouteConfigBuilder {
                 route.put("final", "proxy")
                 route.put(
                     "rules",
-                    buildBaseRouteRules(ipv6Mode, nodeIsIpv6Only)
+                    buildBaseRouteRules(ipv6Mode)
                 )
             }
 
             RoutingMode.RULE_BASED -> {
                 route.put("final", "proxy")
-                val rules = buildBaseRouteRules(ipv6Mode, nodeIsIpv6Only)
+                val rules = buildBaseRouteRules(ipv6Mode)
 
                 if (enableGeoBlockQuic) {
                     rules.put(
@@ -110,7 +109,7 @@ internal object RouteConfigBuilder {
                 route.put("final", "direct")
                 route.put(
                     "rules",
-                    buildBaseRouteRules(ipv6Mode, nodeIsIpv6Only)
+                    buildBaseRouteRules(ipv6Mode)
                 )
             }
 
@@ -156,17 +155,15 @@ internal object RouteConfigBuilder {
         }
     }
 
-    private fun buildBaseRouteRules(ipv6Mode: IPv6Mode, nodeIsIpv6Only: Boolean): JSONArray {
+    private fun buildBaseRouteRules(ipv6Mode: IPv6Mode): JSONArray {
         return JSONArray().apply {
             put(JSONObject().put("action", "sniff"))
 
-            if (!nodeIsIpv6Only) {
-                put(
-                    JSONObject()
-                        .put("action", "resolve")
-                        .put("strategy", ipv6Mode.domainStrategy())
-                )
-            }
+            put(
+                JSONObject()
+                    .put("action", "resolve")
+                    .put("strategy", ipv6Mode.domainStrategy())
+            )
 
             put(
                 JSONObject()

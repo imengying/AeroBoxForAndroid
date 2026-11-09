@@ -59,7 +59,6 @@
     <string name="connection_fix_success">رفع شد؛ اتصال را دوباره تلاش کنید</string>
     <string name="connection_fix_failed">رفع ناموفق بود؛ شبکه را بررسی و دوباره تلاش کنید</string>
     <string name="detecting_ip">در حال تشخیص…</string>
-    <string name="detecting_ip_later">به‌طور خودکار تشخیص داده می‌شود…</string>
     <string name="import_choose_group">انتخاب گروه</string>
     <plurals name="import_node_count">
         <item quantity="one">‫%1$d‬ گره وارد می‌شود</item>
@@ -82,8 +81,6 @@
     <string name="delete_node_confirm">گره «%1$s» حذف شود؟</string>
     <string name="group_empty_nodes">گره‌ای وجود ندارد</string>
     <string name="switch_node_title">تعویض گره</string>
-    <string name="detect_failed_tap_retry">تشخیص ناموفق بود؛ برای تلاش مجدد لمس کنید</string>
-    <string name="tap_detect_exit_ip">برای تشخیص IP خروجی لمس کنید</string>
     <string name="switched_to_mode">تغییر یافت به %1$s</string>
     <string name="subscription_refreshed_new_node">اشتراک به‌روز شد؛ از گره منطبق جدید استفاده می‌شود: %1$s</string>
     <string name="node_current_suffix"> · فعلی</string>
@@ -181,7 +178,6 @@
     <string name="error_dns_port_invalid_format">پورت «%1$s» نامعتبر است</string>
     <string name="error_dns_protocol_invalid_format">پروتکل «%1$s» نامعتبر است</string>
     <string name="error_dns_path_invalid_format">مسیر «%1$s» نامعتبر است</string>
-    <string name="error_dns_no_ipv6_format">«%1$s» نمی‌تواند آدرس IPv6 باشد</string>
     <string name="error_dns_invalid_format_generic">قالب آدرس DNS نامعتبر است</string>
     <string name="dns_label_remote">DNS راه دور</string>
     <string name="dns_label_direct">DNS مستقیم</string>
@@ -278,7 +274,7 @@
     <string name="settings_inbound_http">ورودی HTTP</string>
     <string name="settings_inbound_port_format">پورت %1$d</string>
     <string name="settings_auto_connect_summary">اتصال خودکار پس از راه‌اندازی</string>
-    <string name="settings_ipv6_summary">فعال‌سازی پشتیبانی IPv6</string>
+    <string name="settings_ipv6_summary">دسترسی برنامه‌ها به سایت‌های IPv6؛ نیازمند خروجی IPv6 فعال</string>
     <string name="settings_auto_reconnect">اتصال مجدد خودکار</string>
     <string name="settings_auto_reconnect_summary">در صورت قطع ناگهانی VPN به‌طور خودکار اتصال مجدد برقرار شود</string>
     <string name="settings_log">گزارش اجرا</string>
@@ -381,4 +377,9 @@
     <string name="node_edit_fingerprint">اثر انگشت کلاینت</string>
     <string name="node_edit_reality_public_key">کلید عمومی Reality</string>
     <string name="node_edit_reality_short_id">شناسه کوتاه Reality</string>
+    <string name="network_probe_not_tested">بررسی نشده</string>
+    <string name="network_probe_disabled">غیرفعال</string>
+    <string name="network_probe_failed">پاسخی دریافت نشد؛ برای تلاش دوباره بزنید</string>
+    <string name="settings_fake_dns_title">سازگاری دامنه (FakeIP)</string>
+    <string name="settings_fake_dns_summary">انتخاب نشانی سایت توسط هستهٔ پراکسی؛ فقط در حالت‌های پراکسی</string>
 </resources>

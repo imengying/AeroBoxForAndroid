@@ -6,7 +6,6 @@ import android.util.Log
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.errors.LocalizedException
 import com.aerobox.core.logging.RuntimeLogBuffer
-import com.aerobox.core.network.NodeAddressFamilyResolver
 import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
@@ -230,12 +229,10 @@ class VpnRepository(
         timeoutMs: Int
     ): Int {
         return withContext(Dispatchers.IO) {
-            val nodeIsIpv6Only = NodeAddressFamilyResolver.isIpv6Only(node)
             val config = ConfigGenerator.generateUrlTestConfig(
                 node = node,
                 directDns = directDns,
-                ipv6Mode = ipv6Mode,
-                nodeIsIpv6OnlyOverride = nodeIsIpv6Only
+                ipv6Mode = ipv6Mode
             )
             SingBoxNative.urlTestOutbound(
                 configContent = config,

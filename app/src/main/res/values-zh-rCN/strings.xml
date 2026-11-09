@@ -59,7 +59,6 @@
     <string name="connection_fix_success">修复已完成，请重试连接</string>
     <string name="connection_fix_failed">修复失败，请检查网络后重试</string>
     <string name="detecting_ip">检测中…</string>
-    <string name="detecting_ip_later">稍后自动检测…</string>
     <string name="import_choose_group">选择分组</string>
     <plurals name="import_node_count">
         <item quantity="other">将导入 %1$d 个节点</item>
@@ -80,8 +79,6 @@
     <string name="delete_node_confirm">确定要删除节点「%1$s」吗？</string>
     <string name="group_empty_nodes">暂无节点</string>
     <string name="switch_node_title">切换节点</string>
-    <string name="detect_failed_tap_retry">检测失败，点击重试</string>
-    <string name="tap_detect_exit_ip">点击检测出口 IP</string>
     <string name="switched_to_mode">已切换为%1$s</string>
     <string name="subscription_refreshed_new_node">订阅更新后，已使用匹配的新节点：%1$s</string>
     <string name="node_current_suffix"> · 当前</string>
@@ -175,7 +172,6 @@
     <string name="error_dns_port_invalid_format">%1$s 端口无效</string>
     <string name="error_dns_protocol_invalid_format">%1$s 协议无效</string>
     <string name="error_dns_path_invalid_format">%1$s 路径无效</string>
-    <string name="error_dns_no_ipv6_format">%1$s 不能是 IPv6 地址</string>
     <string name="error_dns_invalid_format_generic">DNS 地址格式无效</string>
     <string name="dns_label_remote">远程 DNS</string>
     <string name="dns_label_direct">直连 DNS</string>
@@ -272,7 +268,7 @@
     <string name="settings_inbound_http">HTTP 入站</string>
     <string name="settings_inbound_port_format">端口 %1$d</string>
     <string name="settings_auto_connect_summary">开机后自动连接</string>
-    <string name="settings_ipv6_summary">启用 IPv6 网络支持</string>
+    <string name="settings_ipv6_summary">允许应用访问 IPv6 网站，需要可用的 IPv6 出口</string>
     <string name="settings_auto_reconnect">断线自动重连</string>
     <string name="settings_auto_reconnect_summary">VPN 意外断开时自动重新连接</string>
     <string name="settings_log">运行日志</string>
@@ -375,4 +371,9 @@
     <string name="node_edit_fingerprint">客户端指纹</string>
     <string name="node_edit_reality_public_key">Reality 公钥</string>
     <string name="node_edit_reality_short_id">Reality Short ID</string>
+    <string name="network_probe_not_tested">未检测</string>
+    <string name="network_probe_disabled">已关闭</string>
+    <string name="network_probe_failed">本次未连通，点按重试</string>
+    <string name="settings_fake_dns_title">域名兼容模式 (FakeIP)</string>
+    <string name="settings_fake_dns_summary">由代理内核选择网站地址，仅在代理模式生效</string>
 </resources>

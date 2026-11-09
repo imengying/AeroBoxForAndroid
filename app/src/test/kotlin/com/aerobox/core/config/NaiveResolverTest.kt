@@ -1,6 +1,5 @@
 package com.aerobox.core.config
 
-import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.ProxyType
 import com.aerobox.data.model.RoutingMode
@@ -30,6 +29,6 @@ class NaiveResolverTest {
 
     @Test fun ordinaryIpOutboundsStillAvoidUnnecessaryServerResolution() {
         val node = ProxyNode(name = "SOCKS", type = ProxyType.SOCKS, server = "127.0.0.1", port = 1080)
-        assertFalse(OutboundConfigBuilder.buildProxyOutbound(node, IPv6Mode.DISABLE, false).has("domain_resolver"))
+        assertFalse(OutboundConfigBuilder.buildProxyOutbound(node).has("domain_resolver"))
     }
 }

@@ -49,6 +49,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.aerobox.core.network.NetworkDetection
+import com.aerobox.core.network.IpDetectionResult
 import com.aerobox.viewmodel.AppViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aerobox.R
@@ -76,7 +78,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(factory = AppViewModelFactor
     val displayNodes by viewModel.displayNodes.collectAsStateWithLifecycle()
     val nodeSortOrder by viewModel.nodeSortOrder.collectAsStateWithLifecycle()
     val routingMode by viewModel.routingMode.collectAsStateWithLifecycle()
-    val detectedIp by viewModel.detectedIp.collectAsStateWithLifecycle()
+    val networkDetection by viewModel.networkDetection.collectAsStateWithLifecycle()
     val memoryUsage by viewModel.memoryUsage.collectAsStateWithLifecycle()
     val connectionIssue by viewModel.connectionIssue.collectAsStateWithLifecycle()
     var showNodeList by remember { mutableStateOf(false) }
@@ -184,7 +186,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(factory = AppViewModelFactor
                 HomeCardPair(
                     stacked = stackCards,
                     first = { modifier ->
-                        NetworkDetectCard(ip = detectedIp, onClick = { viewModel.refreshNetworkInfo() }, modifier = modifier)
+                        NetworkDetectCard(result = networkDetection, onClick = { viewModel.refreshNetworkInfo() }, modifier = modifier)
                     },
                     second = { modifier -> MemoryUsageCard(memoryUsage = memoryUsage, modifier = modifier) }
                 )
@@ -337,7 +339,7 @@ private fun MemoryUsageCard(
 
 @Composable
 private fun NetworkDetectCard(
-    ip: String,
+    result: NetworkDetection,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -362,16 +364,26 @@ private fun NetworkDetectCard(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Text(
-                text = ip,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            NetworkDetectionRow("IPv4", result.ipv4)
+            NetworkDetectionRow("IPv6", result.ipv6)
         }
     }
+}
+
+@Composable
+private fun NetworkDetectionRow(family: String, result: IpDetectionResult) {
+    val status = when (result) {
+        IpDetectionResult.NotTested -> stringResource(R.string.network_probe_not_tested)
+        IpDetectionResult.Checking -> stringResource(R.string.detecting_ip)
+        IpDetectionResult.Disabled -> stringResource(R.string.network_probe_disabled)
+        IpDetectionResult.Failed -> stringResource(R.string.network_probe_failed)
+        is IpDetectionResult.Reachable -> "\u2066${result.address}\u2069"
+    }
+    Text(
+        text = "$family · $status",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)

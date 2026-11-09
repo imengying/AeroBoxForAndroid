@@ -12,8 +12,10 @@ import com.aerobox.core.connection.ConnectionDiagnostics
 import com.aerobox.core.connection.ConnectionFixAction
 import com.aerobox.core.connection.ConnectionIssue
 import com.aerobox.core.geo.GeoAssetManager
-import com.aerobox.core.network.NodeAddressFamilyResolver
 import com.aerobox.core.network.PublicIpDetector
+import com.aerobox.core.network.IpFamily
+import com.aerobox.core.network.IpDetectionResult
+import com.aerobox.core.network.NetworkDetection
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.NodeLatencyState
@@ -144,8 +146,8 @@ class HomeViewModel(
         .flatMapLatest { it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "00:00:00")
 
-    private val _detectedIp = MutableStateFlow(appString(com.aerobox.R.string.tap_detect_exit_ip))
-    val detectedIp: StateFlow<String> = _detectedIp.asStateFlow()
+    private val _networkDetection = MutableStateFlow(NetworkDetection())
+    val networkDetection: StateFlow<NetworkDetection> = _networkDetection.asStateFlow()
 
     private val _connectionIssue = MutableStateFlow<ConnectionIssue?>(null)
     val connectionIssue: StateFlow<ConnectionIssue?> = _connectionIssue.asStateFlow()
@@ -208,7 +210,7 @@ class HomeViewModel(
     private fun observeNetworkInfoTriggers() {
         viewModelScope.launch {
             vpnState
-                .map { state -> state.isConnected to state.currentNode?.id }
+                .map { state -> Triple(state.isConnected, state.currentNode?.id, state.connectionTime) }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect { (isConnected, _) ->
@@ -465,16 +467,32 @@ class HomeViewModel(
     private fun scheduleNetworkInfoRefresh(delayMs: Long = 0L) {
         detectIpJob?.cancel()
         detectIpJob = viewModelScope.launch {
+            _networkDetection.value = NetworkDetection()
             if (delayMs > 0L) {
-                _detectedIp.value = appString(com.aerobox.R.string.detecting_ip_later)
                 delay(delayMs)
                 if (!vpnState.value.isConnected) {
                     return@launch
                 }
             }
 
-            _detectedIp.value = appString(com.aerobox.R.string.detecting_ip)
-            _detectedIp.value = fetchPublicIp(vpnState.value.currentNode ?: selectedNode.value)
+            val connected = vpnState.value.isConnected
+            val testIpv6 = !connected || PreferenceManager.ipv6ModeFlow(appContext).first().enablesIpv6Tun()
+            _networkDetection.value = NetworkDetection(
+                ipv4 = IpDetectionResult.Checking,
+                ipv6 = if (testIpv6) IpDetectionResult.Checking else IpDetectionResult.Disabled
+            )
+            supervisorScope {
+                for (family in IpFamily.entries) {
+                    if (family == IpFamily.IPV6 && !testIpv6) continue
+                    launch {
+                        val result = ipDetector.detect(family, connected)?.let { IpDetectionResult.Reachable(it) }
+                            ?: IpDetectionResult.Failed
+                        _networkDetection.update {
+                            if (family == IpFamily.IPV4) it.copy(ipv4 = result) else it.copy(ipv6 = result)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -506,13 +524,6 @@ class HomeViewModel(
                 _uiMessage.tryEmit(appString(com.aerobox.R.string.connection_fix_failed))
             }
         }
-    }
-
-    private suspend fun fetchPublicIp(node: ProxyNode?): String {
-        val preferIpv6Only = node?.let { NodeAddressFamilyResolver.isIpv6Only(it) } == true
-        val useProxyFriendlyEndpoints = vpnState.value.isConnected
-        return ipDetector.detect(preferIpv6Only, useProxyFriendlyEndpoints)
-            ?: appString(com.aerobox.R.string.detect_failed_tap_retry)
     }
 
     private suspend fun loadUrlTestSettings(): UrlTestSettings {

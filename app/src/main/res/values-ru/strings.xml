@@ -59,7 +59,6 @@
     <string name="connection_fix_success">Исправлено; повторите подключение</string>
     <string name="connection_fix_failed">Исправление не удалось; проверьте сеть и повторите</string>
     <string name="detecting_ip">Определение…</string>
-    <string name="detecting_ip_later">Будет определено автоматически…</string>
     <string name="import_choose_group">Выбрать группу</string>
     <plurals name="import_node_count">
         <item quantity="one">Будет импортирован %1$d узел</item>
@@ -86,8 +85,6 @@
     <string name="delete_node_confirm">Удалить узел «%1$s»?</string>
     <string name="group_empty_nodes">Узлов нет</string>
     <string name="switch_node_title">Сменить узел</string>
-    <string name="detect_failed_tap_retry">Не удалось определить, нажмите для повтора</string>
-    <string name="tap_detect_exit_ip">Нажмите, чтобы определить внешний IP</string>
     <string name="switched_to_mode">Переключено на %1$s</string>
     <string name="subscription_refreshed_new_node">Подписка обновлена; используется подходящий новый узел: %1$s</string>
     <string name="node_current_suffix"> · текущий</string>
@@ -193,7 +190,6 @@
     <string name="error_dns_port_invalid_format">Порт «%1$s» некорректен</string>
     <string name="error_dns_protocol_invalid_format">Протокол «%1$s» некорректен</string>
     <string name="error_dns_path_invalid_format">Путь «%1$s» некорректен</string>
-    <string name="error_dns_no_ipv6_format">«%1$s» не может быть IPv6-адресом</string>
     <string name="error_dns_invalid_format_generic">Формат DNS-адреса некорректен</string>
     <string name="dns_label_remote">Удалённый DNS</string>
     <string name="dns_label_direct">Прямой DNS</string>
@@ -290,7 +286,7 @@
     <string name="settings_inbound_http">Входящий HTTP</string>
     <string name="settings_inbound_port_format">Порт %1$d</string>
     <string name="settings_auto_connect_summary">Автоподключение после загрузки</string>
-    <string name="settings_ipv6_summary">Включить поддержку IPv6</string>
+    <string name="settings_ipv6_summary">Доступ приложений к сайтам IPv6; нужен работающий выход IPv6</string>
     <string name="settings_auto_reconnect">Автопереподключение при сбое</string>
     <string name="settings_auto_reconnect_summary">Автоматически переподключаться при неожиданном разрыве VPN</string>
     <string name="settings_log">Журнал работы</string>
@@ -393,4 +389,9 @@
     <string name="node_edit_fingerprint">Отпечаток клиента</string>
     <string name="node_edit_reality_public_key">Открытый ключ Reality</string>
     <string name="node_edit_reality_short_id">Короткий ID Reality</string>
+    <string name="network_probe_not_tested">Не проверено</string>
+    <string name="network_probe_disabled">Отключено</string>
+    <string name="network_probe_failed">Нет ответа; нажмите для повтора</string>
+    <string name="settings_fake_dns_title">Совместимость доменов (FakeIP)</string>
+    <string name="settings_fake_dns_summary">Ядро прокси выбирает адреса сайтов; действует в режимах прокси</string>
 </resources>

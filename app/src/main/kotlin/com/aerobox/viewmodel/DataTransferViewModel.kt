@@ -114,6 +114,7 @@ class DataTransferViewModel(
             .put("protocol", state.currentNode?.type?.name ?: "")
             .put("routingMode", settings.routingMode.name)
             .put("ipv6Mode", settings.ipv6Mode.name)
+            .put("fakeDns", settings.enableFakeDns)
             .put("logLevel", "error")
             .put("logs", org.json.JSONArray().apply {
                 logs.forEach { put(org.json.JSONObject().put("time", it.timestamp).put("message", it.message)) }
