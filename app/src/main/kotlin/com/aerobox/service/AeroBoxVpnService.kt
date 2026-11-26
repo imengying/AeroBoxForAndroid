@@ -14,6 +14,7 @@ import com.aerobox.AeroBoxApplication
 import com.aerobox.core.native.RustCoreNative
 import com.aerobox.core.native.RustTunController
 import com.aerobox.core.native.RustVpnSession
+import com.aerobox.core.native.PhysicalNetwork
 import com.aerobox.R
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.logging.RuntimeLogBuffer
@@ -485,7 +486,7 @@ class AeroBoxVpnService : VpnService() {
         }
     }
 
-    private fun createCoreSession(network: android.net.Network): RustVpnSession {
+    private fun createCoreSession(network: PhysicalNetwork): RustVpnSession {
         lateinit var session: RustVpnSession
         session = RustVpnSession(
             this, AeroBoxApplication.connectivity, network,
