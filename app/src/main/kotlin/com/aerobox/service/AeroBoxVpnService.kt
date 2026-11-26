@@ -10,6 +10,10 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.aerobox.appContainer
+import com.aerobox.AeroBoxApplication
+import com.aerobox.core.native.RustCoreNative
+import com.aerobox.core.native.RustTunController
+import com.aerobox.core.native.RustVpnSession
 import com.aerobox.R
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.logging.RuntimeLogBuffer
@@ -17,11 +21,6 @@ import com.aerobox.core.native.SingBoxNative
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.utils.NetworkUtils
 import com.aerobox.utils.PreferenceManager
-import io.nekohasekai.libbox.CommandServer
-import io.nekohasekai.libbox.CommandServerHandler
-import io.nekohasekai.libbox.OverrideOptions
-import io.nekohasekai.libbox.SystemProxyStatus
-import io.nekohasekai.libbox.TunOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -40,14 +39,8 @@ import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicLong
 
-/**
- * AeroBox VPN Service — implements PlatformInterfaceWrapper so libbox
- * can call openTun / autoDetectInterfaceControl etc.
- *
- * The core lifecycle follows SFA:
- *   CommandServer(handler, platformInterface) → startOrReloadService(config, overrides)
- */
-class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerHandler {
+/** Android lifecycle and foreground state around the pure Rust VPN session. */
+class AeroBoxVpnService : VpnService() {
 
     companion object {
         const val ACTION_START = "com.aerobox.action.START"
@@ -67,8 +60,8 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         private var activeServiceReference: WeakReference<AeroBoxVpnService>? = null
         private var pendingCleanup: Job? = null
 
-        internal fun activePlatformInterface(): PlatformInterfaceWrapper? {
-            return activeServiceReference?.get()
+        internal fun activePlatformInterface(): RustCoreNative.PlatformCallbacks? {
+            return activeServiceReference?.get()?.commandServer?.platform
         }
 
         suspend fun connectionSnapshot(): String = withContext(Dispatchers.IO) {
@@ -113,9 +106,6 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     private val configResolver by lazy {
         appContainer.vpnConfigResolver
     }
-    private val tunController by lazy {
-        VpnTunController(this, { userRequestedStop || destroyed }, { DefaultNetworkMonitor.defaultNetwork })
-    }
     private val trafficMonitor by lazy {
         VpnTrafficMonitor(
             query = { logErrors ->
@@ -133,7 +123,8 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
     @Volatile
     private var reconnectJob: Job? = null
     @Volatile
-    private var commandServer: CommandServer? = null
+    private var commandServer: RustVpnSession? = null
+    private var coreLogJob: Job? = null
     private var receiverRegistered = false
 
     @Volatile
@@ -323,7 +314,7 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 // Re-establish foreground state after an earlier queued stop or instance cleanup.
                 stage = "foreground service promotion"
                 startForeground(NOTIFICATION_ID, buildNotification(connected = false))
-                Log.i(TAG, "Starting sing-box service")
+                Log.i(TAG, "Starting Rust core service")
 
                 stage = "configuration preparation"
                 val startRequest = prepareStartRequest(
@@ -350,12 +341,19 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
                 }
 
                 stage = "network monitoring"
-                DefaultNetworkMonitor.start(tunController::updateUnderlyingNetwork)
+                DefaultNetworkMonitor.start { network ->
+                    val current = commandServer
+                    try { current?.networkChanged(network) }
+                    catch (failure: Throwable) { coreNetworkFailure(current, failure) }
+                }
 
                 stage = "core service startup"
-                val server = commandServer ?: CommandServer(this@AeroBoxVpnService, this@AeroBoxVpnService).also {
-                    commandServer = it
-                }
+                val network = checkNotNull(DefaultNetworkMonitor.defaultNetwork) { "No physical network available" }
+                val server = commandServer ?: createCoreSession(network).also { commandServer = it }
+                // Publish the latest physical network even when the session was
+                // reused for a node switch while the callback queue was idle.
+                server.networkChanged(DefaultNetworkMonitor.defaultNetwork)
+                startCoreLogs(server)
 
                 val overrides = buildOverrideOptions()
                 trafficMonitor.stop()
@@ -435,23 +433,16 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         return StartRequest(node = node, config = config)
     }
 
-    private suspend fun buildOverrideOptions(): OverrideOptions {
-        return OverrideOptions().apply {
-            // Per-app proxy
-            val perAppEnabled = PreferenceManager.perAppProxyEnabledFlow(applicationContext).first()
-            if (perAppEnabled) {
-                val mode = PreferenceManager.perAppProxyModeFlow(applicationContext).first()
-                val packages = PreferenceManager.perAppProxyPackagesFlow(applicationContext).first()
-                if (mode == "whitelist") {
-                    includePackage = PlatformInterfaceWrapper.StringArray(
-                        (packages + packageName).iterator()
-                    )
-                } else {
-                    excludePackage = PlatformInterfaceWrapper.StringArray(
-                        (packages - packageName).iterator()
-                    )
-                }
-            }
+    private suspend fun buildOverrideOptions(): RustTunController.Applications {
+        if (!PreferenceManager.perAppProxyEnabledFlow(applicationContext).first()) {
+            return RustTunController.Applications()
+        }
+        val mode = PreferenceManager.perAppProxyModeFlow(applicationContext).first()
+        val packages = PreferenceManager.perAppProxyPackagesFlow(applicationContext).first()
+        return if (mode == "whitelist") {
+            RustTunController.Applications(include = (packages + packageName).toSet())
+        } else {
+            RustTunController.Applications(exclude = (packages - packageName).toSet())
         }
     }
 
@@ -479,7 +470,9 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         runCatching { server?.closeService() }
         runCatching { server?.close() }
 
-        tunController.close()
+        coreLogJob?.cancel()
+        coreLogJob = null
+        runCatching { server?.drainLogs(RuntimeLogBuffer::appendCore) }
         if (stopping) cachedConnectedNode = null
 
         if (stopping && receiverRegistered) {
@@ -492,74 +485,35 @@ class AeroBoxVpnService : VpnService(), PlatformInterfaceWrapper, CommandServerH
         }
     }
 
-    // ─── CommandServerHandler callbacks ───
-
-    override fun serviceStop() {
-        val message = if (userRequestedStop) "Service stopped" else "Service stopped unexpectedly"
-        if (userRequestedStop) Log.i(TAG, message) else Log.w(TAG, message)
-        if (!userRequestedStop) {
-            val revision = requestRevision
-            val generation = stateGeneration
-            launchLifecycleOperation {
-                if (!userRequestedStop && !destroyed && revision == requestRevision) {
-                    handleStartFailure(
-                        error = IllegalStateException(message),
-                        allowReconnect = true,
-                        revision = revision,
-                        generation = generation
-                    )
-                }
-            }
-        }
+    private fun createCoreSession(network: android.net.Network): RustVpnSession {
+        lateinit var session: RustVpnSession
+        session = RustVpnSession(
+            this, AeroBoxApplication.connectivity, network,
+            onNetworkRefreshFailure = { error -> coreNetworkFailure(session, error) },
+        )
+        return session
     }
 
-    override fun serviceReload() {
-        Log.i(TAG, "Service reloaded")
+    private fun coreNetworkFailure(session: RustVpnSession?, error: Throwable) {
+        val revision = requestRevision
+        val generation = stateGeneration
         launchLifecycleOperation {
-            if (userRequestedStop || destroyed) return@launchLifecycleOperation
-            val currentNode = resolveCurrentNode()
-            VpnStateManager.updateCurrentNode(currentNode)
-            if (VpnStateManager.vpnState.value.isConnected) {
-                val state = VpnStateManager.vpnState.value
-                val upSpeed = NetworkUtils.formatBytes(state.traffic.uploadSpeed) + "/s"
-                val downSpeed = NetworkUtils.formatBytes(state.traffic.downloadSpeed) + "/s"
-                val notification = buildNotification(
-                    contentText = "↑ $upSpeed  ↓ $downSpeed",
-                    connected = true
-                )
-                notifications.show(notification)
+            if (session != null && commandServer === session && !userRequestedStop &&
+                !destroyed && revision == requestRevision) {
+                handleStartFailure(error, allowReconnect = true, revision = revision, generation = generation)
             }
         }
     }
 
-    override fun getSystemProxyStatus(): SystemProxyStatus {
-        return SystemProxyStatus()
-    }
-
-    override fun setSystemProxyEnabled(enabled: Boolean) {
-        // Not applicable to VPN mode
-    }
-
-    override fun writeDebugMessage(message: String) {
-        RuntimeLogBuffer.appendCore(message)
-    }
-
-    override fun sendNotification(notification: io.nekohasekai.libbox.Notification) {
-        Log.i(TAG, "libbox notification: ${notification.title} - ${notification.body}")
-    }
-
-    // ─── PlatformInterfaceWrapper overrides ───
-
-    override fun autoDetectInterfaceControl(fd: Int) {
-        if (!protect(fd)) {
-            Log.w(TAG, "protect(fd) failed")
+    private fun startCoreLogs(session: RustVpnSession) {
+        coreLogJob?.cancel()
+        coreLogJob = serviceScope.launch {
+            while (commandServer === session && !destroyed) {
+                runCatching { session.drainLogs(RuntimeLogBuffer::appendCore) }
+                    .onFailure { Log.w(TAG, "Core log drain failed", it) }
+                delay(250)
+            }
         }
-    }
-
-    override fun openTun(options: TunOptions): Int {
-        val fd = tunController.open(options)
-        Log.i(TAG, "VPN interface established for ${nodeSummary(cachedConnectedNode)}")
-        return fd
     }
 
     // ─── Notification ───

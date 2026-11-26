@@ -147,7 +147,10 @@ dependencies {
     implementation("org.tukaani:xz:1.12")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
-    implementation(files(layout.buildDirectory.file("libbox/libbox.aar")))
+    // An explicit property also supports an isolated migration worktree.
+    val rustCoreAar = providers.gradleProperty("AEROBOX_CORE_AAR")
+        .orElse(rootProject.file("../core/target/android/aerobox-core.aar").absolutePath)
+    implementation(files(rustCoreAar))
 
     implementation("com.google.accompanist:accompanist-drawablepainter:0.37.3")
 }
