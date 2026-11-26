@@ -27,7 +27,7 @@ class AppContainer(context: Context, scope: CoroutineScope) {
     private val context = context.applicationContext
     val database: AppDatabase by lazy {
         Room.databaseBuilder(this.context, AppDatabase::class.java, "aerobox.db")
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3).build()
+            .build()
     }
     val settingsStore: RecoveringSettingsStore by lazy {
         RecoveringSettingsStore(

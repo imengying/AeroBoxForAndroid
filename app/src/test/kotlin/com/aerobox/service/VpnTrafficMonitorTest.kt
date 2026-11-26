@@ -12,7 +12,7 @@ class VpnTrafficMonitorTest {
     @Test fun missedSampleKeepsTheBaselineAndCounterResetNeverProducesNegativeTraffic() = runTest {
         val counters = ArrayDeque(listOf(TrafficCounters(100, 200), null, TrafficCounters(300, 600), TrafficCounters(10, 20)))
         val samples = mutableListOf<TrafficSample>()
-        val monitor = VpnTrafficMonitor({ counters.removeFirst() }, {}, { testScheduler.currentTime }, { true })
+        val monitor = VpnTrafficMonitor({ counters.removeFirst() }, { testScheduler.currentTime }, { true })
         monitor.start(backgroundScope, { true }, { sample, _ -> samples += sample }, { fail("Unexpected health failure") })
         runCurrent()
         repeat(3) { advanceTimeBy(1_000); runCurrent() }
@@ -25,9 +25,8 @@ class VpnTrafficMonitorTest {
     @Test fun fiveConsecutiveFailuresReportOneHealthFailureAndStopPolling() = runTest {
         var calls = 0
         var failures = 0
-        var closes = 0
         val monitor = VpnTrafficMonitor({ if (calls++ == 0) TrafficCounters(0, 0) else null },
-            { closes++ }, { testScheduler.currentTime }, { true })
+            { testScheduler.currentTime }, { true })
         monitor.start(backgroundScope, { true }, { _, _ -> }, { failures++ })
         runCurrent()
         advanceTimeBy(5_000); runCurrent()
@@ -36,14 +35,13 @@ class VpnTrafficMonitorTest {
         advanceTimeBy(60_000); runCurrent()
         assertEquals(6, calls)
         monitor.stop()
-        assertEquals(1, closes)
     }
 
     @Test fun successfulSamplesResetTheFailureCount() = runTest {
         var calls = 0
         var failures = 0
         val monitor = VpnTrafficMonitor({ if (calls++ % 5 == 0) TrafficCounters(0, 0) else null },
-            {}, { testScheduler.currentTime }, { true })
+            { testScheduler.currentTime }, { true })
         monitor.start(backgroundScope, { true }, { _, _ -> }, { failures++ })
         runCurrent()
         advanceTimeBy(12_000); runCurrent()
@@ -54,9 +52,8 @@ class VpnTrafficMonitorTest {
     @Test fun screenWakeInterruptsSlowPollingAndStopPreventsFurtherSamples() = runTest {
         var interactive = false
         var calls = 0
-        var closes = 0
         val samples = mutableListOf<Boolean>()
-        val monitor = VpnTrafficMonitor({ calls++; TrafficCounters(0, 0) }, { closes++ },
+        val monitor = VpnTrafficMonitor({ calls++; TrafficCounters(0, 0) },
             { testScheduler.currentTime }, { interactive })
         monitor.start(backgroundScope, { true }, { _, screenOn -> samples += screenOn }, { fail("Unexpected health failure") })
         runCurrent()
@@ -69,6 +66,5 @@ class VpnTrafficMonitorTest {
         monitor.stop()
         advanceTimeBy(30_000); runCurrent()
         assertEquals(2, calls)
-        assertEquals(1, closes)
     }
 }

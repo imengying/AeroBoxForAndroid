@@ -16,9 +16,8 @@ import com.aerobox.core.native.RustTunController
 import com.aerobox.core.native.RustVpnSession
 import com.aerobox.core.native.PhysicalNetwork
 import com.aerobox.R
-import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.logging.RuntimeLogBuffer
-import com.aerobox.core.native.SingBoxNative
+import com.aerobox.core.native.RustCore
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.utils.NetworkUtils
 import com.aerobox.utils.PreferenceManager
@@ -62,22 +61,17 @@ class AeroBoxVpnService : VpnService() {
         private var pendingCleanup: Job? = null
 
         internal fun activePlatformInterface(): RustCoreNative.PlatformCallbacks? {
-            return activeServiceReference?.get()?.commandServer?.platform
+            return activeServiceReference?.get()?.coreSession?.platform
         }
 
         suspend fun connectionSnapshot(): String = withContext(Dispatchers.IO) {
             val service = activeServiceReference?.get() ?: return@withContext "[]"
-            service.lifecycleMutex.withLock { service.commandServer?.connectionSnapshot() ?: "[]" }
-        }
-
-        suspend fun stopConnectionTracking() = withContext(Dispatchers.IO) {
-            val service = activeServiceReference?.get() ?: return@withContext
-            service.lifecycleMutex.withLock { service.commandServer?.stopConnectionTracking() }
+            service.lifecycleMutex.withLock { service.coreSession?.connectionSnapshot() ?: "[]" }
         }
 
         suspend fun closeTrackedConnection(id: String) = withContext(Dispatchers.IO) {
             val service = activeServiceReference?.get() ?: return@withContext
-            service.lifecycleMutex.withLock { service.commandServer?.closeTrackedConnection(id) }
+            service.lifecycleMutex.withLock { service.coreSession?.closeTrackedConnection(id) }
         }
 
         suspend fun cancelStartOperation(id: Long) = withContext(Dispatchers.Main.immediate) {
@@ -109,14 +103,7 @@ class AeroBoxVpnService : VpnService() {
     }
     private val trafficMonitor by lazy {
         VpnTrafficMonitor(
-            query = { logErrors ->
-                SingBoxNative.queryV2RayOutboundStats(
-                    apiAddress = ConfigGenerator.V2RAY_API_LISTEN,
-                    outboundTags = listOf("proxy", "direct"),
-                    logErrors = logErrors
-                )?.let { TrafficCounters(it.uploadBytes, it.downloadBytes) }
-            },
-            closeQuery = SingBoxNative::closeV2RayOutboundStats,
+            query = ::queryTraffic,
             clock = SystemClock::elapsedRealtime,
             isInteractive = { getSystemService(android.os.PowerManager::class.java).isInteractive }
         )
@@ -124,7 +111,7 @@ class AeroBoxVpnService : VpnService() {
     @Volatile
     private var reconnectJob: Job? = null
     @Volatile
-    private var commandServer: RustVpnSession? = null
+    private var coreSession: RustVpnSession? = null
     private var coreLogJob: Job? = null
     private var receiverRegistered = false
 
@@ -151,6 +138,15 @@ class AeroBoxVpnService : VpnService() {
 
     private fun nodeDisplayName(node: ProxyNode?): String {
         return node?.name?.takeIf { it.isNotBlank() } ?: "unnamed node"
+    }
+
+    private fun queryTraffic(logErrors: Boolean): TrafficCounters? = try {
+        val session = checkNotNull(coreSession) { "Rust VPN session is unavailable" }
+        check(session.isRunning()) { "Rust core is not running" }
+        session.trafficCounters().let { TrafficCounters(it.uploadBytes, it.downloadBytes) }
+    } catch (error: Exception) {
+        if (logErrors) logError("Rust traffic query failed: ${error.message}", error)
+        null
     }
 
     private fun nodeSummary(node: ProxyNode?): String {
@@ -277,7 +273,7 @@ class AeroBoxVpnService : VpnService() {
         reconnectJob?.cancel()
         reconnectJob = null
         // Coroutine cancellation cannot interrupt JNI. closeService cancels the native startup context.
-        val server = commandServer
+        val server = coreSession
         val interrupt = serviceScope.launch {
             runCatching { server?.closeService() }
         }
@@ -310,7 +306,7 @@ class AeroBoxVpnService : VpnService() {
             if (resetReconnectAttempts) reconnectAttempts = 0
             var stage = "native initialization"
             try {
-                SingBoxNative.awaitReady()
+                RustCore.awaitReady()
                 notifications.refreshLanguage()
                 // Re-establish foreground state after an earlier queued stop or instance cleanup.
                 stage = "foreground service promotion"
@@ -343,14 +339,14 @@ class AeroBoxVpnService : VpnService() {
 
                 stage = "network monitoring"
                 DefaultNetworkMonitor.start { network ->
-                    val current = commandServer
+                    val current = coreSession
                     try { current?.networkChanged(network) }
                     catch (failure: Throwable) { coreNetworkFailure(current, failure) }
                 }
 
                 stage = "core service startup"
                 val network = checkNotNull(DefaultNetworkMonitor.defaultNetwork) { "No physical network available" }
-                val server = commandServer ?: createCoreSession(network).also { commandServer = it }
+                val server = coreSession ?: createCoreSession(network).also { coreSession = it }
                 // Publish the latest physical network even when the session was
                 // reused for a node switch while the callback queue was idle.
                 server.networkChanged(DefaultNetworkMonitor.defaultNetwork)
@@ -466,8 +462,8 @@ class AeroBoxVpnService : VpnService() {
         trafficMonitor.stop()
         DefaultNetworkMonitor.stop()
 
-        val server = commandServer
-        commandServer = null
+        val server = coreSession
+        coreSession = null
         runCatching { server?.closeService() }
         runCatching { server?.close() }
 
@@ -499,7 +495,7 @@ class AeroBoxVpnService : VpnService() {
         val revision = requestRevision
         val generation = stateGeneration
         launchLifecycleOperation {
-            if (session != null && commandServer === session && !userRequestedStop &&
+            if (session != null && coreSession === session && !userRequestedStop &&
                 !destroyed && revision == requestRevision) {
                 handleStartFailure(error, allowReconnect = true, revision = revision, generation = generation)
             }
@@ -509,7 +505,7 @@ class AeroBoxVpnService : VpnService() {
     private fun startCoreLogs(session: RustVpnSession) {
         coreLogJob?.cancel()
         coreLogJob = serviceScope.launch {
-            while (commandServer === session && !destroyed) {
+            while (coreSession === session && !destroyed) {
                 runCatching { session.drainLogs(RuntimeLogBuffer::appendCore) }
                     .onFailure { Log.w(TAG, "Core log drain failed", it) }
                 delay(250)
@@ -587,7 +583,7 @@ class AeroBoxVpnService : VpnService() {
         // A replacement service must wait for this instance to release shared native resources.
         val cleanup = serviceScope.launch(NonCancellable + Dispatchers.Main.immediate) {
             previousCleanup?.join()
-            withContext(Dispatchers.IO) { runCatching { commandServer?.closeService() } }
+            withContext(Dispatchers.IO) { runCatching { coreSession?.closeService() } }
             lifecycleMutex.withLock {
                 withContext(Dispatchers.IO) { stopService("Stopping service: onDestroy", generation) }
             }

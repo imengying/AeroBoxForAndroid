@@ -119,7 +119,7 @@ class SubscriptionRepository(
     suspend fun updateNode(node: ProxyNode, original: ProxyNode): NodeUpdateResult {
         require(node.id == original.id)
         val config = com.aerobox.core.config.ConfigGenerator.generateUrlTestConfig(node)
-        com.aerobox.core.native.SingBoxNative.checkConfig(config)?.let { error ->
+        com.aerobox.core.native.RustCore.checkConfig(config)?.let { error ->
             throw IllegalArgumentException(error)
         }
         val existing = proxyNodeDao.getNodeById(node.id) ?: return NodeUpdateResult.NOT_FOUND

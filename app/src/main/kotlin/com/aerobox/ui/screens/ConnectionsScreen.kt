@@ -22,7 +22,6 @@ import com.aerobox.utils.NetworkUtils
 import com.aerobox.ui.components.AppSnackbarHost
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -57,13 +56,10 @@ fun ConnectionsScreen(onNavigateBack: () -> Unit) {
                         } catch (e: Exception) {
                             error = e.message ?: operationFailed
                         }
-                    } else {
-                        AeroBoxVpnService.stopConnectionTracking()
                     }
                     delay(1_000)
                 }
             } finally {
-                withContext(NonCancellable) { AeroBoxVpnService.stopConnectionTracking() }
                 connections = emptyList()
             }
         }

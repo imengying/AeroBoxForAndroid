@@ -97,7 +97,7 @@ class DataTransferViewModel(
             com.aerobox.core.logging.RuntimeLogBuffer.lines.value).sortedBy { it.timestamp }
         val report = org.json.JSONObject()
             .put("appVersion", com.aerobox.BuildConfig.VERSION_NAME)
-            .put("coreVersion", com.aerobox.core.native.SingBoxNative.version.value)
+            .put("coreVersion", com.aerobox.core.native.RustCore.version.value)
             .put("androidApi", android.os.Build.VERSION.SDK_INT)
             .put("androidRelease", android.os.Build.VERSION.RELEASE)
             .put("manufacturer", android.os.Build.MANUFACTURER)

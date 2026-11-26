@@ -21,7 +21,7 @@ enum class ConnectionFixAction(@param:StringRes val labelResId: Int) {
  * `stringResource(...)` so that translations follow the active locale.
  *
  * [rawError] is intentionally kept un-translated — it's the underlying
- * sing-box error string used for diagnostics / logs.
+ * Rust core error string used for diagnostics / logs.
  */
 data class ConnectionIssue(
     @param:StringRes val titleResId: Int,

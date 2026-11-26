@@ -7,7 +7,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import com.aerobox.core.logging.CrashDiagnostics
 import com.aerobox.core.logging.RuntimeLogBuffer
-import com.aerobox.core.native.SingBoxNative
+import com.aerobox.core.native.RustCore
 import com.aerobox.service.VpnStateManager
 import com.aerobox.work.SubscriptionUpdateScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +27,7 @@ class AeroBoxApplication : Application() {
         CrashDiagnostics.install(this, applicationScope)
         VpnStateManager.resetTrafficSession()
         createNotificationChannel()
-        SingBoxNative.initialize(this, applicationScope)
+        RustCore.initialize(this, applicationScope)
 
         applicationScope.launch {
             container.settingsStore.recover()

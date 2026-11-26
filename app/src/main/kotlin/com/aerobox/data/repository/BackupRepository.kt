@@ -59,9 +59,7 @@ class BackupRepository(
 
     suspend fun restore(uri: Uri): Int = withContext(Dispatchers.IO) {
         val backup = try {
-            BackupMigrations.upgrade(
-                DocumentIo.read(context, uri, codec::read), database.openHelper.readableDatabase.version
-            )
+            DocumentIo.read(context, uri, codec::read)
         } catch (error: BackupLimitExceededException) {
             throw LocalizedException(R.string.backup_too_large, cause = error)
         } catch (error: JSONException) {

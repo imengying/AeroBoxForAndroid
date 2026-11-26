@@ -14,7 +14,7 @@ class NaiveResolverTest {
                 username = "fixture", password = "fixture", tls = true, sni = "example.invalid")
             val configs = listOf(
                 ConfigGenerator.generateUrlTestConfig(node),
-                ConfigGenerator.generateSingBoxConfig(node, routingMode = RoutingMode.GLOBAL_PROXY)
+                ConfigGenerator.generateVpnConfig(node, routingMode = RoutingMode.GLOBAL_PROXY)
             )
             for (raw in configs) {
                 val config = JSONObject(raw)

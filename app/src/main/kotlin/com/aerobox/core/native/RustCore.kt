@@ -16,16 +16,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Retains the App facade while the implementation is the pure Rust core. */
-object SingBoxNative {
+/** App-scoped Rust initialization, configuration checks and temporary node probes. */
+object RustCore {
     private const val TAG = "AeroBoxRustCore"
-    @Volatile private var initialized = false
     @Volatile private var initialization: Deferred<Unit>? = null
     private lateinit var applicationContext: Context
     private val _version = MutableStateFlow("...")
     val version = _version.asStateFlow()
-
-    data class OutboundTrafficStats(val uploadBytes: Long, val downloadBytes: Long)
 
     @Synchronized
     fun initialize(context: Context, scope: CoroutineScope) {
@@ -38,7 +35,6 @@ object SingBoxNative {
                     storage = File(applicationContext.noBackupFilesDir, "rust-core")
                 ).getString("version")
                 CrashDiagnostics.setCoreVersion(_version.value)
-                initialized = true
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -107,31 +103,4 @@ object SingBoxNative {
             -1
         } finally { temporary?.let(::releaseProbePlatform) }
     }
-
-    /** The current UI asks for exactly proxy+direct, which are session totals. */
-    @Suppress("UNUSED_PARAMETER")
-    fun queryV2RayOutboundStats(
-        apiAddress: String,
-        outboundTags: List<String>,
-        logErrors: Boolean = true
-    ): OutboundTrafficStats? {
-        if (outboundTags.isEmpty()) return OutboundTrafficStats(0, 0)
-        if (!initialized) return null
-        return try {
-            require(outboundTags.toSet() == setOf("proxy", "direct")) {
-                "Rust traffic API exposes session totals; arbitrary tag totals are unsupported"
-            }
-            check(RustCoreNative.isRunning()) { "Rust core is not running" }
-            val stats = RustCoreNative.stats()
-            OutboundTrafficStats(stats.getLong("upload_total"), stats.getLong("download_total"))
-        } catch (error: Exception) {
-            if (logErrors) {
-                Log.w(TAG, "Traffic query failed", error)
-                RuntimeLogBuffer.appendError("Traffic query failed: ${error.message}")
-            }
-            null
-        }
-    }
-    // There is no retained localhost gRPC channel in the Rust implementation.
-    fun closeV2RayOutboundStats() = Unit
 }

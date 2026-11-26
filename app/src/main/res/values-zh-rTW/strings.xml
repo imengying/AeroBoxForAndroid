@@ -268,7 +268,7 @@
     <string name="settings_auto_reconnect">斷線自動重連</string>
     <string name="settings_auto_reconnect_summary">VPN 意外斷線時自動重新連線</string>
     <string name="settings_log">執行日誌</string>
-    <string name="settings_log_summary">檢視 sing-box 執行日誌</string>
+    <string name="settings_log_summary">檢視 Rust 執行日誌</string>
     <string name="settings_about_supporting">AeroBox 專案 · GNU GPL-3.0-or-later</string>
     <string name="app_update_checking">正在檢查更新…</string>
     <string name="app_update_already_latest">已是最新版本</string>

@@ -8,7 +8,7 @@ import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.errors.LocalizedException
 import com.aerobox.core.geo.GeoAssetManager
 import com.aerobox.core.logging.RuntimeLogBuffer
-import com.aerobox.core.native.SingBoxNative
+import com.aerobox.core.native.RustCore
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.model.RoutingMode
 import com.aerobox.utils.PreferenceManager
@@ -82,7 +82,7 @@ class VpnConfigResolver(
             null
         }
 
-        val config = ConfigGenerator.generateSingBoxConfig(
+        val config = ConfigGenerator.generateVpnConfig(
             node = node,
             routingMode = prefs.routingMode,
             remoteDns = prefs.remoteDns,
@@ -104,7 +104,7 @@ class VpnConfigResolver(
     }
 
     suspend fun validateConfig(config: String): String? {
-        val error = SingBoxNative.checkConfig(config)
+        val error = RustCore.checkConfig(config)
         if (error != null) {
             Log.e(TAG, "Config check failed: $error")
             RuntimeLogBuffer.appendError("Config check failed: $error")

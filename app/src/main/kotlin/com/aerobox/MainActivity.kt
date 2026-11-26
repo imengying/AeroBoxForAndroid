@@ -13,7 +13,7 @@ import com.aerobox.imports.ExternalImportParser
 import com.aerobox.imports.ExternalImportRequest
 import com.aerobox.ui.components.ProvideAppLocale
 import com.aerobox.ui.navigation.AppNavigation
-import com.aerobox.ui.theme.SingBoxVPNTheme
+import com.aerobox.ui.theme.AeroBoxTheme
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
                 else -> isSystemInDarkTheme()
             }
 
-            SingBoxVPNTheme(
+            AeroBoxTheme(
                 darkTheme = useDarkTheme,
                 dynamicColor = dynamicColor
             ) {

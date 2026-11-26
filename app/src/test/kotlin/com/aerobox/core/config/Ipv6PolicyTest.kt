@@ -14,7 +14,7 @@ class Ipv6PolicyTest {
     @Test fun nodeEntranceCannotChangeWebsiteDnsOrImplicitlyEnableFakeIp() {
         for (mode in IPv6Mode.entries) {
             val configs = listOf("192.0.2.1", "2001:db8::1").map {
-                JSONObject(ConfigGenerator.generateSingBoxConfig(node(it), RoutingMode.GLOBAL_PROXY, ipv6Mode = mode))
+                JSONObject(ConfigGenerator.generateVpnConfig(node(it), RoutingMode.GLOBAL_PROXY, ipv6Mode = mode))
             }
             assertEquals(configs[0].getJSONObject("dns").toString(), configs[1].getJSONObject("dns").toString())
             assertEquals(configs[0].getJSONObject("route").toString(), configs[1].getJSONObject("route").toString())
@@ -27,7 +27,7 @@ class Ipv6PolicyTest {
     }
 
     @Test fun ipv4WebsitesStillAllowIpv6DnsAndIpv6OnlyNodeEntrances() {
-        val raw = ConfigGenerator.generateSingBoxConfig(node("proxy.example"), RoutingMode.GLOBAL_PROXY,
+        val raw = ConfigGenerator.generateVpnConfig(node("proxy.example"), RoutingMode.GLOBAL_PROXY,
             directDns = "udp://[2001:db8::53]:5353", remoteDns = "tcp://[2001:db8::54]:5354", ipv6Mode = IPv6Mode.DISABLE)
         val config = JSONObject(raw)
         val dns = config.getJSONObject("dns")
@@ -39,7 +39,7 @@ class Ipv6PolicyTest {
         assertEquals(1, config.getJSONArray("inbounds").getJSONObject(0).getJSONArray("address").length())
         val test = JSONObject(ConfigGenerator.generateUrlTestConfig(node("proxy.example"), ipv6Mode = IPv6Mode.DISABLE))
         assertEquals(resolver.toString(), test.getJSONArray("outbounds").getJSONObject(0).getJSONObject("domain_resolver").toString())
-        val domainDns = JSONObject(ConfigGenerator.generateSingBoxConfig(node("proxy.example"), RoutingMode.GLOBAL_PROXY,
+        val domainDns = JSONObject(ConfigGenerator.generateVpnConfig(node("proxy.example"), RoutingMode.GLOBAL_PROXY,
             remoteDns = "https://dns.example/dns-query", ipv6Mode = IPv6Mode.DISABLE))
         assertEquals("prefer_ipv4", domainDns.getJSONObject("dns").getJSONArray("servers")
             .getJSONObject(0).getJSONObject("domain_resolver").getString("strategy"))
@@ -47,7 +47,7 @@ class Ipv6PolicyTest {
 
     @Test fun fakeIpIsExplicitPreservesLocalAndBootstrapDnsAndPersistsMappings() {
         for (mode in IPv6Mode.entries) {
-            val config = JSONObject(ConfigGenerator.generateSingBoxConfig(node("proxy.example"), RoutingMode.GLOBAL_PROXY,
+            val config = JSONObject(ConfigGenerator.generateVpnConfig(node("proxy.example"), RoutingMode.GLOBAL_PROXY,
                 ipv6Mode = mode, enableFakeDns = true))
             val dns = config.getJSONObject("dns")
             val servers = dns.getJSONArray("servers")
@@ -63,7 +63,7 @@ class Ipv6PolicyTest {
             assertEquals("NOERROR", rules.getJSONObject(3).getString("rcode"))
             assertTrue(config.getJSONObject("experimental").getJSONObject("cache_file").getBoolean("store_fakeip"))
         }
-        val direct = JSONObject(ConfigGenerator.generateSingBoxConfig(node("2001:db8::1"), RoutingMode.DIRECT, enableFakeDns = true))
+        val direct = JSONObject(ConfigGenerator.generateVpnConfig(node("2001:db8::1"), RoutingMode.DIRECT, enableFakeDns = true))
         assertFalse(direct.getJSONObject("dns").has("rules"))
         assertFalse(direct.getJSONObject("experimental").has("cache_file"))
     }

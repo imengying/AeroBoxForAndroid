@@ -3,7 +3,7 @@ set -euo pipefail
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}"
 
-ASSET_DIR="${GITHUB_WORKSPACE}/app/src/main/assets/sing-box"
+ASSET_DIR="${GITHUB_WORKSPACE}/app/src/main/assets/rules"
 rm -rf "${ASSET_DIR}"
 mkdir -p "${ASSET_DIR}"
 

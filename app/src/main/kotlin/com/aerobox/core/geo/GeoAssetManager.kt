@@ -56,7 +56,7 @@ object GeoAssetManager {
     private const val GEOSITE_ADS_URL =
         "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs"
 
-    private const val ASSET_PREFIX = "sing-box/"
+    private const val ASSET_PREFIX = "rules/"
 
     private const val GEOIP_CN_FILE = "geoip-cn.srs"
     private const val GEOSITE_CN_FILE = "geosite-cn.srs"
@@ -217,7 +217,6 @@ object GeoAssetManager {
         val versionFile = File(getGeoDir(context), versionFileName)
 
         val assetVersion = readAssetText(context, ASSET_PREFIX + assetVersionFileName) ?: return
-        // The legacy shared geosite version cannot identify either file reliably.
         val localVersion = versionFile.takeIf { it.isFile }?.readText()?.trim().orEmpty()
 
         val shouldExtract = when {

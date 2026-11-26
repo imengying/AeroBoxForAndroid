@@ -55,7 +55,7 @@ object RuntimeLogBuffer {
     fun appendCore(message: String) {
         val trimmed = message.trimStart()
         val prefix = coreLevelRegex.find(trimmed)
-        // libbox also forwards service failures as plain, unprefixed error messages.
+        // Service failures may arrive as plain, unprefixed error messages.
         if (prefix == null) {
             appendError(trimmed)
         } else {

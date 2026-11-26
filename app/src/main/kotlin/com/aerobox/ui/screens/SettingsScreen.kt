@@ -47,7 +47,7 @@ import com.aerobox.viewmodel.AppViewModelFactory
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.core.net.toUri
 import com.aerobox.R
-import com.aerobox.core.native.SingBoxNative
+import com.aerobox.core.native.RustCore
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.ui.components.AppDialog
 import com.aerobox.ui.components.DialogActions
@@ -92,7 +92,7 @@ fun SettingsScreen(
     val autoReconnect by viewModel.autoReconnect.collectAsStateWithLifecycle()
     val isCheckingAppUpdate by viewModel.isCheckingAppUpdate.collectAsStateWithLifecycle()
     val availableAppUpdate by viewModel.availableAppUpdate.collectAsStateWithLifecycle()
-    val coreVersion by SingBoxNative.version.collectAsStateWithLifecycle()
+    val coreVersion by RustCore.version.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -378,7 +378,7 @@ fun SettingsScreen(
                 enabled = !isCheckingAppUpdate,
                 icon = { Icon(Icons.Filled.Info, contentDescription = null) },
                 title = stringResource(R.string.version),
-                supporting = "${com.aerobox.BuildConfig.VERSION_NAME} (sing-box $coreVersion)",
+                supporting = "${com.aerobox.BuildConfig.VERSION_NAME} (Rust $coreVersion)",
                 trailing = {
                     if (isCheckingAppUpdate) {
                         CircularProgressIndicator(

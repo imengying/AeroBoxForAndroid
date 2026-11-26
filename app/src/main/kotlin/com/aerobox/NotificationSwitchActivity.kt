@@ -48,7 +48,7 @@ import com.aerobox.data.model.ProxyNode
 import com.aerobox.data.repository.VpnConnectionResult
 import com.aerobox.ui.components.AppSnackbarHost
 import com.aerobox.ui.components.ProvideAppLocale
-import com.aerobox.ui.theme.SingBoxVPNTheme
+import com.aerobox.ui.theme.AeroBoxTheme
 import com.aerobox.utils.AppLocaleManager
 import com.aerobox.utils.PreferenceManager
 import kotlinx.coroutines.launch
@@ -71,7 +71,7 @@ class NotificationSwitchActivity : ComponentActivity() {
             val dynamicColor by PreferenceManager.dynamicColorFlow(this)
                 .collectAsStateWithLifecycle(initialValue = true)
 
-            SingBoxVPNTheme(
+            AeroBoxTheme(
                 darkTheme = when (darkMode) {
                     "on" -> true
                     "off" -> false

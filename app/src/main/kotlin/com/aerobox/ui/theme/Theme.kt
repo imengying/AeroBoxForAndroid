@@ -50,7 +50,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun SingBoxVPNTheme(
+fun AeroBoxTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit

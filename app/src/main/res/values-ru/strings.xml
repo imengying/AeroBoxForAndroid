@@ -286,7 +286,7 @@
     <string name="settings_auto_reconnect">Автопереподключение при сбое</string>
     <string name="settings_auto_reconnect_summary">Автоматически переподключаться при неожиданном разрыве VPN</string>
     <string name="settings_log">Журнал работы</string>
-    <string name="settings_log_summary">Просмотр журнала работы sing-box</string>
+    <string name="settings_log_summary">Просмотр журнала работы Rust</string>
     <string name="settings_about_supporting">Проект AeroBox · GNU GPL-3.0-or-later</string>
     <string name="app_update_checking">Проверка обновлений…</string>
     <string name="app_update_already_latest">Установлена последняя версия</string>

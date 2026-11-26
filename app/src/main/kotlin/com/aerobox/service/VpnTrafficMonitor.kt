@@ -21,7 +21,6 @@ internal data class TrafficSample(
 /** Polls the native traffic API; lifecycle decisions and UI updates belong to its caller. */
 internal class VpnTrafficMonitor(
     private val query: (logErrors: Boolean) -> TrafficCounters?,
-    private val closeQuery: () -> Unit,
     private val clock: () -> Long,
     private val isInteractive: () -> Boolean
 ) {
@@ -34,8 +33,7 @@ internal class VpnTrafficMonitor(
         val previous = job
         job = null
         previous?.cancel()
-        // A JNI query must be interrupted before joining its coroutine.
-        closeQuery()
+        // Rust returns an in-process counter snapshot; there is no RPC channel to close.
         previous?.join()
     }
 

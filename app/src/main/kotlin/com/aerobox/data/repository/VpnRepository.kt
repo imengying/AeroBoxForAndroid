@@ -6,7 +6,7 @@ import android.util.Log
 import com.aerobox.core.config.ConfigGenerator
 import com.aerobox.core.errors.LocalizedException
 import com.aerobox.core.logging.RuntimeLogBuffer
-import com.aerobox.core.native.SingBoxNative
+import com.aerobox.core.native.RustCore
 import com.aerobox.data.model.IPv6Mode
 import com.aerobox.data.model.ProxyNode
 import com.aerobox.service.AeroBoxVpnService
@@ -234,7 +234,7 @@ class VpnRepository(
                 directDns = directDns,
                 ipv6Mode = ipv6Mode
             )
-            SingBoxNative.urlTestOutbound(
+            RustCore.urlTestOutbound(
                 configContent = config,
                 outboundTag = "proxy",
                 testUrl = "http://cp.cloudflare.com/",

@@ -9,7 +9,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Top-level entry point for generating sing-box JSON configurations.
+ * Builds the Android configuration document consumed by the Rust core.
  *
  * Heavy-lifting is delegated to:
  * - [DnsConfigBuilder] — DNS server/rule construction
@@ -23,7 +23,6 @@ object ConfigGenerator {
     internal const val DNS_REMOTE_TAG = "dns-remote"
     internal const val DNS_FAKE_TAG = "dns-fake"
     private const val DEFAULT_TUN_MTU = 9000
-    const val V2RAY_API_LISTEN = "127.0.0.1:10085"
 
     fun exportNodes(nodes: List<ProxyNode>): String {
         val tags = mutableSetOf<String>()
@@ -48,7 +47,7 @@ object ConfigGenerator {
         return DnsConfigBuilder.validateDnsSettings(context, remoteDns, directDns)
     }
 
-    fun generateSingBoxConfig(
+    fun generateVpnConfig(
         node: ProxyNode,
         routingMode: RoutingMode = RoutingMode.RULE_BASED,
         remoteDns: String = "https://cloudflare-dns.com/dns-query",
@@ -206,17 +205,6 @@ object ConfigGenerator {
                     JSONObject().put("enabled", true).put("store_fakeip", storeFakeIp)
                 )
             }
-            put(
-                "v2ray_api",
-                JSONObject()
-                    .put("listen", V2RAY_API_LISTEN)
-                    .put(
-                        "stats",
-                        JSONObject()
-                            .put("enabled", true)
-                            .put("outbounds", JSONArray().put("proxy").put("direct"))
-                    )
-            )
         }
     }
 

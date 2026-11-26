@@ -11,3 +11,5 @@
 app/build
 .codex
 .claude
+/.rust-core/
+/build-logs/
