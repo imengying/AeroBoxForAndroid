@@ -6,7 +6,7 @@ ROOT = Path.cwd()
 TEMPLATE_ROOT = Path(__file__).resolve().parent.parent / "libbox"
 DISABLED_BUILD_TAG = "//go:build aerobox_disabled_libbox_feature\n\n"
 
-# Reviewed against sing-box v1.14.4.
+# Reviewed against sing-box v1.14.5.
 UPSTREAM_HASHES = {
     "log/observable.go": "49f1b8a85f256e605aef4cb23033374a8f83d8f05704d84c7e818af52a80e850",
     "include/registry.go": "cbc7bc06391fe555828782df7bc1ce0844e446a82647448739dbb3e8e3eef19e",
@@ -18,7 +18,7 @@ UPSTREAM_HASHES = {
     "experimental/libbox/deprecated.go": "d3eafe8092bb78276f88e1428ef02876a807d3d9ad5668afe192f776898f2629",
     "experimental/libbox/fdroid.go": "749c57b9a52eaf99a5fcb01a26d1028be10a73859422cadff3b531e18117196b",
     "experimental/libbox/fdroid_mirrors.go": "5a069edecf0766ab35d7dea57ca99dfe3c5307875304179f2767d57a11ca4ed3",
-    "experimental/libbox/http.go": "74f2aa6428a8d17923c48ed47abdddf64000bbff93d33a6028c991ce79d10a60",
+    "experimental/libbox/http.go": "2454d51da4f410c84b0daa49cba2df74d1d42c609d21384574f729d458d42fe2",
     "experimental/libbox/log.go": "8994884541ce20c3e506f087d948c44abb0c19f900416708704f9aebef7f98ff",
     "experimental/libbox/pprof.go": "8be57f35cedebcff7e325133ce162c2b602162e606362c4f42a1c4c6a12dd3d1",
     "experimental/libbox/profile_import.go": "df883b526a5f63c799d6713b90fa7d61927164788333bf603e423c0a9ba3c135",
@@ -27,10 +27,10 @@ UPSTREAM_HASHES = {
     "experimental/libbox/semver_test.go": "dd0901f2b0ddfc7a4564d067c16f53dc90e11157a810ce2658940fb8de13f9d2",
     "experimental/libbox/platform.go": "18b87867b99f956834adfd686f5a59234ae2d6766a43446c363a985e8f3c85b2",
     "experimental/libbox/service.go": "f24115be10e1109e20c32c06750a6cb74a149b00dd82773bf7812959f25ac0ac",
-    "experimental/libbox/config.go": "7cc7b92f90fe7310523792bb79650d2f29466c3342b3b46dc509b320d9487702",
-    "experimental/libbox/command_server.go": "6402aba013b8dd87224e8d8999a36e50e23a9346be81cf9de1ee14a7043c4a90",
+    "experimental/libbox/config.go": "d69dea7ec960e8078ede6815e100491c0879af1295b68c954ac2cb19575de48a",
+    "experimental/libbox/command_server.go": "8b33c526504c38bc2f3e869dd3761ff89520c18b6c4891c4f01c284d0f5d6484",
     "experimental/libbox/setup.go": "052e043c4e257a32f1df94a2bcb999ecff8ecae4d11e0388214dc6631cb48238",
-    "experimental/libbox/monitor.go": "b4afd41fc13f55c602d83d7caa210fa21fbd9bb0db038804ca0cc0cbfe42ca39",
+    "experimental/libbox/monitor.go": "15194b2c1414d5b344397b65de6a06245fe5feb3cb21c92138da38ffbd6c57e6",
     "experimental/libbox/bridge_service_darwin.go": "74aeb9334cef49f231dc743c8e0eb021db65cf5fa7d0d2d927c0c5a40f6835cf",
     "experimental/libbox/bridge_service_linux.go": "615814c3ed53d0cbfa411c51c54e7fab040e8dba56d72b932f02a06f040ccb7c",
     "experimental/libbox/bridge_stub.go": "7bb780f47fadcbd57dd4ea0409294b42bc0011e8ea49fbed135add1eddae01bd",
@@ -53,7 +53,7 @@ UPSTREAM_HASHES = {
     "experimental/libbox/native_shell_session_stub.go": "1e5ee8dd0fb4dfbecfd7fa430a0e5eccd598fa73bddcf59d0f2922f11b84820c",
     "experimental/libbox/neighbor.go": "cfe24dd4252aba380233db1979bc786eda8e8499ca5c491be56c458a697bc33f",
     "experimental/libbox/neighbor_darwin.go": "5277b8288f401e376da569b419646cc689e35c6066b313b8e3ec6b166f51da59",
-    "experimental/libbox/neighbor_linux.go": "40e33bce6550e87d21749c07b748699fcb7f3bf3febb0f3712aa7d636021bdb8",
+    "experimental/libbox/neighbor_linux.go": "8ee8398b51a9cbf2e80106ff0522001e31d2425b007f97eb0b1c138405ea0c08",
     "experimental/libbox/neighbor_stub.go": "0f4b407df01d1c754335e340ff4c87539e38df60893c5cdbb8f51b08398174bc",
     "experimental/libbox/neighbor_unix.go": "9cda1d0d694bca72be0f345f7a9e8cee3bcc2e7b36735ca00803c8d7b9d0c73c",
     "experimental/libbox/networkquality.go": "6dc6e3b4baf8c03aeee235788abd9732fcb436ff2df9aad919628bc84cbf8588",
@@ -253,6 +253,14 @@ def patch_config() -> None:
     verify_upstream_file(path)
     remove_once(path, '\t"reflect"\n')
     remove_once(path, '\t"github.com/sagernet/sing-box/schema"\n')
+    # AeroBox uses CheckConfig, including the core's reference validation.
+    remove_once(
+        path,
+        "func ParseConfig(configContent string) error {\n"
+        "\t_, err := parseConfig(baseContext(nil), configContent)\n"
+        "\treturn err\n"
+        "}\n\n",
+    )
     text = read(path)
     start = text.index("\nfunc GenerateConfigSchema() (*StringBox, error) {")
     end = text.index("\nfunc FormatConfig(configContent string) (*StringBox, error) {", start)
@@ -307,6 +315,27 @@ def patch_monitor() -> None:
 def patch_command_server() -> None:
     path = "experimental/libbox/command_server.go"
     verify_upstream_file(path)
+    # The tunneled HTTP client added in 1.14.5 depends on the disabled http.go.
+    # Remove its entry point and private connection wrappers together.
+    for import_line in (
+        '\t"sync"\n',
+        '\tM "github.com/sagernet/sing/common/metadata"\n',
+        '\tN "github.com/sagernet/sing/common/network"\n',
+        '\t"github.com/sagernet/sing/common/pipe"\n',
+    ):
+        remove_once(path, import_line)
+    text = read(path)
+    start = text.index("\nfunc (s *CommandServer) NewHTTPClient() HTTPClient {")
+    end = text.index("\ntype platformHandler CommandServer\n", start)
+    write(path, text[:start] + text[end:])
+    remove_once(
+        path,
+        "\nvar (\n"
+        "\t_ N.HandshakeFailure   = (*routedConn)(nil)\n"
+        "\t_ N.ReaderWithUpstream = (*routedConn)(nil)\n"
+        "\t_ N.WriterWithUpstream = (*routedConn)(nil)\n"
+        ")\n",
+    )
     remove_once(path, '\t"github.com/sagernet/sing-box/service/oomkiller"\n')
     remove_once(path, '\t"github.com/sagernet/sing-box/service/powerreport"\n')
     remove_once(path, "\tpowerManager      *powerreport.Manager\n")
