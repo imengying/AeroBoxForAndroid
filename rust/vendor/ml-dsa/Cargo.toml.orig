@@ -1,0 +1,68 @@
+[package]
+name = "ml-dsa"
+description = """
+Pure Rust implementation of ML-DSA (formerly known as CRYSTALS-Dilithium) as
+described in FIPS-204 (final)
+"""
+version = "0.1.0-rc.10"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0 OR MIT"
+homepage = "https://github.com/RustCrypto/signatures/tree/master/ml-dsa"
+repository = "https://github.com/RustCrypto/signatures"
+readme = "README.md"
+categories = ["cryptography"]
+keywords = ["crypto", "signature"]
+# Exclude these large files in published crate:
+exclude = [
+    "tests/key-gen.json",
+    "tests/key-gen.rs",
+    "tests/proptests.proptest-regressions",
+    "tests/sig-gen.json",
+    "tests/sig-gen.rs",
+    "tests/sig-ver.json",
+    "tests/sig-ver.rs",
+]
+
+[features]
+default = ["alloc", "getrandom", "pkcs8"]
+alloc = ["hybrid-array/alloc", "pkcs8?/alloc", "signature/alloc"]
+
+getrandom = ["common/getrandom", "rand_core"]
+pkcs8 = ["dep:const-oid", "dep:pkcs8"]
+rand_core = ["common/rand_core", "signature/rand_core"]
+zeroize = ["dep:zeroize", "hybrid-array/zeroize", "module-lattice/zeroize"]
+
+[dependencies]
+common = { package = "crypto-common", version = "0.2", default-features = false }
+ctutils = { version = "0.4", default-features = false }
+hybrid-array = { version = "0.4", features = ["extra-sizes"] }
+module-lattice = { version = "0.2.2", features = ["ctutils"] }
+sha3 = { version = "0.11", default-features = false }
+signature = { version = "3", default-features = false, features = ["digest"] }
+
+# optional dependencies
+const-oid = { version = "0.10", features = ["db"], optional = true }
+pkcs8 = { version = "0.11", default-features = false, optional = true }
+zeroize = { version = "1.8.1", optional = true, default-features = false }
+
+[dev-dependencies]
+criterion = "0.7"
+getrandom = { version = "0.4", features = ["sys_rng"] }
+hex = { version = "0.4", features = ["serde"] }
+hex-literal = "1"
+pkcs8 = { version = "0.11", features = ["pem"] }
+proptest = "1"
+serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1.0.132"
+
+[[bench]]
+name = "ml_dsa"
+harness = false
+required-features = ["getrandom"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true

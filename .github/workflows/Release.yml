@@ -25,23 +25,6 @@ jobs:
       - name: Prepare build logs
         run: mkdir -p build-logs
 
-      - name: Resolve pinned Rust core
-        id: rust-core
-        env:
-          AEROBOX_CORE_REPOSITORY: ${{ vars.AEROBOX_CORE_REPOSITORY }}
-          AEROBOX_CORE_REF: ${{ vars.AEROBOX_CORE_REF }}
-        run: bash .github/scripts/resolve-rust-core.sh
-
-      - name: Checkout Rust core
-        uses: actions/checkout@v7.0.1
-        with:
-          repository: ${{ steps.rust-core.outputs.repository }}
-          ref: ${{ steps.rust-core.outputs.ref }}
-          path: .rust-core
-          fetch-depth: 1
-          persist-credentials: false
-          token: ${{ secrets.AEROBOX_CORE_TOKEN || github.token }}
-
       - name: Set up JDK 25
         uses: actions/setup-java@v6.1.0
         with:
@@ -66,9 +49,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends ripgrep binutils
           command -v rustup
 
-      - name: Build Rust Android AAR (four ABIs, sequential)
-        env:
-          AEROBOX_CORE_REF: ${{ steps.rust-core.outputs.ref }}
+      - name: Build Rust JNI libraries (four ABIs, sequential)
         run: |
           set -euo pipefail
           bash .github/scripts/build-rust-core.sh 2>&1 | tee build-logs/rust-core.log
@@ -128,7 +109,7 @@ jobs:
       - name: Run regression tests
         run: |
           set -euo pipefail
-          ./gradlew --no-daemon --max-workers=1 --stacktrace :app:testDebugUnitTest 2>&1 | tee build-logs/unit-tests.log
+          sudo --non-interactive env "PATH=$PATH" "JAVA_HOME=$JAVA_HOME" "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" "CARGO_HOME=$HOME/.cargo" "RUSTUP_HOME=$HOME/.rustup" "GRADLE_USER_HOME=${GRADLE_USER_HOME:-$HOME/.gradle}" python3 rust/scripts/run-bounded-build.py -- bash .github/scripts/run-regression-tests.sh 2>&1 | tee build-logs/unit-tests.log
 
       - name: Build unsigned release APK
         env:
@@ -140,7 +121,7 @@ jobs:
             "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}"
             "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}"
           )
-          ./gradlew --no-daemon --max-workers=1 --stacktrace --warning-mode all :app:assembleRelease "${EXTRA_ARGS[@]}" \
+          sudo --non-interactive env "PATH=$PATH" "JAVA_HOME=$JAVA_HOME" "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" "CARGO_HOME=$HOME/.cargo" "RUSTUP_HOME=$HOME/.rustup" "GRADLE_USER_HOME=${GRADLE_USER_HOME:-$HOME/.gradle}" python3 rust/scripts/run-bounded-build.py -- ./gradlew --no-daemon --max-workers=1 --stacktrace --warning-mode all :app:assembleRelease "${EXTRA_ARGS[@]}" \
             2>&1 | tee build-logs/assemble-release.log
 
       - name: Run Android lint
@@ -151,7 +132,7 @@ jobs:
         run: |
           set -euo pipefail
           REPORT="app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt"
-          if ! ./gradlew --no-daemon --max-workers=1 --stacktrace --warning-mode all :app:lintRelease \
+          if ! sudo --non-interactive env "PATH=$PATH" "JAVA_HOME=$JAVA_HOME" "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" "CARGO_HOME=$HOME/.cargo" "RUSTUP_HOME=$HOME/.rustup" "GRADLE_USER_HOME=${GRADLE_USER_HOME:-$HOME/.gradle}" python3 rust/scripts/run-bounded-build.py -- ./gradlew --no-daemon --max-workers=1 --stacktrace --warning-mode all :app:lintRelease \
             "-PAEROBOX_VERSION_NAME=${AEROBOX_VERSION_NAME}" \
             "-PAEROBOX_VERSION_CODE=${AEROBOX_VERSION_CODE}" \
             2>&1 | tee build-logs/lint-release.log; then
@@ -170,6 +151,19 @@ jobs:
           name: aerobox-release-lint-report
           path: app/build/reports/lint-results-release.*
           if-no-files-found: warn
+
+      - name: Verify packaged JNI after R8
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          APKS=(app/build/outputs/apk/release/*.apk)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::error::No APK files found for JNI validation"
+            exit 1
+          fi
+          for apk in "${APKS[@]}"; do
+            python3 rust/scripts/audit-android-dex.py "$apk"
+          done 2>&1 | tee build-logs/jni-audit.log
 
       - name: Sign release APKs (v3 only)
         env:
@@ -247,8 +241,8 @@ jobs:
         run: |
           set +e
           {
-            echo "========== Rust Android AAR =========="
-            ls -la "${GITHUB_WORKSPACE}/.rust-core/target/android/" || true
+            echo "========== Rust Android JNI libraries =========="
+            ls -la "${GITHUB_WORKSPACE}/app/build/generated/rust/jniLibs/" || true
             echo "========== app/build/outputs =========="
             if [ -d "${GITHUB_WORKSPACE}/app/build/outputs" ]; then
               find "${GITHUB_WORKSPACE}/app/build/outputs" -maxdepth 5 -print | sort
@@ -306,8 +300,8 @@ jobs:
           name: aerobox-release-build-logs-${{ github.ref_name }}-${{ github.run_attempt }}
           path: |
             build-logs/*.log
-            .rust-core/target/build-control/*.json
-            .rust-core/target/build-control/*.jsonl
+            rust/target/build-control/*.json
+            rust/target/build-control/*.jsonl
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 3

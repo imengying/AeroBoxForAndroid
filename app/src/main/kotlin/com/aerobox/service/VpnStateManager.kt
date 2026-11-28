@@ -41,7 +41,6 @@ object VpnStateManager {
         refreshTile()
     }
     fun stopped(generation: Long) { store.stopped(generation); refreshTile() }
-    fun updateCurrentNode(node: ProxyNode?) { store.updateNode(node); refreshTile() }
     fun updateLastError(error: String?) { store.updateError(error) }
     fun clearLastError() { store.updateError(null) }
 

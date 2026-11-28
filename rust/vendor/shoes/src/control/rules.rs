@@ -1,0 +1,427 @@
+use std::io;
+use std::sync::Arc;
+
+use super::catalog::RuleDescription;
+use super::flows::{FlowContext, FlowRegistry};
+use crate::config::client_visit::sorted_targets;
+use crate::config::{
+    ResolvedConfig, ResolvedRuleConfig, ResolvedServerProxyConfig, ValidatedConfigs,
+};
+use crate::option_util::NoneOrSome;
+
+struct Builder {
+    registry: Option<Arc<FlowRegistry>>,
+    generation: u64,
+    rules: Vec<serde_json::Value>,
+}
+
+impl Builder {
+    fn project_rules(
+        &mut self,
+        rules: &mut NoneOrSome<ResolvedRuleConfig>,
+        inbound: &str,
+        scope: &str,
+        protocol: &str,
+    ) {
+        for rule in rules.iter_mut() {
+            let mut description = rule
+                .criteria
+                .description
+                .as_deref()
+                .cloned()
+                .unwrap_or_else(|| RuleDescription {
+                    payload: "match all".into(),
+                    proxy: if matches!(rule.action, crate::config::ResolvedRuleActionConfig::Block)
+                    {
+                        "REJECT"
+                    } else {
+                        "DIRECT"
+                    }
+                    .into(),
+                    context: None,
+                });
+            if let Some(registry) = &self.registry {
+                description.context = Some(Arc::new(FlowContext {
+                    registry: registry.clone(),
+                    generation: self.generation,
+                    inbound: inbound.into(),
+                    scope: scope.into(),
+                    protocol: protocol.into(),
+                }));
+            }
+            self.rules.push(serde_json::json!({
+                "index": self.rules.len(),
+                "type": "Shoes",
+                "payload": format!("{inbound} ({scope}): {}", description.payload),
+                "proxy": description.proxy,
+                "size": -1,
+                "shoes": {"inbound": inbound, "scope": scope},
+            }));
+            rule.criteria.description = Some(Arc::new(description));
+        }
+    }
+
+    fn project_target(
+        &mut self,
+        rules: &mut NoneOrSome<ResolvedRuleConfig>,
+        protocol: &mut ResolvedServerProxyConfig,
+        inherited: &NoneOrSome<ResolvedRuleConfig>,
+        inbound: &str,
+        scope: &str,
+    ) {
+        if rules.is_empty() {
+            // Project inherited contexts without rebuilding shared routing pools or counters.
+            let mut effective = inherited.clone();
+            let first = self.rules.len();
+            self.project_rules(&mut effective, inbound, scope, inbound_type(protocol));
+            for rule in &mut self.rules[first..] {
+                rule["shoes"]["inherited"] = serde_json::json!(true);
+            }
+            self.project_protocol(protocol, inbound, scope, &effective);
+        } else {
+            self.project_rules(rules, inbound, scope, inbound_type(protocol));
+            self.project_protocol(protocol, inbound, scope, rules);
+        }
+    }
+
+    fn project_protocol(
+        &mut self,
+        protocol: &mut ResolvedServerProxyConfig,
+        inbound: &str,
+        scope: &str,
+        inherited: &NoneOrSome<ResolvedRuleConfig>,
+    ) {
+        match protocol {
+            ResolvedServerProxyConfig::Tls {
+                tls_targets,
+                default_tls_target,
+
+                reality_targets,
+                ..
+            } => {
+                for (key, target) in sorted_targets(tls_targets) {
+                    let scope = format!("{scope}/tls/{key}");
+                    self.project_target(
+                        &mut target.override_rules,
+                        &mut target.protocol,
+                        inherited,
+                        inbound,
+                        &scope,
+                    );
+                }
+                if let Some(target) = default_tls_target {
+                    let scope = format!("{scope}/tls/default");
+                    self.project_target(
+                        &mut target.override_rules,
+                        &mut target.protocol,
+                        inherited,
+                        inbound,
+                        &scope,
+                    );
+                }
+
+                for (key, target) in sorted_targets(reality_targets) {
+                    let scope = format!("{scope}/reality/{key}");
+                    self.project_target(
+                        &mut target.override_rules,
+                        &mut target.protocol,
+                        inherited,
+                        inbound,
+                        &scope,
+                    );
+                }
+            }
+            ResolvedServerProxyConfig::Websocket { targets } => {
+                for (index, target) in targets.iter_mut().enumerate() {
+                    let scope = format!("{scope}/websocket/{index}");
+                    self.project_target(
+                        &mut target.override_rules,
+                        &mut target.protocol,
+                        inherited,
+                        inbound,
+                        &scope,
+                    );
+                }
+            }
+
+            _ => {}
+        }
+    }
+}
+
+pub fn inbound_type(protocol: &ResolvedServerProxyConfig) -> &'static str {
+    match protocol {
+        ResolvedServerProxyConfig::Socks { .. } => "Socks5",
+        ResolvedServerProxyConfig::Http { .. } => "HTTP",
+        ResolvedServerProxyConfig::Vless { .. } => "VLESS",
+        ResolvedServerProxyConfig::Vmess { .. } => "Vmess",
+        ResolvedServerProxyConfig::Shadowsocks { .. } => "Shadowsocks",
+
+        ResolvedServerProxyConfig::Trojan { .. } => "Trojan",
+        ResolvedServerProxyConfig::Anytls { .. } => "AnyTLS",
+
+        ResolvedServerProxyConfig::Tls { .. } => "TLS",
+        ResolvedServerProxyConfig::Websocket { .. } => "WebSocket",
+
+        _ => "Shoes",
+    }
+}
+
+pub fn attach(
+    validated: &mut ValidatedConfigs,
+    generation: u64,
+    registry: Option<Arc<FlowRegistry>>,
+) -> io::Result<Vec<serde_json::Value>> {
+    let mut builder = Builder {
+        registry,
+        generation,
+        rules: Vec::new(),
+    };
+    for (index, config) in validated.configs.iter_mut().enumerate() {
+        match config {
+            ResolvedConfig::Server(server) => {
+                let inbound = server
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("inbound-{index}"));
+                builder.project_rules(
+                    &mut server.rules,
+                    &inbound,
+                    "root",
+                    inbound_type(&server.protocol),
+                );
+                builder.project_protocol(&mut server.protocol, &inbound, "root", &server.rules);
+            }
+            ResolvedConfig::TunServer(tun) => {
+                let inbound = tun.name.clone().unwrap_or_else(|| format!("tun-{index}"));
+                builder.project_rules(&mut tun.rules, &inbound, "root", "Tun");
+            }
+        }
+    }
+
+    if serde_json::to_vec(&builder.rules)
+        .map_err(io::Error::other)?
+        .len()
+        > 32 * 1024 * 1024
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "rule catalog exceeds 32 MiB",
+        ));
+    }
+    Ok(builder.rules)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mask_conditions_have_explicit_controller_and_connection_payloads() {
+        use serde_json::json;
+
+        let conditions = json!({"all": [
+            {"masks": ["example.net", "192.0.2.0/24"]},
+            {"destination_port": [443]}
+        ]});
+        let configs = serde_json::from_value(json!([
+            {"clash_api_address": "127.0.0.1:0", "secret": "test"},
+            {"name": "entry", "address": "127.0.0.1:0", "protocol": {"type": "socks"},
+             "rules": [{"masks": "example.com"}, {"conditions": conditions}]}
+        ]))
+        .unwrap();
+        let mut validated = crate::config::create_server_configs(configs).unwrap();
+        let registry = Arc::new(FlowRegistry::default());
+        let projected = attach(&mut validated, 1, Some(registry)).unwrap();
+        let ResolvedConfig::Server(server) = &validated.configs[0] else {
+            panic!()
+        };
+        let payloads = [
+            json!({"masks": "example.com"}).to_string(),
+            conditions.to_string(),
+        ];
+        assert_eq!(projected.len(), payloads.len());
+        for ((rule, projection), payload) in server.rules.iter().zip(&projected).zip(payloads) {
+            let labeled_payload = format!("entry (root): {payload}");
+            assert_eq!(projection["payload"], labeled_payload);
+            let description = rule.criteria.description.as_ref().unwrap();
+            assert_eq!(description.payload, payload);
+            let flow = description.context.as_ref().unwrap().register(
+                "tcp",
+                &crate::address::NetLocation::from_str("example.com:443", None)
+                    .unwrap()
+                    .into(),
+                Vec::new(),
+                &description.payload,
+                Default::default(),
+            );
+            assert_eq!(flow.entry.rule_payload, labeled_payload);
+        }
+    }
+
+    #[test]
+    fn embedded_rules_preserve_tags_without_retaining_a_controller_catalog() {
+        use serde_json::json;
+        let configs = serde_json::from_value(json!([
+            {"client_group":"proxy", "client_chain":{
+                "address":"127.0.0.1:8080", "protocol":{"type":"http", "password":"SECRET"}
+            }},
+            {"address":"127.0.0.1:0", "protocol":{"type":"socks"}, "rules":[
+                {"conditions":{"destination_port":[443]}, "client_chain":"proxy"},
+                {"masks":"example.com", "client_chain":{
+                    "address":"127.0.0.1:8081", "protocol":{"type":"http", "password":"SECRET"}
+                }}
+            ]}
+        ]))
+        .unwrap();
+        let mut validated = crate::config::create_server_configs(configs).unwrap();
+        assert!(validated.catalog.is_none());
+        let rules = attach(&mut validated, 1, Some(Arc::new(FlowRegistry::default()))).unwrap();
+        assert_eq!(rules[0]["proxy"], "proxy");
+        assert_eq!(rules[1]["proxy"], "HTTP");
+        let diagnostic = serde_json::to_string(&rules).unwrap();
+        assert!(diagnostic.contains("destination_port") && diagnostic.contains("example.com"));
+        assert!(!diagnostic.contains("SECRET"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remote_rule_and_connection_projections_omit_delivery_secrets() {
+        use crate::config::Config;
+        use serde_json::json;
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir_in(std::env::current_dir().unwrap()).unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let path = dir.path().join("rules.json");
+        std::fs::write(
+            &path,
+            r#"{"version":1,"rules":[{"domain":["example.com"]}]}"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let certificate = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        let key = certificate.signing_key.serialize_pem();
+        let source = json!({"url": "https://example.invalid/rules?token=QUERY_SENTINEL", "path": path,
+        "download": {"bootstrap_url": "system", "client_chain": {
+            "address": "127.0.0.1:443", "protocol": {"type": "tls",
+                "cert": certificate.cert.pem(), "key": key,
+                "protocol": {"type": "socks", "username": "user", "password": "PASSWORD_SENTINEL"}}
+        }}});
+        let configs: Vec<Config> = serde_json::from_value(json!([
+            {"global_settings": {"rule_cache_dir": dir.path()}},
+            {"clash_api_address": "127.0.0.1:0", "secret": "controller-secret"},
+            {"address": "127.0.0.1:0", "protocol": {"type": "socks"}, "rules": [
+                {"masks": {"all": [{"any": [source.clone()]}, {"not": {"not": source}}]}, "action": "allow"}
+            ]}
+        ])).unwrap();
+        let mut captured = configs.clone();
+        crate::control::catalog::CatalogDraft::capture(&mut captured).unwrap();
+        let serialized = serde_json::to_string(&captured).unwrap();
+        assert!(serialized.contains("QUERY_SENTINEL"));
+        assert!(serialized.contains("PASSWORD_SENTINEL"));
+        assert!(serialized.contains("PRIVATE KEY"));
+        let mut validated = crate::config::create_server_configs(configs).unwrap();
+        for rule in crate::config::resolved_visit::rules(&validated.configs) {
+            let retained = serde_json::to_string(&rule.criteria.expression).unwrap();
+            for secret in [
+                "QUERY_SENTINEL",
+                "PASSWORD_SENTINEL",
+                "PRIVATE KEY",
+                "download",
+            ] {
+                assert!(
+                    !retained.contains(secret),
+                    "delivery metadata retained in predicates: {secret}"
+                );
+            }
+        }
+        let registry = Arc::new(FlowRegistry::default());
+        let projection = attach(&mut validated, 1, Some(registry.clone())).unwrap();
+        let ResolvedConfig::Server(server) = &validated.configs[0] else {
+            panic!()
+        };
+        let rule = server.rules.iter().next().unwrap();
+        let description = rule.criteria.description.as_ref().unwrap();
+        let guard = description.context.as_ref().unwrap().register(
+            "tcp",
+            &crate::address::NetLocation::from_str("example.com:443", None)
+                .unwrap()
+                .into(),
+            Vec::new(),
+            &description.payload,
+            Default::default(),
+        );
+        for diagnostic in [
+            serde_json::to_string(&projection).unwrap(),
+            guard.entry.rule_payload.clone(),
+        ] {
+            assert!(diagnostic.contains("rules.json"));
+            for secret in [
+                "QUERY_SENTINEL",
+                "PASSWORD_SENTINEL",
+                "PRIVATE KEY",
+                "CERTIFICATE",
+                "download",
+            ] {
+                assert!(
+                    !diagnostic.contains(secret),
+                    "leaked {secret}: {diagnostic}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rule_projection_without_tracking_leaves_flow_context_absent() {
+        let configs = serde_yaml::from_str(
+            "- address: '127.0.0.1:1080'\n  protocol: {type: socks}\n  rules: allow-all-direct",
+        )
+        .unwrap();
+        let mut validated = crate::config::create_server_configs(configs).unwrap();
+        let rules = attach(&mut validated, 1, None).unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0]["proxy"], "DIRECT");
+        let ResolvedConfig::Server(server) = &validated.configs[0] else {
+            panic!()
+        };
+        let rule = server.rules.iter().next().unwrap();
+        assert!(
+            rule.criteria
+                .description
+                .as_ref()
+                .unwrap()
+                .context
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn inherited_protocol_rules_are_projected_without_materializing_overrides() {
+        let configs = serde_yaml::from_str(
+            &serde_json::json!([
+                {"clash_api_address":"127.0.0.1:9090","secret":"test"},
+                {"name":"entry","address":"127.0.0.1:1080","rules":"allow-all-direct",
+                 "protocol":{"type":"websocket","targets":[
+                     {"protocol":{"type":"socks"}},
+                     {"protocol":{"type":"socks"},"override_rules":"block-all"}
+                 ]}}
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        let mut validated = crate::config::create_server_configs(configs).unwrap();
+        let rules = attach(&mut validated, 1, Some(Arc::new(FlowRegistry::default()))).unwrap();
+        assert_eq!(rules.len(), 3);
+        assert_eq!(rules[1]["shoes"]["scope"], "root/websocket/0");
+        assert_eq!(rules[1]["shoes"]["inherited"], true);
+        assert_eq!(rules[1]["proxy"], "DIRECT");
+        assert_eq!(rules[2]["proxy"], "REJECT");
+        let ResolvedConfig::Server(server) = &validated.configs[0] else {
+            panic!()
+        };
+        let ResolvedServerProxyConfig::Websocket { targets } = &server.protocol else {
+            panic!()
+        };
+        assert!(targets.iter().next().unwrap().override_rules.is_empty());
+    }
+}

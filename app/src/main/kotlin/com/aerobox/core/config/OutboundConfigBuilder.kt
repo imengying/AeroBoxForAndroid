@@ -107,11 +107,11 @@ internal object OutboundConfigBuilder {
                         val portArray = JSONArray()
                         ports.forEach { portArray.put(it) }
                         outbound.put("server_ports", portArray)
+                        node.hopInterval
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let(::normalizeHysteriaHopInterval)
+                            ?.let { outbound.put("hop_interval", it) }
                     }
-                node.hopInterval
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let(::normalizeHysteriaHopInterval)
-                    ?.let { outbound.put("hop_interval", it) }
                 node.upMbps?.takeIf { it > 0 }?.let { outbound.put("up_mbps", it) }
                 node.downMbps?.takeIf { it > 0 }?.let { outbound.put("down_mbps", it) }
                 node.brutalDebug?.let { outbound.put("brutal_debug", it) }
@@ -140,15 +140,15 @@ internal object OutboundConfigBuilder {
                     node.congestionControl?.takeIf { it.isNotBlank() }?.let {
                         outbound.put("quic_congestion_control", it)
                     }
+                    node.naiveQuicSessionReceiveWindow?.takeIf { it.isNotBlank() }?.let {
+                        outbound.put("quic_session_receive_window", it)
+                    }
                 }
                 node.naiveInsecureConcurrency?.takeIf { it > 0 }?.let {
                     outbound.put("insecure_concurrency", it)
                 }
                 node.naiveStreamReceiveWindow?.takeIf { it.isNotBlank() }?.let {
                     outbound.put("stream_receive_window", it)
-                }
-                node.naiveQuicSessionReceiveWindow?.takeIf { it.isNotBlank() }?.let {
-                    outbound.put("quic_session_receive_window", it)
                 }
                 buildHeaderObject(node.naiveExtraHeaders)?.let { outbound.put("extra_headers", it) }
                 buildUdpOverTcp(node.udpOverTcpEnabled, node.udpOverTcpVersion)?.let {
@@ -229,16 +229,19 @@ internal object OutboundConfigBuilder {
     private fun applyDialFields(outbound: JSONObject, node: ProxyNode) {
         node.bindInterface?.takeIf { it.isNotBlank() }?.let { outbound.put("bind_interface", it) }
         node.connectTimeout?.takeIf { it.isNotBlank() }?.let { outbound.put("connect_timeout", it) }
-        // sing-box rejects AnyTLS with TFO because its handshake needs an established connection.
-        if (node.type != ProxyType.ANYTLS) {
-            node.tcpFastOpen?.let { outbound.put("tcp_fast_open", it) }
-        }
-        node.tcpMultiPath?.let { outbound.put("tcp_multi_path", it) }
         node.udpFragment?.let { outbound.put("udp_fragment", it) }
         node.networkStrategy?.takeIf { it.isNotBlank() }?.let { outbound.put("network_strategy", it) }
         putStringOrArray(outbound, "network_type", node.networkType)
         putStringOrArray(outbound, "fallback_network_type", node.fallbackNetworkType)
         node.fallbackDelay?.takeIf { it.isNotBlank() }?.let { outbound.put("fallback_delay", it) }
+        // QUIC opens only UDP sockets. Retained TCP settings are used again
+        // when the user switches this node back to a stream transport.
+        if (usesQuicTransport(node)) return
+        // AnyTLS needs an established connection before its handshake.
+        if (node.type != ProxyType.ANYTLS) {
+            node.tcpFastOpen?.let { outbound.put("tcp_fast_open", it) }
+        }
+        node.tcpMultiPath?.let { outbound.put("tcp_multi_path", it) }
         // sing-box 1.13 dial-level TCP keep-alive triplet. All optional;
         // omitting a key falls back to sing-box's defaults (5m initial /
         // 75s interval, keep-alive on).
@@ -249,11 +252,49 @@ internal object OutboundConfigBuilder {
             ?.let { outbound.put("tcp_keep_alive_interval", it) }
     }
 
+    private fun usesQuicTransport(node: ProxyNode): Boolean = when (node.type) {
+        ProxyType.HYSTERIA2, ProxyType.TUIC -> true
+        ProxyType.NAIVE -> node.naiveProtocol.equals("quic", true) || node.transportType.equals("quic", true)
+        ProxyType.VMESS, ProxyType.VLESS, ProxyType.TROJAN -> node.effectiveTransportType() == "quic"
+        ProxyType.SHADOWSOCKS, ProxyType.SHADOWSOCKS_2022 ->
+            node.plugin == "v2ray-plugin" && pluginOption(node.pluginOpts, "mode") == "quic"
+        else -> false
+    }
+
+    /** SIP003 escapes delimiters; the first occurrence of an option wins. */
+    private fun pluginOption(raw: String?, name: String): String? {
+        val key = StringBuilder()
+        val value = StringBuilder()
+        var inValue = false
+        var escaped = false
+        for (character in raw.orEmpty() + ";") {
+            if (escaped) {
+                (if (inValue) value else key).append(character)
+                escaped = false
+            } else when (character) {
+                '\\' -> escaped = true
+                ';' -> {
+                    if (key.toString() == name) return if (inValue) value.toString() else "1"
+                    key.clear()
+                    value.clear()
+                    inValue = false
+                }
+                '=' -> if (inValue) value.append(character) else inValue = true
+                else -> (if (inValue) value else key).append(character)
+            }
+        }
+        return null
+    }
+
     private fun applyMultiplex(outbound: JSONObject, node: ProxyNode) {
         val enabled = node.muxEnabled ?: return
 
         val multiplex = JSONObject()
         multiplex.put("enabled", enabled)
+        if (!enabled) {
+            outbound.put("multiplex", multiplex)
+            return
+        }
         // sing-box accepts smux / yamux / h2mux. Anything else is silently
         // ignored so passing through unrecognised values is safe, but we
         // still gate-check to avoid emitting noise into the config.
@@ -317,6 +358,7 @@ internal object OutboundConfigBuilder {
      * their server advertises an ECHConfig.
      */
     private fun buildEchObject(node: ProxyNode): JSONObject? {
+        if (node.echEnabled == false) return JSONObject().put("enabled", false)
         val config = node.echConfig?.trim()?.takeIf { it.isNotEmpty() }
         val configPath = node.echConfigPath?.trim()?.takeIf { it.isNotEmpty() }
         val queryServerName = node.echQueryServerName?.trim()?.takeIf { it.isNotEmpty() }
@@ -410,13 +452,10 @@ internal object OutboundConfigBuilder {
         node.tlsMaxVersion?.takeIf { it.isNotBlank() }?.let { tls.put("max_version", it) }
         putStringOrArray(tls, "cipher_suites", node.tlsCipherSuites)
         putStringOrArray(tls, "curve_preferences", node.tlsCurvePreferences)
-        node.tlsCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("certificate", it) }
-        node.tlsCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("certificate_path", it) }
+        putCredential(tls, "certificate", node.tlsCertificate, node.tlsCertificatePath)
         putStringOrArray(tls, "certificate_public_key_sha256", node.tlsCertificatePublicKeySha256)
-        node.tlsClientCertificate?.takeIf { it.isNotBlank() }?.let { tls.put("client_certificate", it) }
-        node.tlsClientCertificatePath?.takeIf { it.isNotBlank() }?.let { tls.put("client_certificate_path", it) }
-        node.tlsClientKey?.takeIf { it.isNotBlank() }?.let { tls.put("client_key", it) }
-        node.tlsClientKeyPath?.takeIf { it.isNotBlank() }?.let { tls.put("client_key_path", it) }
+        putCredential(tls, "client_certificate", node.tlsClientCertificate, node.tlsClientCertificatePath)
+        putCredential(tls, "client_key", node.tlsClientKey, node.tlsClientKeyPath)
         node.tlsFragment?.let { tls.put("fragment", it) }
         node.tlsFragmentFallbackDelay?.takeIf { it.isNotBlank() }?.let { tls.put("fragment_fallback_delay", it) }
         node.tlsRecordFragment?.let { tls.put("record_fragment", it) }
@@ -439,6 +478,11 @@ internal object OutboundConfigBuilder {
                     .put("fingerprint", node.fingerprint)
             )
         }
+    }
+
+    private fun putCredential(tls: JSONObject, key: String, inline: String?, path: String?) {
+        if (!inline.isNullOrBlank()) tls.put(key, inline)
+        else path?.takeIf { it.isNotBlank() }?.let { tls.put("${key}_path", it) }
     }
 
     // ── Transport ───────────────────────────────────────────────────
@@ -498,6 +542,7 @@ internal object OutboundConfigBuilder {
     }
 
     private fun buildUdpOverTcp(enabled: Boolean?, version: Int?): Any? {
+        if (enabled == false) return false
         if (enabled == null && version == null) return null
         if (version != null) {
             return JSONObject()

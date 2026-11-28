@@ -1,0 +1,298 @@
+name: test
+
+on:
+  push:
+    branches:
+      - main
+      - release/**
+      - "*_dev"
+    # does not work properly due to an issue in GitHub's branch protection
+    # rules: https://github.com/orgs/community/discussions/13690
+    # paths-ignore:
+    #   - "conformance/**"
+  pull_request:
+  merge_group:
+  schedule:
+    - cron: "0 3 * * 4"
+
+env:
+  CARGO_WS_VERSION: "0.4.2"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ## Run all default oriented feature sets across all platforms.
+  platform-matrix:
+    name: platform
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      RUST_LOG: trace
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: extractions/setup-just@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-workspaces@${{ env.CARGO_WS_VERSION }}
+
+      - name: just all-features
+        run: just all-features
+
+      - name: just test-docs
+        if: ${{ !cancelled() && matrix.os != 'windows-latest' }} # uses all features, avoid openssl
+        run: just test-docs
+
+  wasm:
+    name: wasm
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - name: check
+        run: cargo check -p hickory-proto --target wasm32-wasip1 --no-default-features --features=std
+
+  ## Measure test coverage, only on linux.
+  code-coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools-preview
+
+      - uses: extractions/setup-just@v4
+
+      - name: cargo install cargo-llvm-cov
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: cargo-llvm-cov
+
+      - name: just coverage
+        run: just coverage
+
+      - name: upload coverage
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
+          #files: coverage/hickory-dns-coverage.json
+
+  ## Work through all of the variations of the different features, only on linux to save concurrent resources
+  exhaustive-features-matrix:
+    name: exhaustive
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        feature:
+          [
+            default,
+            no-default-features,
+            tls-aws-lc-rs,
+            https-aws-lc-rs,
+            quic-aws-lc-rs,
+            h3-aws-lc-rs,
+            tls-ring,
+            https-ring,
+            quic-ring,
+            h3-ring,
+            dnssec-aws-lc-rs,
+            dnssec-ring,
+            doc,
+          ]
+    env:
+      RUST_LOG: trace
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: extractions/setup-just@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-workspaces@${{ env.CARGO_WS_VERSION }}
+
+      - name: just
+        run: just ${{ matrix.feature }}
+
+  check-all-features-matrix:
+    name: cargo-all-features
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        chunk:
+          - 1
+          - 2
+          - 3
+          - 4
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: cargo install cargo-all-features
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: cargo-all-features
+          version: 1.12.0
+
+      - name: cargo check-all-features
+        run: cargo check-all-features --n-chunks 4 --chunk ${{ matrix.chunk }}
+
+  ## Check past and future versions
+  ##   this enforces the minimum version of rust this project works with
+  past-future-matrix:
+    name: past-future
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        version: ["1.88", beta, "nightly-2026-02-05"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.version }}
+
+      - uses: extractions/setup-just@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-workspaces@${{ env.CARGO_WS_VERSION }}
+
+      - name: just std
+        run: just std
+
+      - name: just build-bench
+        if: contains( matrix.version, 'nightly' )
+        run: just build-bench
+
+  ## Execute the clippy checks
+  cleanliness:
+    name: cleanliness
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      # not using the cargo cache here, since this differs significantly
+      - name: cargo-all cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo
+          key: ${{ runner.os }}-cargo-all-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-all-${{ hashFiles('**/Cargo.toml') }}
+            ${{ runner.os }}-cargo-all
+            ${{ runner.os }}-cargo
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - uses: extractions/setup-just@v4
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-workspaces@${{ env.CARGO_WS_VERSION }}
+
+      # Clippy
+      - name: just clippy
+        run: just clippy
+      # Rustfmt
+      - name: just fmt
+        if: ${{ !cancelled() }}
+        run: just fmt
+      # Audit
+      - name: cargo audit
+        if: ${{ !cancelled() }}
+        run: just audit
+
+  # Build and run bind to test our compatibility with standard name servers
+  compatibility:
+    name: compatibility
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: extractions/setup-just@v4
+
+      - name: target/bind cache
+        uses: actions/cache@v5
+        with:
+          path: target/bind
+          key: ${{ runner.os }}-bind-${{ hashFiles('**/justfile') }}
+          restore-keys: |
+            ${{ runner.os }}-bind-${{ hashFiles('**/justfile') }}
+            ${{ runner.os }}-bind
+
+      - name: just compatibility
+        run: just compatibility
+
+  # Build on a no_std target
+  no-std-proto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: extractions/setup-just@v4
+
+      - name: Add aarch64-unknown-none target
+        run: rustup target add aarch64-unknown-none
+
+      - uses: actions/checkout@v6
+
+      - name: Build proto crate for aarch64-unknown-none
+        run: just proto-aarch64-none
+
+  cross:
+    name: cross-target building
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - aarch64-linux-android
+          - x86_64-linux-android
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: extractions/setup-just@v4
+
+      - name: Install cross
+        run: just init-cross
+
+      - name: Build crates for ${{ matrix.target }}
+        run: just cross-build ${{ matrix.target }}
+
+      - name: Test android implementation
+        run: just cross-test ${{ matrix.target }} hickory-resolver

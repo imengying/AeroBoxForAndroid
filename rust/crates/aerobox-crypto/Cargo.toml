@@ -1,0 +1,55 @@
+[package]
+name = "aerobox-crypto"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+publish = false
+description = "Explicit RustCrypto provider for AeroBox TLS and QUIC"
+
+# This isolated workspace can be validated before the protocol backend is added
+# to AeroBox's main workspace. Remove this section when integrating it there.
+[workspace]
+resolver = "3"
+
+[dependencies]
+ml-dsa = { path = "../../vendor/ml-dsa", default-features = false, features = ["alloc"] }
+crypto-bigint = { version = "=0.5.5", default-features = false, features = ["zeroize"] }
+des = { version = "=0.9.0", default-features = false, features = ["zeroize"] }
+rc4 = { version = "=0.2.0", default-features = false, features = ["zeroize"] }
+p256 = { version = "0.13", features = ["pkcs8"] }
+p384 = { version = "0.13", features = ["pkcs8"] }
+p521 = { version = "=0.13.3", default-features = false, features = ["ecdsa", "ecdh", "pkcs8", "std"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+rand_chacha = "=0.3.1"
+sha2 = "0.10"
+sha1 = "=0.10.7"
+md-5 = { version = "=0.10.6", default-features = false }
+hmac = "=0.12.1"
+hpke = { version = "=0.13.0", default-features = false, features = ["std", "x25519", "p256", "p384", "p521"] }
+rand = { version = "0.9", default-features = false, features = ["std", "std_rng", "os_rng"] }
+rsa = "0.9.10"
+ed25519-dalek = { version = "2.2", features = ["pkcs8"] }
+aes = { version = "=0.8.4", features = ["zeroize"] }
+aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "zeroize"] }
+chacha20 = { version = "=0.9.1", features = ["zeroize"] }
+chacha20poly1305 = { version = "=0.10.1", default-features = false }
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "tls12"] }
+rustls-rustcrypto = { version = "=0.0.2-alpha", default-features = false, features = ["std", "tls12", "zeroize"] }
+subtle = "2"
+zeroize = "1"
+x509-parser = { version = "=0.18.1", default-features = false }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dev-dependencies]
+aerobox-primitives = { path = "../aerobox-primitives" }
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "tls12", "brotli", "zlib-custom"] }
+serde_json = "1"
+
+[profile.dev]
+debug = 1
+incremental = false
+
+[patch.crates-io]
+rustls = { path = "../../vendor/rustls/rustls" }

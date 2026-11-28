@@ -1,0 +1,261 @@
+#![cfg(feature = "__dnssec")]
+
+//! Test DNSSEC validation in the forwarder.
+//!
+//! Note that these tests configure an authoritative name server as the forwarder's name server, not
+//! a recursive name server. This happens to work out because we only query the root zone. Any more
+//! sophisticated tests would require setting up a recursive name server, which in turn would
+//! require a virtual network of authoritative name servers to contact.
+
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    sync::Arc,
+    time::Duration,
+};
+
+use hickory_net::{
+    client::{Client, ClientHandle},
+    runtime::TokioRuntimeProvider,
+    udp::UdpClientStream,
+};
+use hickory_proto::{
+    dnssec::{
+        DnssecSigner, PublicKeyBuf, SigningKey, TrustAnchors, crypto::Ed25519SigningKey,
+        rdata::DNSKEY,
+    },
+    op::{DnsResponse, ResponseCode},
+    rr::{
+        DNSClass, Name, RData, Record, RecordType,
+        rdata::{A, SOA},
+    },
+};
+use hickory_resolver::config::{NameServerConfig, ResolverOpts};
+use hickory_server::{
+    Server,
+    store::{
+        forwarder::{ForwardConfig, ForwardZoneHandler},
+        in_memory::InMemoryZoneHandler,
+    },
+    zone_handler::{AxfrPolicy, Catalog, ZoneType},
+};
+use test_support::subscribe;
+use tokio::{net::UdpSocket, spawn};
+
+#[tokio::test]
+async fn query_validate_true_signed_zone_with_soa() {
+    subscribe();
+
+    let (name_server_addr, _name_server_future, public_key) =
+        setup_authoritative_server(true, true).await;
+    let (mut client, _forwarder_future) =
+        setup_client_forwarder(name_server_addr, Some(&public_key)).await;
+    let response = client
+        .query(Name::root(), DNSClass::IN, RecordType::A)
+        .await
+        .unwrap();
+    assert_eq!(response.metadata.response_code, ResponseCode::NoError);
+    assert!(answered_a_1234(response));
+}
+
+#[tokio::test]
+async fn query_validate_true_signed_zone_no_soa() {
+    subscribe();
+
+    let (name_server_addr, _name_server_future, public_key) =
+        setup_authoritative_server(true, false).await;
+    let (mut client, _forwarder_future) =
+        setup_client_forwarder(name_server_addr, Some(&public_key)).await;
+    let response = client
+        .query(Name::root(), DNSClass::IN, RecordType::A)
+        .await
+        .unwrap();
+    assert_eq!(response.metadata.response_code, ResponseCode::NoError);
+    assert!(answered_a_1234(response));
+}
+
+#[tokio::test]
+async fn query_validate_true_unsigned_zone_with_soa() {
+    subscribe();
+
+    let (name_server_addr, _name_server_future, public_key) =
+        setup_authoritative_server(false, true).await;
+    let (mut client, _forwarder_future) =
+        setup_client_forwarder(name_server_addr, Some(&public_key)).await;
+    let response = client
+        .query(Name::root(), DNSClass::IN, RecordType::A)
+        .await
+        .unwrap();
+    assert_eq!(response.metadata.response_code, ResponseCode::ServFail);
+    assert!(response.answers.is_empty());
+}
+
+#[tokio::test]
+async fn query_validate_true_unsigned_zone_no_soa() {
+    subscribe();
+
+    let (name_server_addr, _name_server_future, public_key) =
+        setup_authoritative_server(false, false).await;
+    let (mut client, _forwarder_future) =
+        setup_client_forwarder(name_server_addr, Some(&public_key)).await;
+    let response = client
+        .query(Name::root(), DNSClass::IN, RecordType::A)
+        .await
+        .unwrap();
+    assert_eq!(response.metadata.response_code, ResponseCode::ServFail);
+    assert!(response.answers.is_empty());
+}
+
+#[tokio::test]
+async fn query_validate_false_signed_zone_with_soa() {
+    subscribe();
+
+    let (name_server_addr, _name_server_future, _) = setup_authoritative_server(true, true).await;
+    let (mut client, _forwarder_future) = setup_client_forwarder(name_server_addr, None).await;
+    let response = client
+        .query(Name::root(), DNSClass::IN, RecordType::A)
+        .await
+        .unwrap();
+    assert_eq!(response.metadata.response_code, ResponseCode::NoError);
+    assert!(answered_a_1234(response));
+}
+
+#[tokio::test]
+async fn query_validate_false_signed_zone_no_soa() {
+    subscribe();
+
+    let (name_server_addr, _name_server_future, _) = setup_authoritative_server(true, false).await;
+    let (mut client, _forwarder_future) = setup_client_forwarder(name_server_addr, None).await;
+    let response = client
+        .query(Name::root(), DNSClass::IN, RecordType::A)
+        .await
+        .unwrap();
+    assert_eq!(response.metadata.response_code, ResponseCode::NoError);
+    assert!(answered_a_1234(response));
+}
+
+#[tokio::test]
+async fn query_validate_false_unsigned_zone_with_soa() {
+    subscribe();
+
+    let (name_server_addr, _name_server_future, _) = setup_authoritative_server(false, true).await;
+    let (mut client, _forwarder_future) = setup_client_forwarder(name_server_addr, None).await;
+    let response = client
+        .query(Name::root(), DNSClass::IN, RecordType::A)
+        .await
+        .unwrap();
+    assert_eq!(response.metadata.response_code, ResponseCode::NoError);
+    assert!(answered_a_1234(response));
+}
+
+#[tokio::test]
+async fn query_validate_false_unsigned_zone_no_soa() {
+    subscribe();
+
+    let (name_server_addr, _name_server_future, _) = setup_authoritative_server(false, false).await;
+    let (mut client, _forwarder_future) = setup_client_forwarder(name_server_addr, None).await;
+    let response = client
+        .query(Name::root(), DNSClass::IN, RecordType::A)
+        .await
+        .unwrap();
+    assert_eq!(response.metadata.response_code, ResponseCode::NoError);
+    assert!(answered_a_1234(response));
+}
+
+async fn setup_authoritative_server(
+    signed: bool,
+    soa: bool,
+) -> (SocketAddr, Server<Catalog>, PublicKeyBuf) {
+    // Zone setup
+    let key = Ed25519SigningKey::from_pkcs8(&Ed25519SigningKey::generate_pkcs8().unwrap()).unwrap();
+    let public_key = key.to_public_key().unwrap();
+    let mut handler = InMemoryZoneHandler::<TokioRuntimeProvider>::empty(
+        Name::root(),
+        ZoneType::Primary,
+        AxfrPolicy::Deny,
+        Some(hickory_server::dnssec::NxProofKind::Nsec),
+    );
+    handler.upsert_mut(
+        Record::from_rdata(Name::root(), 3600, RData::A(A(Ipv4Addr::new(1, 2, 3, 4)))),
+        0,
+    );
+    if soa {
+        handler.upsert_mut(
+            Record::from_rdata(
+                Name::root(),
+                3600,
+                RData::SOA(SOA::new(
+                    Name::parse("nameserver.", None).unwrap(),
+                    Name::parse("admin.nameserver.", None).unwrap(),
+                    0,
+                    3600,
+                    3600,
+                    3600,
+                    3600,
+                )),
+            ),
+            0,
+        );
+    }
+    if signed {
+        handler
+            .add_zone_signing_key_mut(DnssecSigner::new(
+                DNSKEY::from_key(&key.to_public_key().unwrap()),
+                Box::new(key),
+                Name::root(),
+                Duration::from_secs(86400),
+            ))
+            .unwrap();
+        handler.secure_zone_mut().unwrap();
+    }
+
+    // Server setup
+    let udp_socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let local_addr = udp_socket.local_addr().unwrap();
+    let mut catalog = Catalog::new();
+    catalog.upsert(Name::root().into(), vec![Arc::new(handler)]);
+    let mut server = Server::new(catalog);
+    server.register_socket(udp_socket);
+
+    (local_addr, server, public_key)
+}
+
+async fn setup_client_forwarder(
+    name_server_addr: SocketAddr,
+    public_key: Option<&PublicKeyBuf>,
+) -> (Client<TokioRuntimeProvider>, Server<Catalog>) {
+    // Server setup
+    let mut config = NameServerConfig::udp(name_server_addr.ip());
+    config.connections[0].port = name_server_addr.port();
+    let mut builder = ForwardZoneHandler::builder_tokio(ForwardConfig {
+        name_servers: vec![config],
+        options: Some(ResolverOpts::default()),
+    });
+
+    if let Some(public_key) = public_key {
+        let mut anchors = TrustAnchors::empty();
+        anchors.insert(public_key);
+        builder = builder.with_trust_anchor(Arc::new(anchors));
+    }
+    let handler = builder.build().unwrap();
+
+    let udp_socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let local_addr = udp_socket.local_addr().unwrap();
+    let mut catalog = Catalog::new();
+    catalog.upsert(Name::root().into(), vec![Arc::new(handler)]);
+    let mut server = Server::new(catalog);
+    server.register_socket(udp_socket);
+
+    // Client setup
+    let stream = UdpClientStream::builder(local_addr, TokioRuntimeProvider::new()).build();
+    let (client, bg) = Client::from_sender(stream);
+    spawn(bg);
+
+    (client, server)
+}
+
+fn answered_a_1234(response: DnsResponse) -> bool {
+    response
+        .answers
+        .iter()
+        .any(|record| matches!(record.data, RData::A(a) if a.0 == Ipv4Addr::new(1, 2, 3, 4)))
+}

@@ -1,0 +1,13 @@
+target = "https://www.rfc-editor.org/rfc/rfc9114#section-4.1.2"
+
+[[TODO]]
+quote = '''
+For malformed requests, a server MAY send an HTTP response indicating
+the error prior to closing or resetting the stream.
+'''
+
+[[TODO]]
+quote = '''
+Clients MUST NOT
+accept a malformed response.
+'''

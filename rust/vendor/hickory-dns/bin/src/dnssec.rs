@@ -1,0 +1,200 @@
+// Copyright 2015-2018 Benjamin Fry <benjaminfry@me.com>
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// https://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+//! Configuration types for all security options in hickory-dns
+
+use std::path::{Path, PathBuf};
+
+use rustls_pki_types::PrivateKeyDer;
+use rustls_pki_types::pem::PemObject;
+use serde::Deserialize;
+use time::Duration;
+use tracing::info;
+
+use hickory_proto::rr::domain::Name;
+use hickory_proto::{
+    ProtoError,
+    dnssec::{Algorithm, DnssecSigner, SigningKey, rdata::DNSKEY},
+    rr::domain::IntoName,
+};
+use hickory_server::zone_handler::DnssecZoneHandler;
+
+pub(super) async fn load_keys(
+    handler: &mut impl DnssecZoneHandler,
+    zone_name: &Name,
+    keys: &[KeyConfig],
+) -> Result<(), String> {
+    if keys.is_empty() {
+        return Ok(());
+    }
+
+    for key_config in keys {
+        key_config.load(handler, zone_name.clone()).await?;
+    }
+
+    info!("signing zone: {zone_name}");
+    handler
+        .secure_zone()
+        .await
+        .map_err(|err| format!("failed to sign zone {zone_name}: {err}"))?;
+
+    Ok(())
+}
+
+/// Key pair configuration for DNSSEC keys for signing a zone
+#[derive(Deserialize, PartialEq, Eq, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct KeyConfig {
+    /// file path to the key
+    pub key_path: PathBuf,
+    /// the type of key stored
+    pub algorithm: Algorithm,
+    /// the name to use when signing records, e.g. ns.example.com
+    pub signer_name: Option<String>,
+}
+
+impl KeyConfig {
+    /// the signer name for the key, this defaults to the $ORIGIN aka zone name.
+    pub fn signer_name(&self) -> Result<Option<Name>, ProtoError> {
+        self.signer_name
+            .as_ref()
+            .map(|name| Name::parse(name, None))
+            .transpose()
+    }
+
+    /// set of DNSSEC algorithms to use to sign the zone. enable_dnssec must be true.
+    /// these will be looked up by $file.{key_name}.pem, for backward compatibility
+    /// with previous versions of Hickory DNS, if enable_dnssec is enabled but
+    /// supported_algorithms is not specified, it will default to "RSASHA256" and
+    /// look for the $file.pem for the key. To control key length, or other options
+    /// keys of the specified formats can be generated in PEM format. Instructions
+    /// for custom keys can be found elsewhere.
+    ///
+    /// the currently supported set of supported_algorithms are
+    /// ["RSASHA256", "RSASHA512", "ECDSAP256SHA256", "ECDSAP384SHA384", "ED25519"]
+    ///
+    /// keys are listed in pairs of key_name and algorithm, the search path is the
+    /// same directory has the zone $file:
+    ///  keys = [ "my_rsa_2048|RSASHA256", "/path/to/my_ed25519|ED25519" ]
+    pub fn try_into_signer(&self, signer_name: impl IntoName) -> Result<DnssecSigner, String> {
+        let name = match self.signer_name() {
+            Ok(Some(name)) => name,
+            Ok(None) => signer_name
+                .into_name()
+                .map_err(|e| format!("error loading signer name: {e}"))?,
+            Err(e) => return Err(format!("error loading signer name: {e}")),
+        };
+
+        // read the key in
+        let key = key_from_file(&self.key_path, self.algorithm)?;
+
+        // add the key to the zone
+        // TODO: allow the duration of signatures to be customized
+        let pub_key = key
+            .to_public_key()
+            .map_err(|e| format!("error getting public key: {e}"))?;
+
+        let signer = DnssecSigner::new(
+            DNSKEY::from_key(&pub_key),
+            key,
+            name,
+            Duration::weeks(52)
+                .try_into()
+                .map_err(|e| format!("error converting time to std::Duration: {e}"))?,
+        );
+
+        signer
+            .test_key()
+            .map_err(|e| format!("key failed test: {e}"))?;
+        Ok(signer)
+    }
+
+    pub async fn load(
+        &self,
+        handler: &mut impl DnssecZoneHandler,
+        zone_name: Name,
+    ) -> Result<(), String> {
+        info!("adding key to zone: {:?}", self.key_path,);
+
+        let zone_signer = self
+            .try_into_signer(zone_name)
+            .map_err(|e| format!("failed to load key: {:?} msg: {}", self.key_path, e))?;
+        handler
+            .add_zone_signing_key(zone_signer)
+            .await
+            .map_err(|err| format!("failed to add zone signing key to zone handler: {err}"))?;
+
+        Ok(())
+    }
+}
+
+pub fn key_from_file(path: &Path, algorithm: Algorithm) -> Result<Box<dyn SigningKey>, String> {
+    use std::fs::File;
+    use std::io::Read;
+
+    use tracing::info;
+
+    use hickory_proto::dnssec::crypto::signing_key_from_der;
+
+    info!("reading key: {path:?}");
+    let mut file =
+        File::open(path).map_err(|e| format!("error opening private key file: {path:?}: {e}"))?;
+
+    let mut buf = Vec::with_capacity(256);
+    file.read_to_end(&mut buf)
+        .map_err(|e| format!("could not read key from: {path:?}: {e}"))?;
+
+    let key = match trim_ascii_start(&buf).starts_with(b"-----BEGIN ") {
+        true => PrivateKeyDer::from_pem_slice(&buf)
+            .map_err(|e| format!("could not read pem from {}: {e}", path.display()))?,
+        false => PrivateKeyDer::try_from(&*buf)
+            .map_err(|e| format!("could not read der from {}: {e}", path.display()))?,
+    };
+
+    signing_key_from_der(&key, algorithm).map_err(|e| format!("could not decode key: {e}"))
+}
+
+// Copied from std, MSRV 1.80
+fn trim_ascii_start(mut bytes: &[u8]) -> &[u8] {
+    // Note: A pattern matching based approach (instead of indexing) allows
+    // making the function const.
+    while let [first, rest @ ..] = bytes {
+        match first.is_ascii_whitespace() {
+            true => bytes = rest,
+            false => return bytes,
+        }
+    }
+    bytes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pkcs8_pem_key() {
+        // OpenSSL 3 generates PKCS#8-encoded RSA keys by default
+        // `openssl genrsa 2048`
+        key_from_file(
+            Path::new("tests/test-data/rsa-2048-pkcs8.pem"),
+            Algorithm::RSASHA256,
+        )
+        .expect("failed to read key");
+    }
+
+    #[test]
+    fn pkcs1_pem_key() {
+        // OpenSSL 1 used to generate PKCS#1-encoded RSA keys by default
+        // OpenSSL 3 does not anymore, but you can still generate them with ssh-keygen
+        // `ssh-keygen -t rsa -b 2048 -o -a 100 -f test-data/rsa-2048-pkcs1.pem -m PEM`
+        key_from_file(
+            Path::new("tests/test-data/rsa-2048-pkcs1.pem"),
+            Algorithm::RSASHA256,
+        )
+        .expect("failed to read key");
+    }
+}

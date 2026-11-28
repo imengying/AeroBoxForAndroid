@@ -1,0 +1,57 @@
+//! Configuration types for the proxy server.
+//!
+//! This module contains all the configuration types used by the proxy server,
+//! organized into submodules by functionality:
+//!
+//! - [`common`]: Shared helpers and constants
+//! - [`transport`]: Transport layer types (TCP, QUIC, UDP)
+//! - [`shadowsocks`]: Shadowsocks protocol configuration
+//! - [`selection`]: ConfigSelection for referencing groups or inline configs
+//! - [`server`]: Server-side protocol configurations
+//! - [`client`]: Client-side protocol configurations
+//! - [`rules`]: Rule configurations for traffic routing
+//! - [`groups`]: Top-level configuration groups and the Config enum
+//! - [`dns`]: DNS server configuration
+
+pub mod clash_api;
+pub mod client;
+pub mod common;
+pub mod dns;
+pub mod global;
+pub mod groups;
+pub mod ntp;
+pub mod quic_client;
+pub mod rules;
+pub mod selection;
+pub mod server;
+pub mod shadowsocks;
+pub mod tls;
+pub mod transport;
+pub mod tun;
+pub mod vless;
+
+// Re-export all public types for convenience
+pub use clash_api::{CacheFileConfig, ClashApiConfig, ControlConfig};
+#[allow(unused_imports)]
+pub use client::{
+    ClientConfig, ClientProxyConfig, H2MuxConfig, HttpVersion, TlsClientConfig,
+    WebsocketClientConfig,
+};
+pub use common::DEFAULT_REALITY_SHORT_ID;
+pub use dns::{DnsConfig, DnsConfigGroup, DnsServerSpec, ExpandedDnsGroup, ExpandedDnsSpec};
+pub use global::{GlobalLimits, GlobalSettings};
+pub use groups::{
+    ClientConfigGroup, ClientGroupMember, Config, GroupType, NamedPem, PemSource, RuleSourceGroup,
+    UrlTestConfig,
+};
+pub use ntp::NtpConfig;
+pub use rules::{ClientChain, ClientChainHop, RuleActionConfig, RuleConfig};
+pub use selection::ConfigSelection;
+pub use server::{
+    RealityServerConfig, ServerConfig, ServerProxyConfig, TlsServerConfig, WebsocketPingType,
+    WebsocketServerConfig, direct_allow_rule,
+};
+pub use shadowsocks::ShadowsocksConfig;
+pub use tls::TlsKeyExchangeGroups;
+pub use transport::{BindLocation, ClientQuicConfig, ServerQuicConfig, TcpConfig, Transport};
+pub use tun::TunConfig;

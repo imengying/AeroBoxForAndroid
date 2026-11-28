@@ -1,0 +1,16 @@
+mod catalog_tests;
+mod chained_zone_handler_tests;
+mod client_future_tests;
+mod client_tests;
+mod dnssec_client_handle_tests;
+mod invalid_nsec3_tests;
+mod invalid_nsec_tests;
+mod lookup_tests;
+mod multiple_rrsig_tests;
+mod name_server_pool_tests;
+mod retry_dns_handle_tests;
+mod rfc4592_tests;
+mod server_future_tests;
+mod sqlite_zone_handler_tests;
+mod truncation_tests;
+mod validating_forwarder_tests;

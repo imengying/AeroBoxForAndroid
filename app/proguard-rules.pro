@@ -13,7 +13,18 @@
     native <methods>;
 }
 
-# The Rust AAR includes its JNI callback consumer rules.
+-keep class com.aerobox.core.native.RustCoreNative { *; }
+-keep interface com.aerobox.core.native.RustCoreNative$PlatformCallbacks { *; }
+-keepclassmembers class * implements com.aerobox.core.native.RustCoreNative$PlatformCallbacks {
+    public boolean protect(int);
+    public java.lang.String dnsServers();
+    public boolean supportsSystemDns();
+    public void startDnsQuery(long, long, long, byte[]);
+    public void cancelDnsQuery(long);
+    public java.lang.String connectionOwner(int, java.lang.String, int, java.lang.String, int);
+    public java.lang.String physicalNetworks();
+    public boolean protectOnNetwork(int, long, long);
+}
 
 # OkHttp
 -dontwarn okhttp3.**

@@ -1,0 +1,475 @@
+use futures::ready;
+use tokio::io::ReadBuf;
+
+use std::future::Future;
+use std::io;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tokio::time::Instant;
+
+use crate::async_stream::AsyncMessageStream;
+use crate::util::allocate_vec;
+
+// Informed by https://stackoverflow.com/questions/14856639/udp-hole-punching-timeout
+pub const DEFAULT_ASSOCIATION_TIMEOUT_SECS: u32 = 200;
+
+struct CopyBuffer {
+    read_done: bool,
+    need_flush: bool,
+    need_write_ping: bool,
+    cache_length: Option<usize>,
+    buf: Box<[u8]>,
+    read_count: usize,
+}
+
+impl CopyBuffer {
+    pub fn new(need_flush: bool) -> Self {
+        Self {
+            read_done: false,
+            need_flush,
+            need_write_ping: false,
+            cache_length: None,
+            buf: allocate_vec(65535).into_boxed_slice(),
+            read_count: 0,
+        }
+    }
+
+    pub fn poll_copy<R, W>(
+        &mut self,
+        cx: &mut Context<'_>,
+        mut reader: Pin<&mut R>,
+        mut writer: Pin<&mut W>,
+    ) -> Poll<io::Result<()>>
+    where
+        R: AsyncMessageStream + ?Sized,
+        W: AsyncMessageStream + ?Sized,
+    {
+        // Check tokio's cooperative budget to prevent task starvation
+        let coop = ready!(tokio::task::coop::poll_proceed(cx));
+
+        loop {
+            let mut did_read = false;
+            let mut did_write = false;
+            let mut read_pending = false;
+            let mut write_pending = false;
+
+            if !self.read_done && self.cache_length.is_none() {
+                let me = &mut *self;
+                let mut buf = ReadBuf::new(&mut me.buf);
+                match reader.as_mut().poll_read_message(cx, &mut buf) {
+                    Poll::Ready(val) => {
+                        val?;
+                        let n = buf.filled().len();
+                        if n == 0 && reader.read_message_eof_on_empty() {
+                            self.read_done = true;
+                        } else {
+                            self.cache_length = Some(n);
+                            did_read = true;
+                            self.read_count = self.read_count.wrapping_add(n.max(1));
+                            coop.made_progress();
+                        }
+                    }
+                    Poll::Pending => {
+                        read_pending = true;
+                    }
+                }
+            }
+
+            if let Some(length) = self.cache_length {
+                let me = &mut *self;
+                match writer.as_mut().poll_write_message(cx, &me.buf[..length]) {
+                    Poll::Ready(val) => {
+                        val?;
+                        self.cache_length = None;
+                        self.need_flush = true;
+                        // Don't bother writing ping, since we just wrote.
+                        self.need_write_ping = false;
+                        did_write = true;
+                        coop.made_progress();
+                    }
+                    Poll::Pending => {
+                        write_pending = true;
+                    }
+                }
+            }
+
+            if !write_pending && self.need_write_ping {
+                match writer.as_mut().poll_write_ping(cx) {
+                    Poll::Ready(val) => {
+                        let written = val?;
+                        self.need_write_ping = false;
+                        if written {
+                            self.need_flush = true;
+                            coop.made_progress();
+                        }
+                    }
+                    Poll::Pending => {
+                        write_pending = true;
+                    }
+                }
+            }
+
+            if did_read && did_write && !read_pending && !write_pending {
+                continue;
+            }
+
+            if self.need_flush {
+                ready!(writer.as_mut().poll_flush_message(cx))?;
+                self.need_flush = false;
+                coop.made_progress();
+                continue;
+            }
+
+            // If we've written all the data and we've seen EOF, finish the transfer.
+            if self.read_done && self.cache_length.is_none() {
+                return Poll::Ready(Ok(()));
+            }
+
+            // Return Pending to prevent task starvation
+            if read_pending || write_pending {
+                return Poll::Pending;
+            }
+        }
+    }
+}
+
+enum TransferState {
+    Running,
+    ShuttingDown(Pin<Box<tokio::time::Sleep>>),
+    Done,
+}
+
+struct CopyBidirectional<'a, A: ?Sized, B: ?Sized> {
+    a: &'a mut A,
+    b: &'a mut B,
+    a_buf: CopyBuffer,
+    b_buf: CopyBuffer,
+    a_to_b: TransferState,
+    b_to_a: TransferState,
+    sleep_future: Pin<Box<tokio::time::Sleep>>,
+    last_active: Instant,
+}
+
+fn transfer_one_direction<A, B>(
+    cx: &mut Context<'_>,
+    state: &mut TransferState,
+    buf: &mut CopyBuffer,
+    r: &mut A,
+    w: &mut B,
+) -> Poll<io::Result<()>>
+where
+    A: AsyncMessageStream + ?Sized,
+    B: AsyncMessageStream + ?Sized,
+{
+    let mut r = Pin::new(r);
+    let mut w = Pin::new(w);
+
+    loop {
+        match state {
+            TransferState::Running => {
+                ready!(buf.poll_copy(cx, r.as_mut(), w.as_mut()))?;
+                *state = TransferState::ShuttingDown(Box::pin(tokio::time::sleep(
+                    crate::util::SHUTDOWN_TIMEOUT,
+                )));
+            }
+            TransferState::ShuttingDown(deadline) => match w.as_mut().poll_shutdown_message(cx) {
+                Poll::Ready(result) => {
+                    result?;
+                    *state = TransferState::Done;
+                }
+                Poll::Pending => {
+                    ready!(deadline.as_mut().poll(cx));
+                    return Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "message stream shutdown timed out",
+                    )));
+                }
+            },
+            TransferState::Done => return Poll::Ready(Ok(())),
+        }
+    }
+}
+
+impl<A, B> Future for CopyBidirectional<'_, A, B>
+where
+    A: AsyncMessageStream + ?Sized,
+    B: AsyncMessageStream + ?Sized,
+{
+    type Output = io::Result<()>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let CopyBidirectional {
+            a,
+            b,
+            a_buf,
+            b_buf,
+            a_to_b,
+            b_to_a,
+            sleep_future,
+            last_active,
+        } = &mut *self;
+
+        let ping_fired = sleep_future.as_mut().poll(cx).is_ready();
+        if ping_fired {
+            // a_buf writes to b - so we need to check if b supports ping, and similarly
+            // for b_buf.
+            a_buf.need_write_ping = b.supports_ping();
+            b_buf.need_write_ping = a.supports_ping();
+            sleep_future
+                .as_mut()
+                .reset(tokio::time::Instant::now() + std::time::Duration::from_secs(60));
+        }
+
+        let a_count = a_buf.read_count;
+        let b_count = b_buf.read_count;
+
+        let a_to_b = transfer_one_direction(cx, a_to_b, &mut *a_buf, &mut *a, &mut *b);
+        let b_to_a = transfer_one_direction(cx, b_to_a, &mut *b_buf, &mut *b, &mut *a);
+
+        if a_buf.read_count != a_count || b_buf.read_count != b_count {
+            *last_active = Instant::now();
+        } else if last_active.elapsed().as_secs() >= DEFAULT_ASSOCIATION_TIMEOUT_SECS.into() {
+            return Poll::Ready(Ok(()));
+        }
+
+        if a_to_b.is_ready() {
+            return a_to_b;
+        } else if b_to_a.is_ready() {
+            return b_to_a;
+        }
+
+        Poll::Pending
+    }
+}
+
+/// Copies data in both directions between `a` and `b`.
+///
+/// This function returns a future that will read from both streams,
+/// writing any data read to the opposing stream.
+/// This happens in both directions concurrently.
+///
+/// If an EOF is observed on one stream, [`shutdown()`] will be invoked on
+/// the other, and reading from that stream will stop. Copying of data in
+/// the other direction will continue.
+///
+/// The future will complete successfully once both directions of communication has been shut down.
+/// A direction is shut down when the reader reports EOF,
+/// at which point [`shutdown()`] is called on the corresponding writer. When finished,
+/// it will return a tuple of the number of bytes copied from a to b
+/// and the number of bytes copied from b to a, in that order.
+///
+/// [`shutdown()`]: crate::io::AsyncWriteExt::shutdown
+///
+/// # Errors
+///
+/// The future will immediately return an error if any IO operation on `a`
+/// or `b` returns an error. Some data read from either stream may be lost (not
+/// written to the other stream) in this case. A shutdown that is still pending
+/// after `SHUTDOWN_TIMEOUT` fails with `TimedOut`, as in the stream copy.
+///
+/// # Return value
+///
+/// Returns a tuple of bytes copied `a` to `b` and bytes copied `b` to `a`.
+pub async fn copy_bidirectional_message<A, B>(
+    a: &mut A,
+    b: &mut B,
+    a_initial_flush: bool,
+    b_initial_flush: bool,
+) -> Result<(), std::io::Error>
+where
+    A: AsyncMessageStream + ?Sized,
+    B: AsyncMessageStream + ?Sized,
+{
+    // Unlike tcp copy_bidirectional, we always run a sleep future so that we can expire
+    // connections.
+    let sleep_future = Box::pin(tokio::time::sleep(std::time::Duration::from_secs(60)));
+
+    CopyBidirectional {
+        a,
+        b,
+        // this is correctly reversed - CopyBuffer will copy from a (reader) to b (writer) using
+        // a_buf, which means that the need_flush signal is for the writer (b), and vice versa for
+        // b_buf.
+        a_buf: CopyBuffer::new(b_initial_flush),
+        b_buf: CopyBuffer::new(a_initial_flush),
+        a_to_b: TransferState::Running,
+        b_to_a: TransferState::Running,
+        sleep_future,
+        last_active: Instant::now(),
+    }
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::async_stream::{
+        AsyncFlushMessage, AsyncPing, AsyncReadMessage, AsyncShutdownMessage, AsyncWriteMessage,
+    };
+    use std::collections::VecDeque;
+
+    #[derive(Default)]
+    struct Messages {
+        incoming: VecDeque<Vec<u8>>,
+        outgoing: Vec<Vec<u8>>,
+        eof_on_empty: bool,
+        write_ready: bool,
+        shutdown_pending: bool,
+    }
+
+    impl AsyncReadMessage for Messages {
+        fn read_message_eof_on_empty(&self) -> bool {
+            self.eof_on_empty
+        }
+
+        fn poll_read_message(
+            mut self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            let Some(message) = self.incoming.pop_front() else {
+                return Poll::Pending;
+            };
+            buf.put_slice(&message);
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    impl AsyncWriteMessage for Messages {
+        fn poll_write_message(
+            mut self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<io::Result<()>> {
+            if !self.write_ready {
+                return Poll::Pending;
+            }
+            self.write_ready = false;
+            self.outgoing.push(buf.to_vec());
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    impl AsyncFlushMessage for Messages {
+        fn poll_flush_message(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+    impl AsyncShutdownMessage for Messages {
+        fn poll_shutdown_message(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<io::Result<()>> {
+            if self.shutdown_pending {
+                return Poll::Pending;
+            }
+            Poll::Ready(Ok(()))
+        }
+    }
+    impl AsyncPing for Messages {
+        fn supports_ping(&self) -> bool {
+            false
+        }
+        fn poll_write_ping(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<bool>> {
+            Poll::Ready(Ok(false))
+        }
+    }
+    impl AsyncMessageStream for Messages {}
+
+    #[tokio::test]
+    async fn empty_datagrams_survive_pending_writes_and_count_as_activity() {
+        let mut reader = Messages {
+            incoming: [vec![], b"next".to_vec()].into(),
+            ..Messages::default()
+        };
+        let mut writer = Messages::default();
+        let mut buffer = CopyBuffer::new(false);
+        let mut cx = Context::from_waker(futures::task::noop_waker_ref());
+        for _ in 0..2 {
+            assert!(
+                buffer
+                    .poll_copy(&mut cx, Pin::new(&mut reader), Pin::new(&mut writer))
+                    .is_pending()
+            );
+            assert_eq!(reader.incoming.len(), 1);
+            assert!(writer.outgoing.is_empty());
+            assert_ne!(buffer.read_count, 0, "empty datagram must refresh activity");
+        }
+        writer.write_ready = true;
+        assert!(
+            buffer
+                .poll_copy(&mut cx, Pin::new(&mut reader), Pin::new(&mut writer))
+                .is_pending()
+        );
+        assert_eq!(writer.outgoing, [Vec::<u8>::new()]);
+        assert!(reader.incoming.is_empty());
+        writer.write_ready = true;
+        assert!(
+            buffer
+                .poll_copy(&mut cx, Pin::new(&mut reader), Pin::new(&mut writer))
+                .is_pending()
+        );
+        assert_eq!(writer.outgoing, [vec![], b"next".to_vec()]);
+        assert!(!buffer.read_done);
+    }
+
+    #[tokio::test]
+    async fn empty_reads_still_end_eof_based_streams() {
+        let mut reader = Messages {
+            incoming: [vec![], b"unread".to_vec()].into(),
+            eof_on_empty: true,
+            ..Messages::default()
+        };
+        let mut writer = Messages {
+            write_ready: true,
+            ..Messages::default()
+        };
+        let mut buffer = CopyBuffer::new(false);
+        let mut cx = Context::from_waker(futures::task::noop_waker_ref());
+        assert!(matches!(
+            buffer.poll_copy(&mut cx, Pin::new(&mut reader), Pin::new(&mut writer)),
+            Poll::Ready(Ok(()))
+        ));
+        assert!(writer.outgoing.is_empty());
+        assert_eq!(reader.incoming.len(), 1);
+        assert_eq!(buffer.read_count, 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_after_eof_is_bounded() {
+        let mut reader = Messages {
+            incoming: [vec![]].into(),
+            eof_on_empty: true,
+            ..Messages::default()
+        };
+        let mut writer = Messages {
+            shutdown_pending: true,
+            ..Messages::default()
+        };
+        let start = Instant::now();
+        let error = copy_bidirectional_message(&mut reader, &mut writer, false, false)
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert_eq!(start.elapsed(), crate::util::SHUTDOWN_TIMEOUT);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_associations_expire_within_one_ping_interval_of_the_timeout() {
+        let (mut a, mut b) = (Messages::default(), Messages::default());
+        let start = Instant::now();
+        let timeout = std::time::Duration::from_secs(DEFAULT_ASSOCIATION_TIMEOUT_SECS.into());
+        tokio::time::timeout(
+            timeout * 2,
+            copy_bidirectional_message(&mut a, &mut b, false, false),
+        )
+        .await
+        .expect("idle associations must expire")
+        .unwrap();
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed >= timeout && elapsed < timeout + std::time::Duration::from_secs(60),
+            "{elapsed:?}"
+        );
+    }
+}

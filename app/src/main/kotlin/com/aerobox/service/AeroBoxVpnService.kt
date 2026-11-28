@@ -443,12 +443,6 @@ class AeroBoxVpnService : VpnService() {
         }
     }
 
-    private suspend fun resolveCurrentNode(): ProxyNode? {
-        return configResolver.resolveNodeById(
-            nodeId = lastNodeId.takeIf { it > 0L }
-        )
-    }
-
     private suspend fun stopService(reason: String, generation: Long) {
         Log.i(TAG, reason)
         reconnectJob?.cancel()

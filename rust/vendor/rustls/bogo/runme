@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+
+# This script fetches, builds, and runs the BoringSSL
+# TLS test tool ('BoGo') against rustls.
+
+set -xe
+
+case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
+  ring)
+      cpp -P -DRING config.json.in > config.json
+      cargo run -- -print-rustls-provider
+      ;;
+  aws-lc-rs)
+      cpp -P -DAWS_LC_RS config.json.in > config.json
+      cargo run -- -print-rustls-provider
+      ;;
+  aws-lc-rs-fips)
+      cpp -P -DAWS_LC_RS -DFIPS config.json.in > config.json
+      cargo run --features fips -- -print-rustls-provider
+      ;;
+  existing)
+      ;;
+  *)
+      echo "unsupported BOGO_SHIM_PROVIDER: supported are (ring|aws-lc-rs|aws-lc-rs-fips|post-quantum|existing)"
+      exit 1
+      ;;
+esac
+
+if [ ! -e bogo/.git ] ; then
+  mkdir -p bogo
+  pushd bogo
+
+  git init --initial-branch main
+  git config core.sparsecheckout 1
+  cat << EOF > .git/info/sparse-checkout
+go.mod
+go.sum
+ssl/test/runner
+util/testresult
+EOF
+
+  popd
+  cp -v keys/* bogo/
+fi
+
+# fix on a tested point of rustls-testing branch
+COMMIT=9389a4af2c6c47a59ec39bfb51e4da2fe971d1bc
+changed=$([ "$(git -C bogo rev-parse HEAD)" != "$COMMIT" ] && echo true || echo false)
+if $changed ; then
+  pushd bogo
+  git fetch --depth=1 https://github.com/rustls/boringssl.git $COMMIT
+  git checkout $COMMIT
+  popd
+fi
+
+if $changed || [ ! -e bogo/ssl/test/runner/runner.test ] ; then
+  (cd bogo/ssl/test/runner && go test -c)
+fi
+
+# Best effort on OS-X
+case $OSTYPE in darwin*) set +e ;; esac
+
+# Set default timeout unless -wait-for-debugger flag is present.
+# When this flag is set the shim will pause itself, and the runner will
+# print the PID to attach to in order to continue.
+runner_args="-pipe -allow-unimplemented"
+[[ ! "$*" =~ "-wait-for-debugger" ]] && runner_args+=" -test.timeout 60s"
+
+( cd bogo/ssl/test/runner && ./runner.test -shim-path ../../../../../target/debug/bogo \
+     -shim-config ../../../../config.json \
+     $runner_args \
+     "$@") # you can pass in `-test "Foo;Bar"` to run specific tests
+true

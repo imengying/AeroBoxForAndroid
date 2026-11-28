@@ -1,0 +1,33 @@
+[package]
+name = "aerobox-http2-transport-check"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+test = false
+doctest = false
+
+[dependencies]
+async-trait = "0.1"
+base64 = "0.22"
+httparse = "1"
+percent-encoding = "2"
+rand = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bytes = "1"
+h2 = "0.4"
+http = "1"
+log = "0.4"
+parking_lot = "0.12"
+tokio = { version = "1", features = ["io-util", "macros", "rt", "sync", "time", "test-util"] }
+
+[profile.dev]
+debug = 0
+incremental = false
+
+[patch.crates-io]
+h2 = { path = "../../vendor/h2" }

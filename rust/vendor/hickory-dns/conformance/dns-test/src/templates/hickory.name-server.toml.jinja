@@ -1,0 +1,34 @@
+user = "nobody"
+group = "nogroup"
+
+{% if dot %}
+tls_listen_port = 853
+ssl_keylog_enabled = true
+
+[tls_cert]
+path = "{{ dot.cert_chain }}"
+private_key = "{{ dot.private_key }}"
+{% endif %}
+
+[[zones]]
+zone = "{{ fqdn }}"
+zone_type = "Primary"
+file = "/etc/zones/main.zone"
+nx_proof_kind = { nsec3 = { iterations = 1 } }
+
+{% if use_dnssec %}
+[[zones.keys]]
+{% if use_pkcs8 %}
+key_path = "/etc/zones/zsk.pk8"
+{% else %}
+key_path = "/etc/zones/zsk.key"
+{% endif %}
+algorithm = "RSASHA256"
+{% endif %}
+
+{% for zone in additional_zones -%}
+[[zones]]
+zone = "{{ zone }}"
+zone_type = "Primary"
+file = "/etc/zones/{{ zone }}zone"
+{% endfor -%}

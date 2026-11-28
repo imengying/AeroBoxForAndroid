@@ -1,0 +1,97 @@
+# Example demonstrating named PEM files (certificates and keys)
+# This shows how to define PEM files once and use them in multiple places
+
+# Define named PEM files (can contain both cert and key)
+- pem: "main-server-cert"
+  path: "cert.pem"
+
+- pem: "main-server-key"
+  path: "key.pem"
+
+- pem: "client-ca"
+  path: "ca-cert.pem"
+
+# Define a self-signed certificate inline
+- pem: "self-signed-cert"
+  data: |
+    -----BEGIN CERTIFICATE-----
+    certificate data
+    -----END CERTIFICATE-----
+
+- pem: "self-signed-key"
+  data: |
+    -----BEGIN PRIVATE KEY-----
+    private key data
+    -----END PRIVATE KEY-----
+
+# QUIC server using named PEM files
+- address: "0.0.0.0:443"
+  transport: quic
+  quic_settings:
+    cert: "main-server-cert"    # Reference named PEM file
+    key: "main-server-key"      # Reference named PEM file
+    client_ca_certs:
+      - "client-ca"             # Reference named CA certificate
+  protocol:
+    type: hysteria2
+    password: "my-secret-password"
+
+# TLS server reusing the same certificates
+- address: "0.0.0.0:8443"
+  protocol:
+    type: tls
+    sni_targets:
+      "example.com":
+        cert: "main-server-cert"    # Reuse the same certificate
+        key: "main-server-key"      # Reuse the same key
+        client_ca_certs:
+          - "client-ca"
+        protocol:
+          type: vmess
+          cipher: any
+          user_id: "b85798ef-e9dc-46a4-9a87-8da4499d36d0"
+      "test.example.com":
+        cert: "self-signed-cert"    # Use different certificate for this SNI
+        key: "self-signed-key"
+        protocol:
+          type: vless
+          user_id: "b85798ef-e9dc-46a4-9a87-8da4499d36d0"
+
+# Reality server (note: Reality uses X25519 keys, not certificates)
+# Reality doesn't use named PEMs for its keys since they're not certificates
+- address: "0.0.0.0:10443"
+  protocol:
+    type: tls
+    reality_targets:
+      "www.cloudflare.com":
+        private_key: "YOUR_REALITY_PRIVATE_KEY_HERE"
+        short_ids: ["0123456789abcdef", ""]
+        dest: "www.cloudflare.com:443"
+        protocol:
+          type: vless
+          user_id: "b85798ef-e9dc-46a4-9a87-8da4499d36d0"
+          udp_enabled: true
+
+# Mixed configuration: Regular TLS and Reality on same server
+- address: "0.0.0.0:11443"
+  protocol:
+    type: tls
+    # Regular TLS target using named certificates
+    tls_targets:
+      "tls.example.com":
+        cert: "main-server-cert"
+        key: "main-server-key"
+        protocol:
+          type: vless
+          user_id: "b85798ef-e9dc-46a4-9a87-8da4499d36d0"
+    # Reality target (uses its own X25519 keys)
+    reality_targets:
+      "www.google.com":
+        private_key: "YOUR_REALITY_PRIVATE_KEY_HERE"
+        short_ids: ["0123456789abcdef"]
+        dest: "www.google.com:443"
+        vision: true
+        protocol:
+          type: vless
+          user_id: "b85798ef-e9dc-46a4-9a87-8da4499d36d0"
+          udp_enabled: true

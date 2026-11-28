@@ -1,0 +1,95 @@
+//! DNS resolver module with configurable DNS servers.
+//!
+//! Supports:
+//! - System resolver (NativeResolver)
+//! - UDP DNS
+//! - TCP DNS
+//! - DNS-over-TLS (DoT) - requires `hickory-tls` feature
+//! - DNS-over-HTTPS (DoH) - requires `hickory-https` feature
+//!
+//! TCP-based protocols (tcp://, tls://, https://) support routing through
+//! proxy chains via the ProxyRuntimeProvider.
+
+mod bootstrap;
+mod builder;
+mod cache;
+mod composite_resolver;
+mod context;
+mod datagram;
+#[cfg(test)]
+mod direct_dial_tests;
+mod exchange;
+pub mod fake_ip;
+mod guard;
+mod hickory_resolver;
+mod hosts;
+pub(crate) mod message;
+mod network;
+mod parsed;
+pub(crate) mod platform;
+mod proxy_runtime;
+pub(crate) mod routing;
+#[cfg(test)]
+mod recovery_tests;
+mod stream;
+mod system;
+#[allow(
+    dead_code,
+    reason = "staged adapter; global tendns policy is not activated yet"
+)]
+mod tendns_resolver;
+
+pub(crate) use bootstrap::controlled as controlled_bootstrap;
+pub(crate) use builder::check_interception;
+pub use context::{DnsContext, FakeDnsResolver};
+pub use hosts::StaticHosts;
+
+pub(crate) fn canonical_hostname(name: &str) -> Option<String> {
+    let name = name.strip_suffix('.').unwrap_or(name);
+    if name.is_empty() || name.len() > 253 || name.parse::<std::net::IpAddr>().is_ok() {
+        return None;
+    }
+    if !name.split('.').all(|label| {
+        !label.is_empty()
+            && label.len() <= 63
+            && label.as_bytes()[0].is_ascii_alphanumeric()
+            && label.as_bytes()[label.len() - 1].is_ascii_alphanumeric()
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    }) {
+        return None;
+    }
+    Some(name.to_ascii_lowercase())
+}
+
+pub(crate) use guard::{SyntheticDnsAnswer, real_only};
+
+/// Binds a TCP listener and a UDP socket on one loopback port, as DNS servers listen. A
+/// free TCP port does not imply a free UDP port, so retry with new ports.
+#[cfg(test)]
+pub(crate) async fn bind_tcp_and_udp() -> (tokio::net::TcpListener, tokio::net::UdpSocket) {
+    let ip = std::net::Ipv4Addr::LOCALHOST;
+    for _ in 0..64 {
+        let tcp = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let port = tcp.local_addr().unwrap().port();
+        match tokio::net::UdpSocket::bind((ip, port)).await {
+            Ok(udp) => return (tcp, udp),
+            Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {}
+            Err(error) => panic!("binding UDP port {port}: {error}"),
+        }
+    }
+    panic!("no port was free for both TCP and UDP");
+}
+
+#[allow(unused_imports)]
+pub use builder::{
+    DnsRegistry, DnsSnapshotTask, build_dns_registry, build_dns_registry_for_runtime,
+    build_dns_registry_reusing, build_dns_registry_with_limits,
+};
+pub use parsed::{IpStrategy, ParsedDnsUrl};
+#[cfg(all(test, unix))]
+pub(crate) use proxy_runtime::ProxyRuntimeProvider;
+
+#[cfg(test)]
+mod routing_tests;

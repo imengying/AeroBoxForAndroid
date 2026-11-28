@@ -1,0 +1,1421 @@
+// Copyright 2015-2021 Benjamin Fry <benjaminfry@me.com>
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// https://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+// TODO, I've implemented this as a separate entity from the cache, but I wonder if the cache
+//  should be the only "front-end" for lookups, where if that misses, then we go to the catalog
+//  then, if requested, do a recursive lookup... i.e. the catalog would only point to files.
+use std::{collections::HashMap, iter, sync::Arc};
+
+use tracing::{debug, error, info, trace, warn};
+
+#[cfg(feature = "metrics")]
+use crate::metrics::CatalogMetrics;
+#[cfg(feature = "__dnssec")]
+use crate::net::{DnsError, NetError};
+#[cfg(all(feature = "__dnssec", feature = "recursor"))]
+use crate::resolver::recursor;
+#[cfg(feature = "__dnssec")]
+use crate::{
+    dnssec::NxProofKind,
+    proto::{
+        dnssec::{DnssecSummary, Proof, rdata::DNSSECRData},
+        rr::RData,
+        serialize::binary::BinEncoder,
+    },
+    zone_handler::Nsec3QueryInfo,
+};
+use crate::{
+    net::runtime::Time,
+    proto::{
+        op::{Edns, LowerQuery, Message, MessageType, Metadata, OpCode, ResponseCode},
+        rr::{
+            LowerName, Record, RecordType,
+            rdata::opt::{EdnsCode, EdnsOption, NSIDPayload},
+        },
+    },
+    server::{Request, RequestHandler, RequestInfo, ResponseHandler, ResponseInfo},
+    zone_handler::{
+        AuthLookup, LookupControlFlow, LookupError, LookupOptions, LookupRecords,
+        MessageResponseBuilder, ZoneHandler, ZoneType,
+    },
+};
+
+/// Set of zones and zone handlers available to this server.
+#[derive(Default)]
+pub struct Catalog {
+    nsid_payload: Option<NSIDPayload>,
+    handlers: HashMap<LowerName, Vec<Arc<dyn ZoneHandler>>>,
+    #[cfg(feature = "metrics")]
+    metrics: CatalogMetrics,
+}
+
+#[async_trait::async_trait]
+impl RequestHandler for Catalog {
+    /// Determines what needs to happen given the type of request, i.e. Query or Update.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - the requested action to perform.
+    /// * `response_handle` - sink for the response message to be sent
+    async fn handle_request<R: ResponseHandler, T: Time>(
+        &self,
+        request: &Request,
+        response_handle: R,
+    ) -> ResponseInfo {
+        trace!("request: {:?}", request);
+
+        let mut resp_edns: Edns;
+
+        // check if it's edns
+        let response_edns = if let Some(req_edns) = request.edns.as_ref() {
+            resp_edns = Edns::new();
+
+            // check our version against the request
+            // TODO: what version are we?
+            let our_version = 0;
+            #[cfg(feature = "__dnssec")]
+            resp_edns.set_dnssec_ok(req_edns.flags().dnssec_ok);
+            resp_edns.set_max_payload(req_edns.max_payload().max(512));
+            resp_edns.set_version(our_version);
+
+            if req_edns.version() > our_version {
+                warn!(
+                    "request edns version greater than {}: {}",
+                    our_version,
+                    req_edns.version()
+                );
+                return send_error_response(
+                    request,
+                    ResponseCode::BADVERS,
+                    Some(&resp_edns),
+                    response_handle,
+                )
+                .await;
+            }
+
+            // RFC 5001 "DNS Name Server Identifier (NSID) Option" handling.
+            match (req_edns.option(EdnsCode::NSID), &self.nsid_payload) {
+                // NSID was requested, and we have a payload to reply with. Add it to the
+                // response EDNS.
+                (Some(request_option), Some(payload)) => {
+                    // "The name server MUST ignore any NSID payload data that might be
+                    //  present in the query message."
+                    if !request_option.is_empty() {
+                        warn!("ignoring non-empty EDNS NSID request payload")
+                    }
+                    resp_edns
+                        .options_mut()
+                        .insert(EdnsOption::NSID(payload.clone()));
+                }
+                // NSID was requested, but we don't have a payload configured.
+                (Some(_), None) => {
+                    trace!("ignoring EDNS NSID request - no response payload configured")
+                }
+                // "A name server MUST NOT send an NSID option back to a resolver which
+                // did not request it."
+                (None, _) => {}
+            };
+
+            Some(&resp_edns)
+        } else {
+            None
+        };
+
+        let now = T::current_time();
+        match request.metadata.message_type {
+            // TODO think about threading query lookups for multiple lookups, this could be a huge improvement
+            //  especially for recursive lookups
+            MessageType::Query => match request.metadata.op_code {
+                OpCode::Query => {
+                    debug!("query received: {}", request.metadata.id);
+                    self.lookup(request, response_edns, now, response_handle)
+                        .await
+                }
+                OpCode::Update => {
+                    debug!("update received: {}", request.metadata.id);
+                    self.update(request, response_edns, now, response_handle)
+                        .await
+                }
+                c => {
+                    warn!("unimplemented op_code: {:?}", c);
+                    send_error_response(
+                        request,
+                        ResponseCode::NotImp,
+                        response_edns,
+                        response_handle,
+                    )
+                    .await
+                }
+            },
+            MessageType::Response => {
+                warn!(
+                    "got a response as a request from id: {}",
+                    request.metadata.id
+                );
+                send_error_response(
+                    request,
+                    ResponseCode::FormErr,
+                    response_edns,
+                    response_handle,
+                )
+                .await
+            }
+        }
+    }
+}
+
+impl Catalog {
+    /// Constructs a new Catalog
+    pub fn new() -> Self {
+        Self {
+            handlers: HashMap::new(),
+            nsid_payload: None,
+            #[cfg(feature = "metrics")]
+            metrics: CatalogMetrics::default(),
+        }
+    }
+
+    /// Insert or update the provided zone handlers
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - zone name, e.g. example.com.
+    /// * `handlers` - a vec of zone handler objects
+    pub fn upsert(&mut self, name: LowerName, handlers: Vec<Arc<dyn ZoneHandler>>) {
+        #[cfg(feature = "metrics")]
+        for handler in handlers.iter() {
+            self.metrics.add_handler(handler.as_ref())
+        }
+
+        self.handlers.insert(name, handlers);
+    }
+
+    /// Remove a zone from the catalog
+    pub fn remove(&mut self, name: &LowerName) -> Option<Vec<Arc<dyn ZoneHandler>>> {
+        // NOTE: metrics are not removed to avoid dropping counters that are potentially still
+        // being used by other zone handlers having the same labels
+        self.handlers.remove(name)
+    }
+
+    /// Set a specified name server identifier (NSID) in responses
+    ///
+    /// The provided `NSIDPayload` will be included in responses to requests that
+    /// specify the NSID option in EDNS. Set to `None` to disable NSID.
+    ///
+    /// By default, no NSID is sent.
+    pub fn set_nsid(&mut self, payload: Option<NSIDPayload>) {
+        self.nsid_payload = payload
+    }
+
+    /// Return the name server identifier (NSID) that is used for responses (if enabled)
+    ///
+    /// See `set_nsid()` for more information.
+    pub fn nsid(&self) -> Option<&NSIDPayload> {
+        self.nsid_payload.as_ref()
+    }
+
+    /// Update the zone given the Update request.
+    ///
+    /// [RFC 2136](https://tools.ietf.org/html/rfc2136), DNS Update, April 1997
+    ///
+    /// ```text
+    /// 3.1 - Process Zone Section
+    ///
+    ///   3.1.1. The Zone Section is checked to see that there is exactly one
+    ///   RR therein and that the RR's ZTYPE is SOA, else signal FORMERR to the
+    ///   requestor.  Next, the ZNAME and ZCLASS are checked to see if the zone
+    ///   so named is one of this server's authority zones, else signal NOTAUTH
+    ///   to the requestor.  If the server is a zone Secondary, the request will be
+    ///   forwarded toward the Primary Zone Server.
+    ///
+    ///   3.1.2 - Pseudocode For Zone Section Processing
+    ///
+    ///      if (zcount != 1 || ztype != SOA)
+    ///           return (FORMERR)
+    ///      if (zone_type(zname, zclass) == SECONDARY)
+    ///           return forward()
+    ///      if (zone_type(zname, zclass) == PRIMARY)
+    ///           return update()
+    ///      return (NOTAUTH)
+    ///
+    ///   Sections 3.2 through 3.8 describe the primary's behaviour,
+    ///   whereas Section 6 describes a forwarder's behaviour.
+    ///
+    /// 3.8 - Response
+    ///
+    ///   At the end of UPDATE processing, a response code will be known.  A
+    ///   response message is generated by copying the ID and Opcode fields
+    ///   from the request, and either copying the ZOCOUNT, PRCOUNT, UPCOUNT,
+    ///   and ADCOUNT fields and associated sections, or placing zeros (0) in
+    ///   the these "count" fields and not including any part of the original
+    ///   update.  The QR bit is set to one (1), and the response is sent back
+    ///   to the requestor.  If the requestor used UDP, then the response will
+    ///   be sent to the requestor's source UDP port.  If the requestor used
+    ///   TCP, then the response will be sent back on the requestor's open TCP
+    ///   connection.
+    /// ```
+    ///
+    /// The "request" should be an update formatted message.
+    ///  The response will be in the alternate, all 0's format described in RFC 2136 section 3.8
+    ///  as this is more efficient.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - an update message
+    /// * `response_edns` an optional `Edns` value for the response message
+    /// * `response_handle` - sink for the response message to be sent
+    pub async fn update<R: ResponseHandler>(
+        &self,
+        update: &Request,
+        response_edns: Option<&Edns>,
+        now: u64,
+        mut response_handle: R,
+    ) -> ResponseInfo {
+        // 2.3 - Zone Section
+        //
+        //  All records to be updated must be in the same zone, and
+        //  therefore the Zone Section is allowed to contain exactly one record.
+        //  The ZNAME is the zone name, the ZTYPE must be SOA, and the ZCLASS is
+        //  the zone's class.
+
+        let Ok(request_info) = update.request_info() else {
+            warn!("invalid update request, zone count must be one");
+            return send_error_response(
+                update,
+                ResponseCode::FormErr,
+                response_edns,
+                response_handle,
+            )
+            .await;
+        };
+        let ztype = request_info.query.query_type();
+
+        if ztype != RecordType::SOA {
+            warn!("invalid update request zone type must be SOA, ztype: {ztype}");
+            return send_error_response(
+                update,
+                ResponseCode::FormErr,
+                response_edns,
+                response_handle,
+            )
+            .await;
+        }
+
+        // verify the zone type and number of zones in request, then find the zone to update
+        if let Some(handlers) = self.find(request_info.query.name()) {
+            #[allow(clippy::never_loop)]
+            for handler in handlers {
+                #[cfg_attr(not(feature = "__dnssec"), expect(unused))]
+                let (response_code, signer) = match handler.zone_type() {
+                    ZoneType::Secondary => {
+                        error!("secondary forwarding for update not yet implemented");
+                        (ResponseCode::NotImp, None)
+                    }
+                    ZoneType::Primary => {
+                        let (update_result, signer) = handler.update(update, now).await;
+                        match update_result {
+                            // successful update
+                            Ok(_) => (ResponseCode::NoError, signer),
+                            Err(response_code) => (response_code, signer),
+                        }
+                    }
+                    _ => (ResponseCode::NotAuth, None),
+                };
+
+                let response = MessageResponseBuilder::new(&update.queries, response_edns);
+                let mut response_meta =
+                    Metadata::new(update.metadata.id, MessageType::Response, OpCode::Update);
+                response_meta.response_code = response_code;
+                #[cfg_attr(not(feature = "__dnssec"), expect(unused_mut))]
+                let mut response = response.build_no_records(response_meta);
+
+                #[cfg(feature = "__dnssec")]
+                if let Some(signer) = signer {
+                    let mut tbs_response_buf = Vec::with_capacity(512);
+                    let mut encoder = BinEncoder::new(&mut tbs_response_buf);
+                    let mut response_meta =
+                        Metadata::new(update.metadata.id, MessageType::Response, OpCode::Update);
+                    response_meta.response_code = response_code;
+                    let tbs_response = MessageResponseBuilder::new(&update.queries, response_edns)
+                        .build_no_records(response_meta);
+                    if let Err(error) = tbs_response.destructive_emit(&mut encoder) {
+                        error!(%error, "error encoding response");
+                        return send_error_response(
+                            update,
+                            ResponseCode::ServFail,
+                            response_edns,
+                            response_handle,
+                        )
+                        .await;
+                    }
+                    match signer.sign(&tbs_response_buf) {
+                        Ok(signature) => response.set_signature(signature),
+                        Err(error) => {
+                            error!(%error, "error signing response");
+                            return send_error_response(
+                                update,
+                                ResponseCode::ServFail,
+                                response_edns,
+                                response_handle,
+                            )
+                            .await;
+                        }
+                    }
+                }
+
+                match response_handle.send_response(response).await {
+                    Err(error) => {
+                        error!(%error, "error sending message");
+                        return ResponseInfo::serve_failed(update);
+                    }
+                    Ok(response_info) => return response_info,
+                }
+            }
+        };
+
+        send_error_response(
+            update,
+            ResponseCode::ServFail,
+            response_edns,
+            response_handle,
+        )
+        .await
+    }
+
+    /// Checks whether the `Catalog` contains DNS records for `name`
+    ///
+    /// Use this when you know the exact `LowerName` that was used when
+    /// adding a zone handler and you don't care about the zone handler it
+    /// contains. For public domain names, `LowerName` is usually the
+    /// top level domain name like `example.com.`.
+    ///
+    /// If you do not know the exact domain name to use or you actually
+    /// want to use the zone handler it contains, use `find` instead.
+    pub fn contains(&self, name: &LowerName) -> bool {
+        self.handlers.contains_key(name)
+    }
+
+    /// Given the requested query, lookup and return any matching results.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - the query message.
+    /// * `response_edns` an optional `Edns` value for the response message
+    /// * `response_handle` - sink for the response message to be sent
+    pub async fn lookup<R: ResponseHandler>(
+        &self,
+        request: &Request,
+        response_edns: Option<&Edns>,
+        now: u64,
+        response_handle: R,
+    ) -> ResponseInfo {
+        let Ok(request_info) = request.request_info() else {
+            // Wrong number of queries
+            return send_error_response(
+                request,
+                ResponseCode::FormErr,
+                response_edns,
+                response_handle,
+            )
+            .await;
+        };
+        let handlers = self.find(request_info.query.name());
+
+        let Some(handlers) = handlers else {
+            // There are no zone handlers registered that can handle the request
+            return send_error_response(
+                request,
+                ResponseCode::Refused,
+                response_edns,
+                response_handle,
+            )
+            .await;
+        };
+
+        if request_info.query.query_type() == RecordType::AXFR {
+            zone_transfer(
+                request_info,
+                handlers,
+                request,
+                response_edns,
+                now,
+                response_handle.clone(),
+            )
+            .await
+        } else {
+            lookup(
+                request_info,
+                handlers,
+                request,
+                response_edns,
+                response_handle.clone(),
+                #[cfg(feature = "metrics")]
+                &self.metrics,
+            )
+            .await
+        }
+    }
+
+    /// Recursively searches the catalog for a matching zone handler
+    pub fn find(&self, name: &LowerName) -> Option<&Vec<Arc<dyn ZoneHandler + 'static>>> {
+        debug!("searching zone handlers for: {name}");
+        self.handlers.get(name).or_else(|| {
+            if !name.is_root() {
+                let name = name.base_name();
+                self.find(&name)
+            } else {
+                None
+            }
+        })
+    }
+}
+
+async fn lookup<R: ResponseHandler + Unpin>(
+    request_info: RequestInfo<'_>,
+    handlers: &[Arc<dyn ZoneHandler>],
+    request: &Request,
+    response_edns: Option<&Edns>,
+    mut response_handle: R,
+    #[cfg(feature = "metrics")] metrics: &CatalogMetrics,
+) -> ResponseInfo {
+    let edns = request.edns.as_ref();
+    let lookup_options = LookupOptions::from_edns(edns);
+    let request_id = request.metadata.id;
+
+    if lookup_options.dnssec_ok {
+        info!("request: {request_id} lookup_options: {lookup_options:?}");
+    }
+
+    let query = request_info.query;
+
+    for (index, handler) in handlers.iter().enumerate() {
+        debug!(
+            "performing {query} on zone handler {origin} with request id {request_id}",
+            origin = handler.origin(),
+        );
+
+        // Wait so we can determine if we need to fire a request to the next zone handler in a
+        // chained configuration if the current zone handler declines to answer.
+        #[cfg_attr(not(feature = "__dnssec"), expect(unused))]
+        let (mut result, mut signer) = handler.search(request, lookup_options).await;
+        #[cfg(feature = "metrics")]
+        metrics.update_zone_lookup(handler.as_ref(), &result);
+
+        if let LookupControlFlow::Skip = result {
+            trace!("catalog::lookup: zone handler did not handle request");
+            continue;
+        } else if result.is_continue() {
+            trace!("catalog::lookup: zone handler did handle request with continue");
+
+            // For LookupControlFlow::Continue results, we'll call consult on every
+            // zone handler, except the zone handler that returned the Continue result.
+            for (continue_index, consult_handler) in handlers.iter().enumerate() {
+                if continue_index == index {
+                    trace!("skipping current zone handler consult (index {continue_index})");
+                    continue;
+                } else {
+                    trace!("calling zone handler consult (index {continue_index})");
+                }
+
+                let (new_result, new_signer) = consult_handler
+                    .consult(
+                        request_info.query.name(),
+                        request_info.query.query_type(),
+                        Some(&request_info),
+                        LookupOptions::from_edns(response_edns),
+                        result,
+                    )
+                    .await;
+                #[cfg_attr(not(feature = "__dnssec"), expect(unused))]
+                if let Some(new_signer) = new_signer {
+                    signer = Some(new_signer);
+                }
+                result = new_result;
+            }
+        } else {
+            trace!("catalog::lookup: zone handler did handle request with break");
+        }
+
+        // We no longer need the context from LookupControlFlow, so decompose into a standard Result
+        // to clean up the rest of the match conditions
+        let Some(result) = result.map_result() else {
+            error!("impossible skip detected after final lookup result");
+            return send_error_response(
+                request,
+                ResponseCode::ServFail,
+                response_edns,
+                response_handle,
+            )
+            .await;
+        };
+
+        let response_message = build_response(
+            result,
+            &**handler,
+            request_id,
+            &request.metadata,
+            query,
+            edns,
+        )
+        .await;
+
+        #[cfg_attr(not(feature = "__dnssec"), expect(unused_mut))]
+        let mut message_response = MessageResponseBuilder::new(&request.queries, response_edns)
+            .build(
+                response_message.metadata,
+                response_message.answers.iter(),
+                response_message.authorities.iter(),
+                iter::empty(),
+                response_message.additionals.iter(),
+            );
+
+        #[cfg(feature = "__dnssec")]
+        if let Some(signer) = signer {
+            let mut tbs_response_buf = Vec::with_capacity(512);
+            let mut encoder = BinEncoder::new(&mut tbs_response_buf);
+            let tbs_response = MessageResponseBuilder::new(&request.queries, response_edns).build(
+                response_message.metadata,
+                response_message.answers.iter(),
+                response_message.authorities.iter(),
+                iter::empty(),
+                response_message.additionals.iter(),
+            );
+            if let Err(error) = tbs_response.destructive_emit(&mut encoder) {
+                error!(%error, "error encoding response");
+                return send_error_response(
+                    request,
+                    ResponseCode::ServFail,
+                    response_edns,
+                    response_handle,
+                )
+                .await;
+            }
+            match signer.sign(&tbs_response_buf) {
+                Ok(signature) => message_response.set_signature(signature),
+                Err(error) => {
+                    error!(%error, "error signing response");
+                    return send_error_response(
+                        request,
+                        ResponseCode::ServFail,
+                        response_edns,
+                        response_handle,
+                    )
+                    .await;
+                }
+            }
+        }
+
+        #[cfg(feature = "metrics")]
+        metrics.update_request_response(query, response_message.answers.iter());
+
+        match response_handle.send_response(message_response).await {
+            Err(error) => {
+                error!(%error, "error sending response");
+                return ResponseInfo::serve_failed(request);
+            }
+            Ok(response_info) => return response_info,
+        }
+    }
+
+    error!("end of chained zone handler loop reached with all zone handlers not answering");
+    send_error_response(
+        request,
+        ResponseCode::ServFail,
+        response_edns,
+        response_handle,
+    )
+    .await
+}
+
+async fn zone_transfer(
+    request_info: RequestInfo<'_>,
+    handlers: &[Arc<dyn ZoneHandler>],
+    request: &Request,
+    response_edns: Option<&Edns>,
+    now: u64,
+    mut response_handle: impl ResponseHandler,
+) -> ResponseInfo {
+    let request_edns = request.edns.as_ref();
+    let lookup_options = LookupOptions::from_edns(request_edns);
+    for handler in handlers.iter() {
+        debug!(
+            query = %request_info.query,
+            origin = %handler.origin(),
+            request_id = request.metadata.id,
+            "performing zone transfer"
+        );
+        #[cfg_attr(not(feature = "__dnssec"), expect(unused))]
+        let Some((result, signer)) = handler.zone_transfer(request, lookup_options, now).await
+        else {
+            continue;
+        };
+
+        let mut response_meta = Metadata::response_from_request(&request.metadata);
+        let zone_transfer = match result {
+            Ok(zone_transfer) => {
+                response_meta.response_code = ResponseCode::NoError;
+                response_meta.authoritative = true;
+                Some(zone_transfer)
+            }
+            Err(e) => {
+                match e {
+                    LookupError::ResponseCode(
+                        rcode @ ResponseCode::Refused | rcode @ ResponseCode::NotAuth,
+                    ) => {
+                        response_meta.response_code = rcode;
+                    }
+                    _ => {
+                        if e.is_nx_domain() {
+                            response_meta.response_code = ResponseCode::NXDomain;
+                        }
+                    }
+                }
+                None
+            }
+        };
+
+        // TODO(issue #351): Send more than one message in response as needed.
+        #[cfg_attr(not(feature = "__dnssec"), expect(unused_mut))]
+        let mut message_response = MessageResponseBuilder::new(&request.queries, response_edns)
+            .build(
+                response_meta,
+                zone_transfer
+                    .iter()
+                    .flat_map(|zone_transfer| zone_transfer.iter()),
+                iter::empty(),
+                iter::empty(),
+                iter::empty(),
+            );
+
+        #[cfg(feature = "__dnssec")]
+        if let Some(signer) = signer {
+            let mut tbs_response_buf = Vec::with_capacity(512);
+            let mut encoder = BinEncoder::new(&mut tbs_response_buf);
+            let tbs_response = MessageResponseBuilder::new(&request.queries, response_edns).build(
+                response_meta,
+                zone_transfer
+                    .iter()
+                    .flat_map(|zone_transfer| zone_transfer.iter()),
+                iter::empty(),
+                iter::empty(),
+                iter::empty(),
+            );
+            if let Err(error) = tbs_response.destructive_emit(&mut encoder) {
+                error!(%error, "error encoding response");
+                return send_error_response(
+                    request,
+                    ResponseCode::ServFail,
+                    response_edns,
+                    response_handle,
+                )
+                .await;
+            }
+            match signer.sign(&tbs_response_buf) {
+                Ok(signature) => message_response.set_signature(signature),
+                Err(error) => {
+                    error!(%error, "error signing response");
+                    return send_error_response(
+                        request,
+                        ResponseCode::ServFail,
+                        response_edns,
+                        response_handle,
+                    )
+                    .await;
+                }
+            }
+        }
+
+        match response_handle.send_response(message_response).await {
+            Err(error) => {
+                error!(%error, "error sending response");
+                return ResponseInfo::serve_failed(request);
+            }
+            Ok(response_info) => return response_info,
+        }
+    }
+
+    error!("end of chained zone handler loop with all zone handlers not answering");
+    send_error_response(
+        request,
+        ResponseCode::ServFail,
+        response_edns,
+        response_handle,
+    )
+    .await
+}
+
+/// Helper function to construct a response message with an error response code, and send it via a
+/// response handler.
+async fn send_error_response(
+    request: &Request,
+    response_code: ResponseCode,
+    mut response_edns: Option<&Edns>,
+    mut response_handle: impl ResponseHandler,
+) -> ResponseInfo {
+    let mut new_edns: Edns;
+    if response_code.high() != 0 {
+        if let Some(edns) = response_edns {
+            new_edns = edns.clone();
+            new_edns.set_rcode_high(response_code.high());
+            response_edns = Some(&new_edns);
+        }
+    }
+    let response = MessageResponseBuilder::new(&request.queries, response_edns)
+        .error_msg(&request.metadata, response_code);
+    match response_handle.send_response(response).await {
+        Ok(r) => r,
+        Err(error) => {
+            error!(%error, "failed to send response");
+            ResponseInfo::serve_failed(request)
+        }
+    }
+}
+
+/// Build metadata and LookupSections (answers) given a query response from a zone handler
+async fn build_response(
+    result: Result<AuthLookup, LookupError>,
+    handler: &dyn ZoneHandler,
+    request_id: u16,
+    request_meta: &Metadata,
+    query: &LowerQuery,
+    edns: Option<&Edns>,
+) -> Message {
+    let lookup_options = LookupOptions::from_edns(edns);
+
+    match handler.zone_type() {
+        ZoneType::Primary | ZoneType::Secondary => {
+            build_authoritative_response(
+                result,
+                handler,
+                request_meta,
+                lookup_options,
+                request_id,
+                query,
+            )
+            .await
+        }
+        ZoneType::External => {
+            build_forwarded_response(
+                result,
+                request_meta,
+                #[cfg(feature = "__dnssec")]
+                handler.can_validate_dnssec(),
+                query,
+                lookup_options,
+            )
+            .await
+        }
+    }
+}
+
+/// Prepare a response for an authoritative zone
+async fn build_authoritative_response(
+    response: Result<AuthLookup, LookupError>,
+    handler: &dyn ZoneHandler,
+    request_meta: &Metadata,
+    lookup_options: LookupOptions,
+    _request_id: u16,
+    query: &LowerQuery,
+) -> Message {
+    let mut response_meta = Metadata::response_from_request(request_meta);
+    response_meta.authoritative = true;
+
+    let mut message = Message::new(
+        response_meta.id,
+        response_meta.message_type,
+        response_meta.op_code,
+    );
+    message.add_query(query.original().clone());
+
+    // In this state we await the records, on success we transition to getting
+    // NS records, which indicate an authoritative response.
+    //
+    // On Errors, the transition depends on the type of error.
+    let answers = match response {
+        Ok(records) => {
+            response_meta.response_code = ResponseCode::NoError;
+            Some(records)
+        }
+        // TODO: there are probably other error cases that should just drop through (FormErr, ServFail)
+        Err(LookupError::ResponseCode(
+            rcode @ ResponseCode::Refused | rcode @ ResponseCode::NotAuth,
+        )) => {
+            response_meta.response_code = rcode;
+            message.metadata = response_meta;
+            return message;
+        }
+        Err(e) => {
+            response_meta.response_code = if e.is_nx_domain() {
+                ResponseCode::NXDomain
+            } else {
+                ResponseCode::NoError
+            };
+            None
+        }
+    };
+
+    #[cfg_attr(not(feature = "__dnssec"), allow(unused_variables))]
+    let (ns, soa) = if let Some(answers) = &answers {
+        // SOA queries should return the NS records as well.
+        if query.query_type().is_soa() {
+            // This was a successful authoritative lookup for SOA:
+            //   get the NS records as well.
+
+            let future = handler.lookup(handler.origin(), RecordType::NS, None, lookup_options);
+            match future.await.map_result() {
+                Some(Ok(ns)) => (Some(ns), None),
+                Some(Err(error)) => {
+                    warn!(%error, "ns_lookup errored");
+                    (None, None)
+                }
+                None => {
+                    warn!("ns_lookup unexpected skip");
+                    (None, None)
+                }
+            }
+        } else {
+            #[cfg(feature = "__dnssec")]
+            {
+                let has_wildcard_match = answers.iter().any(|rr| match &rr.data {
+                    RData::DNSSEC(DNSSECRData::RRSIG(rrsig)) => {
+                        rrsig.input().num_labels < rr.name.num_labels()
+                    }
+                    _ => false,
+                });
+
+                let res = match handler.nx_proof_kind() {
+                    Some(NxProofKind::Nsec3 {
+                        algorithm,
+                        salt,
+                        iterations,
+                        opt_out: _,
+                    }) => handler
+                        .nsec3_records(
+                            Nsec3QueryInfo {
+                                qname: query.name(),
+                                qtype: query.query_type(),
+                                has_wildcard_match,
+                                algorithm: *algorithm,
+                                salt,
+                                iterations: *iterations,
+                            },
+                            lookup_options,
+                        )
+                        .await
+                        .map_result(),
+                    Some(NxProofKind::Nsec) if has_wildcard_match => handler
+                        .nsec_records(query.name(), lookup_options)
+                        .await
+                        .map_result(),
+                    _ => None,
+                };
+
+                match res {
+                    // run the soa lookup
+                    Some(Ok(nsecs)) => (Some(nsecs), None),
+                    Some(Err(error)) => {
+                        warn!(%error, request_id = _request_id, "failed to lookup nsecs for request");
+                        (None, None)
+                    }
+                    None => {
+                        warn!(
+                            request_id = _request_id,
+                            "unexpected lookup skip for request"
+                        );
+                        (None, None)
+                    }
+                }
+            }
+            #[cfg(not(feature = "__dnssec"))]
+            (None, None)
+        }
+    } else {
+        let nsecs = if lookup_options.dnssec_ok {
+            #[cfg(feature = "__dnssec")]
+            {
+                // in the dnssec case, nsec records should exist, we return NoError + NoData + NSec...
+                debug!("request: {_request_id} non-existent adding nsecs");
+                match handler.nx_proof_kind() {
+                    Some(nx_proof_kind) => {
+                        // run the nsec lookup future, and then transition to get soa
+                        let future = match nx_proof_kind {
+                            NxProofKind::Nsec => handler.nsec_records(query.name(), lookup_options),
+                            NxProofKind::Nsec3 {
+                                algorithm,
+                                salt,
+                                iterations,
+                                opt_out: _,
+                            } => handler.nsec3_records(
+                                Nsec3QueryInfo {
+                                    qname: query.name(),
+                                    qtype: query.query_type(),
+                                    has_wildcard_match: false,
+                                    algorithm: *algorithm,
+                                    salt,
+                                    iterations: *iterations,
+                                },
+                                lookup_options,
+                            ),
+                        };
+
+                        match future.await.map_result() {
+                            // run the soa lookup
+                            Some(Ok(nsecs)) => Some(nsecs),
+                            Some(Err(error)) => {
+                                warn!(%error, request_id = _request_id, "failed to lookup nsecs for request");
+                                None
+                            }
+                            None => {
+                                warn!(
+                                    request_id = _request_id,
+                                    "unexpected lookup skip for request"
+                                );
+                                None
+                            }
+                        }
+                    }
+                    None => None,
+                }
+            }
+            #[cfg(not(feature = "__dnssec"))]
+            None
+        } else {
+            None
+        };
+
+        let future = handler.lookup(handler.origin(), RecordType::SOA, None, lookup_options);
+        match future.await.map_result() {
+            Some(Ok(soa)) => (nsecs, Some(soa)),
+            Some(Err(error)) => {
+                warn!(%error, "failed to lookup soa");
+                (nsecs, None)
+            }
+            None => {
+                warn!("unexpected lookup skip");
+                (None, None)
+            }
+        }
+    };
+
+    // everything is done, construct a Message with all sections.
+    message.metadata = response_meta;
+
+    if let Some(mut lookup_records) = answers {
+        if let Some(adds) = lookup_records.take_additionals() {
+            message.additionals.extend(adds.iter().cloned());
+        }
+
+        let is_referral = lookup_records.iter().next().is_some_and(|r| {
+            r.record_type() == RecordType::NS
+                && query.query_type() != RecordType::NS
+                && query.query_type() != RecordType::ANY
+        });
+
+        if is_referral {
+            message.authorities.extend(lookup_records.iter().cloned());
+        } else {
+            message.answers.extend(lookup_records.iter().cloned());
+        }
+    }
+
+    if let Some(ns_records) = ns {
+        message.authorities.extend(ns_records.iter().cloned());
+    }
+
+    if let Some(soa_records) = soa {
+        message.authorities.extend(soa_records.iter().cloned());
+    }
+
+    message
+}
+
+/// Prepare a response for a forwarded zone.
+async fn build_forwarded_response(
+    response: Result<AuthLookup, LookupError>,
+    request_meta: &Metadata,
+    #[cfg(feature = "__dnssec")] can_validate_dnssec: bool,
+    query: &LowerQuery,
+    lookup_options: LookupOptions,
+) -> Message {
+    let mut response_meta = Metadata::response_from_request(request_meta);
+    response_meta.recursion_available = true;
+    response_meta.authoritative = false;
+    let mut message = Message::new(
+        response_meta.id,
+        response_meta.message_type,
+        response_meta.op_code,
+    );
+    message.add_query(query.original().clone());
+
+    if !request_meta.recursion_desired {
+        info!(
+            id = request_meta.id,
+            "request disabled recursion, returning REFUSED"
+        );
+
+        response_meta.response_code = ResponseCode::Refused;
+        message.metadata = response_meta;
+        return message;
+    }
+
+    #[derive(Default)]
+    struct ResponseParts {
+        answers: AuthLookup,
+        soa: Option<Record>,
+        authorities: AuthLookup,
+        additionals: AuthLookup,
+        #[cfg(feature = "__dnssec")]
+        nsec_proof: Option<Proof>,
+    }
+
+    #[cfg_attr(not(feature = "__dnssec"), allow(unused_mut))]
+    let mut rsp = match response {
+        #[cfg(feature = "resolver")]
+        Ok(AuthLookup::Resolved(lookup)) => {
+            // Extract each section from the Lookup to preserve section structure
+            let answers =
+                AuthLookup::answers(LookupRecords::Section(lookup.answers().to_vec()), None);
+            let authorities =
+                AuthLookup::answers(LookupRecords::Section(lookup.authorities().to_vec()), None);
+            let additionals =
+                AuthLookup::answers(LookupRecords::Section(lookup.additionals().to_vec()), None);
+
+            ResponseParts {
+                answers,
+                authorities,
+                additionals,
+                ..ResponseParts::default()
+            }
+        }
+        Ok(answers) => ResponseParts {
+            answers,
+            ..ResponseParts::default()
+        },
+        Err(e) if e.is_no_records_found() || e.is_nx_domain() => {
+            debug!(error = ?e, "error resolving");
+
+            if e.is_nx_domain() {
+                response_meta.response_code = ResponseCode::NXDomain;
+            }
+
+            // Collect all of the authority records, except the SOA
+            let authorities = if let Some(authorities) = e.authorities() {
+                let authorities = authorities
+                    .iter()
+                    .filter_map(|record| {
+                        // if we have another record (probably a dnssec record) that
+                        // matches the query name, but wasn't included in the answers
+                        // section, change the NXDomain response to NoError
+                        if record.name == **query.name() {
+                            debug!(
+                                query_name = %query.name(),
+                                ?record,
+                                "changing response code from NXDomain to NoError due to other record",
+                            );
+                            response_meta.response_code = ResponseCode::NoError;
+                        }
+
+                        match record.record_type() {
+                            RecordType::SOA => None,
+                            _ => Some(record.clone()),
+                        }
+                    })
+                    .collect();
+
+                AuthLookup::answers(LookupRecords::Section(authorities), None)
+            } else {
+                AuthLookup::default()
+            };
+
+            if let Some(soa) = e.into_soa() {
+                let soa = soa.into_record_of_rdata();
+
+                ResponseParts {
+                    soa: Some(soa),
+                    authorities,
+                    ..ResponseParts::default()
+                }
+            } else {
+                ResponseParts {
+                    authorities,
+                    ..ResponseParts::default()
+                }
+            }
+        }
+        #[cfg(all(feature = "__dnssec", feature = "recursor"))]
+        Err(LookupError::RecursiveError(recursor::RecursorError::Net(NetError::Dns(
+            DnsError::Nsec {
+                response, proof, ..
+            },
+        )))) if proof.is_insecure() => {
+            response_meta.response_code = response.response_code;
+
+            if let Some(soa) = response.soa() {
+                let soa = soa.to_owned().into_record_of_rdata();
+
+                ResponseParts {
+                    soa: Some(soa),
+                    nsec_proof: Some(proof),
+                    ..ResponseParts::default()
+                }
+            } else {
+                ResponseParts {
+                    nsec_proof: Some(proof),
+                    ..ResponseParts::default()
+                }
+            }
+        }
+        #[cfg(feature = "__dnssec")]
+        Err(LookupError::NetError(NetError::Dns(DnsError::DnssecBogus))) => {
+            response_meta.response_code = ResponseCode::ServFail;
+            ResponseParts {
+                nsec_proof: Some(Proof::Bogus),
+                ..ResponseParts::default()
+            }
+        }
+        Err(e) => {
+            response_meta.response_code = ResponseCode::ServFail;
+            debug!(error = ?e, "error resolving");
+            ResponseParts::default()
+        }
+    };
+
+    // If DNSSEC is disabled, we ignore the CD bit and do not set the AD bit.
+    #[cfg(feature = "__dnssec")]
+    if can_validate_dnssec {
+        // section 3.2.2 ("the CD bit") of RFC4035 is a bit underspecified because it does not use
+        // RFC2119 vocabulary ("MUST", "MAY", etc.) in some sentences that describe the resolver's
+        // behavior.
+        //
+        // A. it is clear that if CD=1 in the query then data that fails DNSSEC validation SHOULD
+        //   be returned
+        //
+        // B. it also clear that if CD=0 and DNSSEC validation fails then the status MUST be
+        //   SERVFAIL
+        //
+        // C. it's less clear if DNSSEC validation can be skipped altogether when CD=1
+        //
+        // the logic here follows `unbound`'s interpretation of that section
+        //
+        // 0. the requirements A and B are implemented
+        // 1. DNSSEC validation happens regardless of the state of the CD bit
+        // 2. the AD bit gets set if DNSSEC validation succeeded regardless of the state of the
+        //   CD bit
+        //
+        // this last point can result in responses that have both AD=1 and CD=1. RFC4035 is unclear
+        // whether that's a valid state but that's what `unbound` does
+        //
+        // we may want to interpret (B) as allowed ("MAY be skipped") as a form of optimization in
+        // the future to reduce the number of network transactions that a CD=1 query needs.
+        if rsp.soa.is_none() {
+            match summarize_proofs(rsp.answers.iter(), rsp.nsec_proof) {
+                DnssecSummary::Secure
+                    if (request_meta.authentic_data || lookup_options.dnssec_ok) =>
+                {
+                    trace!("setting ad header");
+                    response_meta.authentic_data = true;
+                }
+                DnssecSummary::Bogus if !request_meta.checking_disabled => {
+                    response_meta.response_code = ResponseCode::ServFail;
+                    // do not return Bogus records when CD=0
+                    rsp.answers = AuthLookup::default();
+                }
+                _ => {}
+            }
+        } else {
+            let dnssec_summary =
+                summarize_proofs(rsp.soa.iter().chain(rsp.authorities.iter()), rsp.nsec_proof);
+            match dnssec_summary {
+                DnssecSummary::Secure
+                    if (request_meta.authentic_data || lookup_options.dnssec_ok) =>
+                {
+                    trace!("setting ad header");
+                    response_meta.authentic_data = true;
+                }
+                DnssecSummary::Bogus if !request_meta.checking_disabled => {
+                    response_meta.response_code = ResponseCode::ServFail;
+                    // do not return Bogus records when CD=0
+                    trace!("clearing SOA record from response");
+                    rsp.soa = None;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    message.metadata = response_meta;
+
+    message.answers.extend(rsp.answers.iter().cloned());
+    if let Some(soa) = rsp.soa {
+        message.authorities.push(soa);
+    }
+    message.authorities.extend(rsp.authorities.iter().cloned());
+    message.additionals.extend(rsp.additionals.iter().cloned());
+
+    // Strip DNSSEC records from all applicable sections based on the DNSSEC OK setting.
+    message.maybe_strip_dnssec_records(lookup_options.dnssec_ok)
+}
+
+/// Summarize proofs from individual records and an optional separate nonexistence proof result.
+#[cfg(feature = "__dnssec")]
+fn summarize_proofs<'a>(
+    records: impl Iterator<Item = &'a Record>,
+    nsec_proof: Option<Proof>,
+) -> DnssecSummary {
+    let mut dnssec_summary = DnssecSummary::from_records(records);
+    if let Some(proof) = nsec_proof {
+        dnssec_summary = update_dnssec_summary_with_proof(dnssec_summary, proof);
+    }
+    dnssec_summary
+}
+
+/// Combine a [`DnssecSummary`] with a [`Proof`].
+#[cfg(feature = "__dnssec")]
+fn update_dnssec_summary_with_proof(summary: DnssecSummary, proof: Proof) -> DnssecSummary {
+    match (summary, proof) {
+        (DnssecSummary::Secure, Proof::Secure) => DnssecSummary::Secure,
+        (DnssecSummary::Bogus, _) | (_, Proof::Bogus) => DnssecSummary::Bogus,
+        (
+            DnssecSummary::Secure | DnssecSummary::Insecure,
+            Proof::Secure | Proof::Insecure | Proof::Indeterminate,
+        ) => DnssecSummary::Insecure,
+    }
+}
+
+#[cfg(all(test, feature = "resolver"))]
+mod tests {
+    use std::{net::Ipv4Addr, str::FromStr};
+
+    use super::*;
+    use crate::net::runtime::TokioRuntimeProvider;
+    use crate::proto::rr::rdata::NS;
+    use crate::proto::{
+        op::{MessageType, OpCode, Query},
+        rr::{
+            Name, RData, Record, RecordSet, RecordType,
+            rdata::{A, SOA},
+        },
+    };
+    use crate::resolver::lookup::Lookup;
+    use crate::store::in_memory::InMemoryZoneHandler;
+    use crate::zone_handler::AxfrPolicy;
+
+    #[tokio::test]
+    async fn test_build_forwarded_response_preserves_sections() {
+        // Create a DNS message with records in all three sections
+        let query = Query::query(Name::from_str("example.com.").unwrap(), RecordType::A);
+
+        // Create a Lookup from the query
+        let mut lookup =
+            Lookup::from_rdata(query.clone(), RData::A(A(Ipv4Addr::new(192, 0, 2, 1))));
+
+        // Add authority record (SOA)
+        lookup.extend_authorities([Record::from_rdata(
+            Name::from_str("example.com.").unwrap(),
+            3600,
+            RData::SOA(SOA::new(
+                Name::from_str("ns.example.com.").unwrap(),
+                Name::from_str("admin.example.com.").unwrap(),
+                1,
+                3600,
+                1800,
+                604800,
+                86400,
+            )),
+        )]);
+
+        // Add additional record (glue)
+        lookup.extend_additionals([Record::from_rdata(
+            Name::from_str("ns.example.com.").unwrap(),
+            3600,
+            RData::A(A(Ipv4Addr::new(192, 0, 2, 2))),
+        )]);
+
+        // Wrap it in AuthLookup::Resolved
+        let auth_lookup = AuthLookup::Resolved(lookup);
+
+        // Build the forwarded response
+        let mut request_meta = Metadata::new(1234, MessageType::Query, OpCode::Query);
+        request_meta.recursion_desired = true;
+        let query_lower = LowerQuery::query(query);
+
+        let message = build_forwarded_response(
+            Ok(auth_lookup),
+            &request_meta,
+            #[cfg(feature = "__dnssec")]
+            false,
+            &query_lower,
+            LookupOptions::default(),
+        )
+        .await;
+
+        // Verify that all sections were preserved
+        assert!(
+            !message.answers.is_empty(),
+            "Answers section should not be empty"
+        );
+
+        // Check that we have authorities
+        let authorities_count = message.authorities.len();
+        assert!(
+            authorities_count > 0,
+            "Authorities section should not be empty, got {} records",
+            authorities_count
+        );
+
+        // Check that we have additionals
+        let additionals_count = message.additionals.len();
+        assert!(
+            additionals_count > 0,
+            "Additionals section should not be empty, got {} records",
+            additionals_count
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_authoritative_response_referral() {
+        let origin = Name::from_str("example.com.").unwrap();
+        let sub = Name::from_str("sub.example.com.").unwrap();
+        let ns_name = Name::from_str("ns.example.com.").unwrap();
+
+        let ns_record = Record::from_rdata(sub.clone(), 3600, RData::NS(NS(ns_name)));
+        let record_set = RecordSet::from(ns_record);
+
+        let auth_lookup = AuthLookup::Records {
+            answers: LookupRecords::new(LookupOptions::default(), Arc::new(record_set)),
+            additionals: None,
+        };
+
+        let handler = InMemoryZoneHandler::<TokioRuntimeProvider>::empty(
+            origin.clone(),
+            ZoneType::Primary,
+            AxfrPolicy::Deny,
+            #[cfg(feature = "__dnssec")]
+            None,
+        );
+
+        let metadata = Metadata::new(0, MessageType::Query, OpCode::Query);
+        let query = LowerQuery::from(Query::query(
+            Name::from_str("www.sub.example.com.").unwrap(),
+            RecordType::A,
+        ));
+
+        let message = build_authoritative_response(
+            Ok(auth_lookup),
+            &handler,
+            &metadata,
+            LookupOptions::default(),
+            0,
+            &query,
+        )
+        .await;
+
+        assert!(message.answers.is_empty());
+        assert!(!message.authorities.is_empty());
+        assert_eq!(message.authorities[0].record_type(), RecordType::NS);
+    }
+}

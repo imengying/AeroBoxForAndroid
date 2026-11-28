@@ -1,0 +1,51 @@
+name: REALITY stable release rebase
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+permissions:
+  contents: read
+jobs:
+  candidate:
+    if: github.repository == 'cfal/rustls'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: 1
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Fetch compatible upstream
+        run: |
+          git remote add upstream https://github.com/rustls/rustls.git
+          git fetch upstream rel-0.23 'refs/tags/v/0.23.*:refs/tags/upstream/v/0.23.*'
+          git config user.name 'rustls rebase check'
+          git config user.email 'noreply@github.com'
+      - name: Validate latest stable release without publishing refs
+        run: |
+          mapfile -t releases < <(git for-each-ref --sort=-version:refname --format='%(refname)' 'refs/tags/upstream/v/0.23.*')
+          release="${releases[0]}"
+          candidate="$GITHUB_WORKSPACE"
+          if git merge-base --is-ancestor "$release" HEAD; then
+            printf 'Latest stable release is already included: %s\n' "$release" > "$RUNNER_TEMP/rebase-range-diff.txt"
+          else
+            candidate="$HOME/rustls-candidate"
+            bash .fork/rebase.sh "$release" "$candidate" > "$RUNNER_TEMP/rebase-range-diff.txt"
+          fi
+          cd "$candidate"
+          bash .fork/check.sh "$release"
+          git bundle create "$RUNNER_TEMP/rebase-candidate.bundle" HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reality-rebase-candidate
+          path: |
+            ${{ runner.temp }}/rebase-range-diff.txt
+            ${{ runner.temp }}/rebase-candidate.bundle

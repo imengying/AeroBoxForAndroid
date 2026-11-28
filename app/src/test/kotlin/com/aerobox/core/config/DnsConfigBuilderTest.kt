@@ -33,7 +33,7 @@ class DnsConfigBuilderTest {
             "udp://user@1.1.1.1", "https://user@1.1.1.1/dns-query", "1.1.1.1#fragment",
             "1.1.1.1:0", "1.1.1.1:-1", "1.1.1.1:65536", "1.1.1.1:abc", "1.1.1.1:",
             "https://1.1.1.1:0/dns-query", "https://1.1.1.1:abc/dns-query", "https://",
-            "udp://999.1.1.1", "2001:::53", "[2001:db8::53]:0", "resolver name"
+            "udp://999.1.1.1", "2001:::53", "[2001:db8::53]:0", "resolver name", "[ipv4]", "[ipv6]"
         )) {
             try {
                 DnsConfigBuilder.parseDnsServer(address)
@@ -44,7 +44,7 @@ class DnsConfigBuilderTest {
 
     @Test fun normalizationDoesNotHideBadPortsOrSchemesOrRewriteDirectDns() {
         for (fakeDns in listOf(false, true)) {
-            for (address in listOf("https://1.1.1.1:0/dns-query", "tls://1.1.1.1:0", "invalid://dns")) {
+            for (address in listOf("https://1.1.1.1:0/dns-query", "tls://1.1.1.1:0", "invalid://dns", "[ipv4]", "[ipv6]")) {
                 for (remote in listOf(false, true)) {
                     try {
                         DnsConfigBuilder.buildDns(

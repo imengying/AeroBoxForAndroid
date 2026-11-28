@@ -13,9 +13,6 @@ data class RuntimeLogEntry(
 )
 
 object RuntimeLogBuffer {
-    private val coreLevelRegex = Regex(
-        """(?i)^(FATAL|PANIC|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)(?:\[\d+\]|:|\s|$)\s*"""
-    )
     private val uuidRegex = Regex(
         """\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"""
     )
@@ -53,15 +50,9 @@ object RuntimeLogBuffer {
     }
 
     fun appendCore(message: String) {
-        val trimmed = message.trimStart()
-        val prefix = coreLevelRegex.find(trimmed)
-        // Service failures may arrive as plain, unprefixed error messages.
-        if (prefix == null) {
-            appendError(trimmed)
-        } else {
-            when (prefix.groupValues[1].lowercase()) {
-                "error", "fatal", "panic" -> appendError(trimmed.substring(prefix.value.length))
-            }
+        // Rust BufferedLogs prefixes every native log with its uppercase level.
+        if (message.startsWith("ERROR ")) {
+            appendError(message.substring(6))
         }
     }
 

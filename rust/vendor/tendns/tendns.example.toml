@@ -1,0 +1,44 @@
+ttl = 60
+valid_for = "24h"
+upstream_timeout = "3s"
+request_timeout = "10s" # 1s-24h, including HTTP header/body and keep-alive timers.
+cache_capacity = 1024
+max_inflight = 256
+hex_zones = ["hex.example.net"]
+
+[[listeners]]
+type = "dns"
+address = "0.0.0.0:5300"
+
+# HTTP is unencrypted; use only on a trusted network or behind a TLS proxy.
+# [[listeners]]
+# type = "http"
+# address = "0.0.0.0:8053"
+# path = "/dns-query"
+# auth_tokens = ["REPLACE_WITH_A_GENERATED_TOKEN"]
+
+# Credential file paths are relative to this TOML file; restart to rotate.
+# [[listeners]]
+# type = "https"
+# address = "0.0.0.0:8443"
+# path = "/dns-query"
+# http2 = true
+# cert = "server.crt"
+# key = "server.key"
+# auth_tokens = ["REPLACE_WITH_A_GENERATED_TOKEN"]
+# auth_token_file = "tokens.txt"
+
+[[upstreams]]
+type = "doh"
+url = "https://cloudflare-dns.com/dns-query"
+bootstrap = ["1.1.1.1", "1.0.0.1"]
+
+# Optional explicit plaintext fallback. No fallback is added automatically.
+# [[upstreams]]
+# type = "plain"
+# address = "9.9.9.9:53"
+
+[[discovery]]
+domain = "example.com"
+# Replace with the output of `tendns keygen`. Protect this file as a secret.
+key = "REPLACE_WITH_A_GENERATED_KEY"

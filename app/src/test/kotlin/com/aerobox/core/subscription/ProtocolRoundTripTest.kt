@@ -15,6 +15,14 @@ import org.junit.runners.Parameterized
 class ProtocolRoundTripTest(private val label: String, private val original: ProxyNode) {
     @Test fun exportImportPreservesProtocolCredentialsAndConnectionOptions() {
         val first = ConfigGenerator.exportNodes(listOf(original))
+        val outbound = JSONObject(first).getJSONArray("outbounds").getJSONObject(0)
+        val quic = original.type in setOf(ProxyType.HYSTERIA2, ProxyType.TUIC) || original.naiveProtocol == "quic"
+        for (key in listOf("tcp_multi_path", "disable_tcp_keep_alive", "tcp_keep_alive", "tcp_keep_alive_interval")) {
+            assertEquals("$label $key", !quic, outbound.has(key))
+        }
+        assertEquals(!quic && original.type != ProxyType.ANYTLS, outbound.has("tcp_fast_open"))
+        assertEquals("5s", outbound.getString("connect_timeout"))
+        assertTrue(outbound.getBoolean("udp_fragment"))
         val restored = JsonNodeParser.parseJsonContent(first).nodes.single()
         assertEquals(original.type, restored.type)
         assertEquals(original.name, restored.name)
@@ -45,7 +53,9 @@ class ProtocolRoundTripTest(private val label: String, private val original: Pro
         @JvmStatic @Parameterized.Parameters(name = "{0}")
         fun cases(): List<Array<Any>> {
             fun node(type: ProxyType) = ProxyNode(name = "节点 ${type.name}", type = type,
-                server = "192.0.2.1", port = 443, connectTimeout = "5s", tcpFastOpen = true)
+                server = "192.0.2.1", port = 443, connectTimeout = "5s", tcpFastOpen = true,
+                tcpMultiPath = true, disableTcpKeepAlive = false, tcpKeepAlive = "30s",
+                tcpKeepAliveInterval = "15s", udpFragment = true)
             val id = "11111111-2222-3333-4444-555555555555"
             val cases = listOf(
                 node(ProxyType.SHADOWSOCKS).copy(password = "fixture", method = "aes-128-gcm", udpOverTcpEnabled = true, udpOverTcpVersion = 2),

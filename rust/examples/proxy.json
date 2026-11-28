@@ -1,0 +1,14 @@
+{
+  "outbounds": [
+    { "type": "direct", "tag": "direct" },
+    { "type": "socks", "tag": "upstream", "server": "127.0.0.1", "server_port": 1081 }
+  ],
+  "route": {
+    "final": "upstream",
+    "rules": [
+      { "domain_suffix": ["blocked.example"], "action": "reject" },
+      { "ip_cidr": ["127.0.0.0/8", "::1/128"], "action": "route", "outbound": "direct" }
+    ]
+  },
+  "inbounds": [ { "type": "mixed", "tag": "mixed-in", "listen": "127.0.0.1", "listen_port": 2080, "sniff": true } ]
+}

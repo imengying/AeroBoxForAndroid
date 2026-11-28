@@ -78,7 +78,7 @@ object PreferenceManager {
         repeat(packages.length()) { require(packages.get(it) is String) }
         if (settings.has(ROUTING_MODE.name)) RoutingMode.valueOf(settings.getString(ROUTING_MODE.name))
         if (settings.has(IPV6_MODE.name)) IPv6Mode.valueOf(settings.getString(IPV6_MODE.name))
-        if (settings.has(DARK_MODE.name)) require(settings.getString(DARK_MODE.name) in setOf("system", "on", "off", "light", "dark"))
+        if (settings.has(DARK_MODE.name)) require(settings.getString(DARK_MODE.name) in setOf("system", "on", "off"))
         if (settings.has(PER_APP_PROXY_MODE.name)) require(settings.getString(PER_APP_PROXY_MODE.name) in setOf("whitelist", "blacklist"))
         if (settings.has(CUSTOM_RULE_SETS.name)) {
             val raw = settings.getString(CUSTOM_RULE_SETS.name)
@@ -92,11 +92,6 @@ object PreferenceManager {
             val prefs = this
             backupStrings.forEach { key ->
                 if (settings.has(key.name)) prefs[key] = settings.getString(key.name) else prefs.remove(key)
-            }
-            // The UI persists on/off; also normalize aliases accepted by older backups.
-            when (prefs[DARK_MODE]) {
-                "dark" -> prefs[DARK_MODE] = "on"
-                "light" -> prefs[DARK_MODE] = "off"
             }
             backupBooleans.forEach { key ->
                 if (settings.has(key.name)) prefs[key] = settings.getBoolean(key.name) else prefs.remove(key)

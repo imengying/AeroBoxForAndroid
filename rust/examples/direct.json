@@ -1,0 +1,15 @@
+{
+  "inbounds": [
+    { "type": "socks", "listen": "127.0.0.1", "listen_port": 1080 }
+  ],
+  "outbounds": [
+    { "type": "direct", "tag": "direct" }
+  ],
+  "route": {
+    "rules": [
+      { "domain_suffix": ["blocked.example"], "action": "reject" },
+      { "ip_cidr": ["224.0.0.0/3", "ff00::/8"], "action": "reject" }
+    ],
+    "final": "direct"
+  }
+}

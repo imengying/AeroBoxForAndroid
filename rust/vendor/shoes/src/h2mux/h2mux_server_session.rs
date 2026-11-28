@@ -1,0 +1,985 @@
+//! H2MUX Server Session
+//!
+//! Accepts incoming HTTP/2 streams and demultiplexes them into individual proxy streams.
+//! Includes idle timeout support matching sing-mux behavior.
+
+use std::io;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use bytes::Bytes;
+use http::Response;
+use log::{debug, info};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::sync::mpsc;
+use tokio::task::{AbortHandle, JoinSet};
+use tokio::time::{Duration, interval, timeout};
+
+use crate::client_proxy_selector::ClientProxySelector;
+use crate::copy_bidirectional::copy_bidirectional;
+use crate::resolver::Resolver;
+use crate::routing::{ServerStream, run_udp_routing};
+use crate::tcp::tcp_server::run_udp_copy;
+use crate::uot::SocksPacketAddrStream;
+use crate::util::{SHUTDOWN_TIMEOUT, shutdown_stream, timeout_stream_setup};
+use crate::vless::VlessMessageStream;
+
+use super::MuxProtocol;
+use super::activity_tracked_stream::ActivityTrackedStream;
+use super::activity_tracker::{ActivityTracker, IDLE_TIMEOUT, SHUTDOWN_DRAIN_TIMEOUT};
+use super::h2mux_padding::H2MuxPaddingStream;
+use super::h2mux_protocol::{SessionRequest, StreamRequest};
+use super::h2mux_server_stream::H2MuxServerStream;
+use super::h2mux_stream::H2MuxStream;
+use crate::prepend_stream::PrependStream;
+
+/// HTTP/2 window and frame size configuration
+const STREAM_WINDOW_SIZE: u32 = 256 * 1024; // 256 KB per stream
+const CONNECTION_WINDOW_SIZE: u32 = 1 << 20; // 1 MB (matches Go's http2 default)
+const MAX_FRAME_SIZE: u32 = 16 * 1024;
+
+/// Channel buffer size for inbound streams
+const INBOUND_BUFFER: usize = 128;
+
+/// An incoming stream with its destination
+pub struct InboundStream {
+    _permit: crate::resources::BudgetPermit,
+    _local_permit: crate::resources::BudgetPermit,
+    /// The multiplexed stream (wrapped with deferred status response)
+    pub stream: H2MuxServerStream,
+    /// Stream request with destination info
+    pub request: StreamRequest,
+}
+
+/// Server session that accepts multiplexed streams.
+pub struct H2MuxServerSession {
+    driver: AbortHandle,
+    /// Receiver for incoming streams
+    inbound_rx: mpsc::Receiver<InboundStream>,
+    /// Session closed flag (shared with accept loop)
+    #[allow(dead_code)]
+    is_closed: Arc<AtomicBool>,
+    /// Session protocol
+    protocol: MuxProtocol,
+    /// Padding enabled
+    padding_enabled: bool,
+}
+
+impl Drop for H2MuxServerSession {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
+impl H2MuxServerSession {
+    /// Create a new server session from a raw connection.
+    ///
+    /// This performs:
+    /// 1. Read session request header on RAW stream (unpadded)
+    /// 2. Apply padding layer if client requested it
+    /// 3. Perform HTTP/2 server handshake over (potentially padded) stream
+    /// 4. Start accepting streams with idle timeout monitoring
+    pub async fn new<IO>(mut conn: IO) -> io::Result<Self>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        // Read session request header on RAW stream (before padding)
+        let session_req = SessionRequest::decode(&mut conn).await?;
+
+        if session_req.protocol != MuxProtocol::H2Mux {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unsupported mux protocol: {:?}", session_req.protocol),
+            ));
+        }
+
+        debug!(
+            "H2MuxServerSession: received session request (version={}, protocol={:?}, padding={})",
+            session_req.version, session_req.protocol, session_req.padding
+        );
+
+        // Apply padding layer and perform handshake
+        if session_req.padding {
+            let padded = H2MuxPaddingStream::new(conn);
+            Self::handshake_and_spawn(padded, session_req.protocol, session_req.padding).await
+        } else {
+            Self::handshake_and_spawn(conn, session_req.protocol, session_req.padding).await
+        }
+    }
+
+    /// Perform HTTP/2 handshake and spawn acceptor task.
+    async fn handshake_and_spawn<IO>(
+        conn: IO,
+        protocol: MuxProtocol,
+        padding_enabled: bool,
+    ) -> io::Result<Self>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        // Create channel for inbound streams
+        let (inbound_tx, inbound_rx) = mpsc::channel(INBOUND_BUFFER);
+        let is_closed = Arc::new(AtomicBool::new(false));
+
+        // Create activity tracker for idle timeout.
+        // Wrap the connection with ActivityTrackedStream so that ALL HTTP/2 frames
+        // (including PING, SETTINGS, WINDOW_UPDATE) count as activity,
+        // matching Go's http2.Server.IdleTimeout behavior.
+        let activity = ActivityTracker::new();
+        let conn = ActivityTrackedStream::new(conn, activity.clone());
+
+        // Perform H2 server handshake
+        let connection = h2::server::Builder::new()
+            .initial_window_size(STREAM_WINDOW_SIZE)
+            .initial_connection_window_size(CONNECTION_WINDOW_SIZE)
+            .max_frame_size(MAX_FRAME_SIZE)
+            .max_concurrent_streams(
+                crate::resources::limits()
+                    .max_streams_per_connection
+                    .unwrap_or(u32::MAX as usize) as u32,
+            )
+            .handshake(conn)
+            .await
+            .map_err(|e| io::Error::other(format!("H2 server handshake failed: {}", e)))?;
+
+        debug!("H2MuxServerSession: H2 handshake complete");
+
+        // Spawn acceptor task with idle timeout monitoring
+        let is_closed_clone = Arc::clone(&is_closed);
+        let driver = crate::network_tasks::spawn(async move {
+            Self::accept_loop(connection, inbound_tx, is_closed_clone, activity).await;
+        });
+
+        Ok(Self {
+            driver: driver.abort_handle(),
+            inbound_rx,
+            is_closed,
+            protocol,
+            padding_enabled,
+        })
+    }
+
+    /// Accept loop - handles incoming H2 streams with idle timeout.
+    ///
+    /// Activity tracking is handled at the IO level by ActivityTrackedStream,
+    /// so we don't need to manually record activity on stream accept/read/write.
+    async fn accept_loop(
+        mut connection: h2::server::Connection<impl AsyncRead + AsyncWrite + Unpin, Bytes>,
+        inbound_tx: mpsc::Sender<InboundStream>,
+        is_closed: Arc<AtomicBool>,
+        activity: ActivityTracker,
+    ) {
+        // Check idle timeout periodically (6 times per timeout period)
+        let check_interval = IDLE_TIMEOUT / 6;
+        let mut idle_timer = interval(check_interval);
+        idle_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        // Skip the first tick which returns immediately
+        idle_timer.tick().await;
+        let mut tasks = JoinSet::new();
+        let slots = Arc::new(crate::resources::Budget::new(
+            crate::resources::limits().max_streams_per_connection,
+        ));
+
+        loop {
+            tokio::select! {
+                _ = tasks.join_next(), if !tasks.is_empty() => {}
+                // Accept new streams
+                result = connection.accept() => {
+                    match result {
+                        Some(Ok((request, respond))) => {
+                            let inbound_tx = inbound_tx.clone();
+                            let slots = slots.clone();
+                            crate::network_tasks::spawn_in(&mut tasks, async move {
+                                if let Err(e) = Self::handle_stream(request, respond, inbound_tx, slots).await {
+                                    debug!("H2MuxServerSession: stream error: {}", e);
+                                }
+                            });
+                        }
+                        Some(Err(e)) => {
+                            debug!("H2MuxServerSession: accept error: {}", e);
+                            break;
+                        }
+                        None => break,
+                    }
+                }
+
+                // Check for idle timeout
+                _ = idle_timer.tick() => {
+                    if is_closed.load(Ordering::Relaxed) {
+                        break;
+                    }
+
+                    if activity.is_idle(IDLE_TIMEOUT) {
+                        debug!("H2MuxServerSession: idle timeout, initiating graceful shutdown");
+                        // Send GOAWAY and allow existing streams to complete
+                        connection.graceful_shutdown();
+
+                        // Drain remaining accepts with a timeout to prevent indefinite hangs.
+                        // Without this timeout, if the client keeps the TCP connection open
+                        // (e.g., with keepalive PINGs), accept().await can block forever.
+                        let drain_result = tokio::time::timeout(SHUTDOWN_DRAIN_TIMEOUT, async {
+                            loop {
+                                let result = tokio::select! {
+                                    result = connection.accept() => result,
+                                    _ = tasks.join_next(), if !tasks.is_empty() => continue,
+                                };
+                                let Some(result) = result else { break };
+                                match result {
+                                    Ok((request, respond)) => {
+                                        let inbound_tx = inbound_tx.clone();
+                                        let slots = slots.clone();
+                                        crate::network_tasks::spawn_in(&mut tasks, async move {
+                                            if let Err(e) = Self::handle_stream(request, respond, inbound_tx, slots).await {
+                                                debug!("H2MuxServerSession: stream error during drain: {}", e);
+                                            }
+                                        });
+                                    }
+                                    Err(e) => {
+                                        debug!("H2MuxServerSession: error during drain, stopping: {}", e);
+                                        break;
+                                    }
+                                }
+                            }
+                        }).await;
+
+                        if drain_result.is_err() {
+                            debug!("H2MuxServerSession: drain timeout, forcing close");
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        is_closed.store(true, Ordering::Relaxed);
+        debug!("H2MuxServerSession: accept loop ended");
+    }
+
+    /// Handle a single incoming H2 stream
+    async fn handle_stream(
+        request: http::Request<h2::RecvStream>,
+        mut respond: h2::server::SendResponse<Bytes>,
+        inbound_tx: mpsc::Sender<InboundStream>,
+        slots: Arc<crate::resources::Budget>,
+    ) -> io::Result<()> {
+        let Some(local_permit) = slots.acquire(1) else {
+            respond.send_reset(h2::Reason::REFUSED_STREAM);
+            return Ok(());
+        };
+        let permit = match crate::resources::try_stream() {
+            Some(permit) => permit,
+            None => {
+                respond.send_reset(h2::Reason::REFUSED_STREAM);
+                return Ok(());
+            }
+        };
+        // Send 200 OK response
+        let response = Response::builder()
+            .status(http::StatusCode::OK)
+            .body(())
+            .map_err(|e| io::Error::other(format!("failed to build H2 response: {e}")))?;
+
+        let send_stream = respond
+            .send_response(response, false)
+            .map_err(|e| io::Error::other(format!("failed to send H2 response: {e}")))?;
+
+        let recv_stream = request.into_body();
+
+        // Create H2MuxStream
+        let mut stream = H2MuxStream::new(send_stream, recv_stream);
+
+        // Read stream request (destination)
+        let stream_request = timeout(
+            Duration::from_secs(30),
+            StreamRequest::decode_async(&mut stream),
+        )
+        .await??;
+
+        debug!(
+            "H2MuxServerSession: new stream to {} ({})",
+            stream_request.destination, stream_request.network
+        );
+
+        // Wrap with server stream that sends status on first write
+        let server_stream = H2MuxServerStream::new(stream);
+
+        // Send to inbound channel
+        let inbound = InboundStream {
+            _permit: permit,
+            _local_permit: local_permit,
+            stream: server_stream,
+            request: stream_request,
+        };
+
+        inbound_tx
+            .send(inbound)
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "inbound channel closed"))?;
+
+        Ok(())
+    }
+
+    /// Accept the next incoming stream.
+    ///
+    /// Returns None when the session is closed.
+    pub async fn accept(&mut self) -> Option<InboundStream> {
+        self.inbound_rx.recv().await
+    }
+
+    /// Check if the session is closed.
+    #[allow(dead_code)]
+    pub fn is_closed(&self) -> bool {
+        self.is_closed.load(Ordering::Relaxed)
+    }
+
+    /// Close the session.
+    #[allow(dead_code)]
+    pub fn close(&self) {
+        self.is_closed.store(true, Ordering::Relaxed);
+        self.driver.abort();
+    }
+
+    /// Get the protocol being used
+    pub fn protocol(&self) -> MuxProtocol {
+        self.protocol
+    }
+
+    /// Check if padding is enabled
+    pub fn padding_enabled(&self) -> bool {
+        self.padding_enabled
+    }
+}
+
+/// Run an H2MUX server session, forwarding each stream to a handler.
+#[allow(dead_code)]
+pub async fn run_h2mux_server<IO, F, Fut>(conn: IO, handler: F) -> io::Result<()>
+where
+    IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    F: Fn(InboundStream) -> Fut + Send + Sync + 'static,
+    Fut: std::future::Future<Output = io::Result<()>> + Send + 'static,
+{
+    let mut session = timeout(Duration::from_secs(30), H2MuxServerSession::new(conn)).await??;
+    let mut tasks = JoinSet::new();
+
+    loop {
+        let inbound = tokio::select! {
+            inbound = session.accept() => inbound,
+            _ = tasks.join_next(), if !tasks.is_empty() => continue,
+        };
+        let Some(inbound) = inbound else { break };
+        let fut = handler(inbound);
+        crate::network_tasks::spawn_in(&mut tasks, async move {
+            if let Err(e) = fut.await {
+                debug!("H2MUX stream handler error: {}", e);
+            }
+        });
+    }
+
+    Ok(())
+}
+
+/// Handle an H2MUX session on a stream.
+///
+/// This function is called when a protocol handler detects the h2mux magic address.
+/// It reads the session header, sets up HTTP/2, and handles each multiplexed stream.
+pub async fn handle_h2mux_session<S>(
+    stream: S,
+    initial_data: Option<Box<[u8]>>,
+    udp_enabled: bool,
+    proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+) -> io::Result<()>
+where
+    S: crate::async_stream::AsyncStream + 'static,
+{
+    let peer = stream.peer_addr();
+    info!("H2MUX: Starting server session");
+
+    // Wrap with PrependStream if there's initial data from protocol parsing
+    let stream = PrependStream::new(stream, initial_data);
+    let mut session = timeout(Duration::from_secs(30), H2MuxServerSession::new(stream)).await??;
+    let mut tasks = JoinSet::new();
+
+    info!(
+        "H2MUX: Session established (protocol={:?}, padding={})",
+        session.protocol(),
+        session.padding_enabled()
+    );
+
+    loop {
+        let inbound = tokio::select! {
+            inbound = session.accept() => inbound,
+            _ = tasks.join_next(), if !tasks.is_empty() => continue,
+        };
+        let Some(mut inbound) = inbound else { break };
+        inbound.stream.peer = peer;
+        let proxy_selector = proxy_selector.clone();
+        let resolver = resolver.clone();
+
+        crate::network_tasks::spawn_in(&mut tasks, async move {
+            if let Err(e) =
+                handle_h2mux_stream(inbound, udp_enabled, proxy_selector, resolver).await
+            {
+                debug!("H2MUX stream error: {}", e);
+            }
+        });
+    }
+
+    debug!("H2MUX: Session ended");
+    Ok(())
+}
+
+/// Handle a single h2mux stream
+async fn handle_h2mux_stream(
+    inbound: InboundStream,
+    udp_enabled: bool,
+    proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+) -> io::Result<()> {
+    let InboundStream {
+        _permit,
+        _local_permit,
+        mut stream,
+        request,
+    } = inbound;
+    let is_udp = request.is_udp();
+    let packet_addr = request.packet_addr;
+    let destination = request.destination;
+
+    info!(
+        "H2MUX stream: {} -> {} (udp={}, packet_addr={})",
+        if is_udp { "UDP" } else { "TCP" },
+        destination,
+        is_udp,
+        packet_addr
+    );
+
+    if !is_udp {
+        return handle_h2mux_tcp(stream, destination, proxy_selector, resolver).await;
+    }
+
+    if !udp_enabled {
+        reject_h2mux_stream(&mut stream, "UDP not enabled").await;
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "UDP not enabled",
+        ));
+    }
+
+    if packet_addr {
+        handle_h2mux_udp_packet_addr(stream, proxy_selector, resolver).await
+    } else {
+        handle_h2mux_udp(stream, destination, proxy_selector, resolver).await
+    }
+}
+
+async fn reject_h2mux_stream(stream: &mut H2MuxServerStream, message: &str) {
+    let _ = timeout(SHUTDOWN_TIMEOUT, stream.write_error_response(message)).await;
+    shutdown_stream(stream).await;
+}
+
+/// Handle TCP stream from h2mux
+async fn handle_h2mux_tcp(
+    mut stream: H2MuxServerStream,
+    destination: crate::address::NetLocation,
+    proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+) -> io::Result<()> {
+    let prepared =
+        crate::tcp::ingress::PreparedTcp::new(&proxy_selector, destination.clone(), Vec::new())?
+            .with_source(stream.peer);
+    let route =
+        timeout_stream_setup(prepared.route(&mut stream, &proxy_selector, &resolver)).await?;
+    let routed = timeout_stream_setup(route.connect(&resolver)).await?;
+    drop(proxy_selector);
+    drop(resolver);
+    match routed.setup {
+        Some(client_result) => {
+            debug!(
+                "H2MUX TCP: connected to {} via chain",
+                routed.wire_destination
+            );
+            let mut client_stream = client_result.client_stream;
+            let flow = client_stream.flow().cloned();
+
+            if let Some(data) = client_result.early_data {
+                crate::control::tracked_stream::during_flow(
+                    flow.as_deref(),
+                    timeout_stream_setup(async {
+                        stream.write_all(&data).await?;
+                        stream.flush().await
+                    }),
+                )
+                .await?;
+            }
+            if !routed.prefix.is_empty() {
+                timeout_stream_setup(async {
+                    client_stream.write_all(&routed.prefix).await?;
+                    client_stream.flush().await
+                })
+                .await?;
+            }
+
+            drop(routed.prefix);
+            let result = copy_bidirectional(&mut stream, &mut *client_stream, false, false).await;
+
+            crate::util::shutdown_stream_pair(&mut stream, &mut client_stream).await;
+
+            result
+        }
+        None => {
+            debug!("H2MUX TCP: blocked by rules: {}", destination);
+            reject_h2mux_stream(&mut stream, "Connection blocked by rules").await;
+            Err(io::Error::new(
+                io::ErrorKind::ConnectionRefused,
+                format!("Connection to {} blocked", destination),
+            ))
+        }
+    }
+}
+
+/// Handle UDP stream with fixed destination
+async fn handle_h2mux_udp(
+    mut stream: H2MuxServerStream,
+    destination: crate::address::NetLocation,
+    proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+) -> io::Result<()> {
+    debug!("H2MUX UDP fixed: {}", destination);
+
+    let prepared = crate::routing::ingress::PreparedUdp::new(&proxy_selector, destination)?;
+    let optimistic = prepared.needs_sniff(&proxy_selector);
+    let peer = stream.peer;
+    if optimistic {
+        timeout_stream_setup(async {
+            // An empty write emits status; write_all(&[]) would skip poll_write.
+            let _written = stream.write(&[]).await?;
+            stream.flush().await
+        })
+        .await?;
+    }
+    let mut server_stream =
+        crate::routing::ingress::PeekMessageStream::new(VlessMessageStream::new(&mut stream));
+    let route =
+        match timeout_stream_setup(prepared.route(&mut server_stream, &proxy_selector, &resolver))
+            .await
+        {
+            Ok(route) => route.with_source(peer),
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                drop(server_stream);
+                if optimistic {
+                    shutdown_stream(&mut stream).await;
+                } else {
+                    reject_h2mux_stream(&mut stream, "Connection blocked by rules").await;
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::ConnectionRefused,
+                    "UDP connection blocked by rules",
+                ));
+            }
+            Err(error) => return Err(error),
+        };
+    let setup = timeout_stream_setup(route.connect(&resolver)).await?;
+    run_udp_copy(server_stream, setup.stream, false, false).await
+}
+
+/// Handle UDP stream with per-packet addressing (packet_addr mode)
+async fn handle_h2mux_udp_packet_addr(
+    stream: H2MuxServerStream,
+    proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+) -> io::Result<()> {
+    debug!("H2MUX UDP packet_addr mode - entering");
+
+    // Uses the sing-mux SOCKS packet serializer for h2mux `packet_addr`.
+    let packet_stream = SocksPacketAddrStream::new_socks(Box::new(stream));
+
+    debug!("H2MUX UDP packet_addr mode - starting routing");
+    let result = run_udp_routing(
+        ServerStream::Targeted(Box::new(packet_stream)),
+        proxy_selector,
+        resolver,
+        false,
+    )
+    .await;
+
+    debug!("H2MUX UDP packet_addr mode - routing ended: {:?}", result);
+    result
+}
+
+#[cfg(all(test, feature = "integration-tests"))]
+#[path = "singbox_interop_tests.rs"]
+mod singbox_interop_tests;
+
+#[cfg(test)]
+#[path = "test_io.rs"]
+mod test_io;
+
+#[cfg(test)]
+mod tests {
+    use super::test_io::H2Writes;
+    use super::*;
+    use crate::address::NetLocation;
+    use crate::h2mux::{H2MuxClientSession, H2MuxOptions};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn fake_dns_udp_modes() {
+        use crate::routing::ingress::tests::{PacketMode, UdpCase, UdpFixture};
+        timeout(Duration::from_secs(10), async {
+            for packet_addr in [false, true] {
+                for case in UdpCase::ALL {
+                    let mut tasks = JoinSet::new();
+                    let fixture = UdpFixture::new(case, &mut tasks).await;
+                    let mode = if packet_addr {
+                        PacketMode::Socks
+                    } else {
+                        PacketMode::Fixed
+                    };
+                    let (mut peer, server) = tokio::io::duplex(65536);
+                    SessionRequest::new(MuxProtocol::H2Mux, false)
+                        .write(&mut peer)
+                        .await
+                        .unwrap();
+                    let (client, server) =
+                        tokio::join!(h2::client::handshake(peer), H2MuxServerSession::new(server));
+                    let (mut client, connection) = client.unwrap();
+                    let mut server = server.unwrap();
+                    let _driver =
+                        tokio_util::task::AbortOnDropHandle::new(tokio::spawn(connection));
+                    let request = http::Request::builder()
+                        .method("CONNECT")
+                        .uri("mux.example:443")
+                        .body(())
+                        .unwrap();
+                    let (response, mut send) = client.send_request(request, false).unwrap();
+                    let mut bytes = StreamRequest::udp(fixture.target.clone(), packet_addr)
+                        .encode()
+                        .unwrap();
+                    let response_gated = !packet_addr && case == UdpCase::Stun;
+                    if !response_gated {
+                        bytes.extend(fixture.request(mode));
+                    }
+                    send.send_data(Bytes::from(bytes), false).unwrap();
+                    let inbound = server.accept().await.unwrap();
+                    assert_eq!(inbound.request.packet_addr, packet_addr);
+                    assert!(inbound.request.is_udp());
+                    let _handler = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(
+                        handle_h2mux_stream(
+                            inbound,
+                            true,
+                            fixture.selector.clone(),
+                            fixture.resolver.clone(),
+                        ),
+                    ));
+                    let response = response.await.unwrap();
+                    assert_eq!(response.status(), http::StatusCode::OK);
+                    let mut peer = H2MuxStream::new(send, response.into_body());
+                    assert_eq!(
+                        peer.read_u8().await.unwrap(),
+                        super::super::h2mux_protocol::STATUS_SUCCESS
+                    );
+                    if response_gated {
+                        peer.write_all(&fixture.request(mode)).await.unwrap();
+                    }
+                    fixture.read_reply(&mut peer, mode).await;
+                    while let Some(result) = tasks.join_next().await {
+                        result.unwrap();
+                    }
+                }
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn udp_optimistic_failures_close_without_a_second_status() {
+        use crate::routing::ingress::tests::{PacketMode, protocol_failure_selector};
+        timeout(Duration::from_secs(5), async {
+            for blocked in [true, false] {
+                let target = NetLocation::from_str("192.0.2.1:443", None).unwrap();
+                let (mut peer, server) = tokio::io::duplex(8192);
+                SessionRequest::new(MuxProtocol::H2Mux, false)
+                    .write(&mut peer)
+                    .await
+                    .unwrap();
+                let (client, server) =
+                    tokio::join!(h2::client::handshake(peer), H2MuxServerSession::new(server));
+                let (mut client, connection) = client.unwrap();
+                let mut server = server.unwrap();
+                let _driver = tokio_util::task::AbortOnDropHandle::new(tokio::spawn(connection));
+                let request = http::Request::builder()
+                    .method("CONNECT")
+                    .uri("mux.example:443")
+                    .body(())
+                    .unwrap();
+                let (response, mut send) = client.send_request(request, false).unwrap();
+                send.send_data(
+                    Bytes::from(StreamRequest::udp(target.clone(), false).encode().unwrap()),
+                    false,
+                )
+                .unwrap();
+                let inbound = server.accept().await.unwrap();
+                let handler =
+                    tokio_util::task::AbortOnDropHandle::new(tokio::spawn(handle_h2mux_stream(
+                        inbound,
+                        true,
+                        protocol_failure_selector(blocked),
+                        Arc::new(crate::resolver::NativeResolver),
+                    )));
+                let mut peer = H2MuxStream::new(send, response.await.unwrap().into_body());
+                assert_eq!(
+                    peer.read_u8().await.unwrap(),
+                    super::super::h2mux_protocol::STATUS_SUCCESS
+                );
+                peer.write_all(
+                    &PacketMode::Fixed.packet(&target, &crate::sniff::udp::tests::stun_packet()),
+                )
+                .await
+                .unwrap();
+                peer.flush().await.unwrap();
+                assert_eq!(
+                    handler.await.unwrap().unwrap_err().kind(),
+                    if blocked {
+                        io::ErrorKind::ConnectionRefused
+                    } else {
+                        io::ErrorKind::PermissionDenied
+                    }
+                );
+                let mut extra = Vec::new();
+                let _ = peer.read_to_end(&mut extra).await;
+                assert!(extra.is_empty(), "second status after optimistic success");
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn fake_dns_adapter_contract() {
+        use crate::tcp::ingress::tests::FakeTcpCase;
+        timeout(Duration::from_secs(10), async {
+            for case in [
+                FakeTcpCase::Dns,
+                FakeTcpCase::Tls,
+                FakeTcpCase::Http,
+                FakeTcpCase::Plain,
+                FakeTcpCase::Unknown,
+            ] {
+                let mut tasks = JoinSet::new();
+                let (selector, resolver, target, payload) = case.fixture(&mut tasks).await;
+                let (client, server) = tokio::io::duplex(65536);
+                let options = H2MuxOptions::default();
+                let (client, server) = tokio::join!(
+                    H2MuxClientSession::new(client, &options),
+                    H2MuxServerSession::new(server)
+                );
+                let mut client = client.unwrap();
+                let mut server = server.unwrap();
+                let mut stream = client.open_tcp(&target).await.unwrap();
+                stream
+                    .write_all(if case == FakeTcpCase::Unknown {
+                        b"x"
+                    } else {
+                        &payload
+                    })
+                    .await
+                    .unwrap();
+                stream.shutdown().await.unwrap();
+                let inbound = server.accept().await.unwrap();
+                tasks.spawn(async move {
+                    let result = handle_h2mux_tcp(inbound.stream, target, selector, resolver).await;
+                    assert_eq!(result.is_err(), case == FakeTcpCase::Unknown);
+                });
+                let mut reply = Vec::new();
+                let result = stream.read_to_end(&mut reply).await;
+                if case == FakeTcpCase::Unknown {
+                    assert!(reply.is_empty());
+                } else {
+                    result.unwrap();
+                    case.assert_reply(&reply);
+                }
+                while let Some(result) = tasks.join_next().await {
+                    result.unwrap();
+                }
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn sniffed_stream_preserves_lazy_status_early_data_and_half_close() {
+        timeout(Duration::from_secs(5), async {
+            let mut tasks = JoinSet::new();
+            let hello = crate::sniff::tests::hello(&rustls::version::TLS13, true);
+            let (selector, resolver) =
+                crate::tcp::ingress::tests::socks_target(hello.clone(), &mut tasks).await;
+            let (client, server) = tokio::io::duplex(65536);
+            let options = H2MuxOptions::default();
+            let (client, server) = tokio::join!(
+                H2MuxClientSession::new(client, &options),
+                H2MuxServerSession::new(server),
+            );
+            let mut client = client.unwrap();
+            let mut server = server.unwrap();
+            let location = NetLocation::from_str(crate::tcp::ingress::tests::TARGET, None).unwrap();
+            let mut stream = client.open_tcp(&location).await.unwrap();
+            stream.write_all(&hello).await.unwrap();
+            stream.shutdown().await.unwrap();
+            let inbound = server.accept().await.unwrap();
+            tasks.spawn(async move {
+                handle_h2mux_tcp(inbound.stream, location, selector, resolver)
+                    .await
+                    .unwrap();
+            });
+            let mut reply = Vec::new();
+            stream.read_to_end(&mut reply).await.unwrap();
+            assert_eq!(reply, b"greetinglater");
+            while let Some(result) = tasks.join_next().await {
+                result.unwrap();
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_goaway_allows_existing_stream_to_finish() {
+        timeout(Duration::from_secs(30), exercise_idle_shutdown(true))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_goaway_bounds_stalled_stream_drain() {
+        timeout(Duration::from_secs(30), exercise_idle_shutdown(false))
+            .await
+            .unwrap();
+    }
+
+    async fn exercise_idle_shutdown(finish_stream: bool) {
+        let (client_io, server_io) = tokio::io::duplex(65536);
+        let writes = H2Writes::default();
+        let (client, server) = tokio::join!(
+            h2::client::handshake(client_io),
+            h2::server::handshake(writes.wrap(server_io)),
+        );
+        let (mut sender, client) = client.unwrap();
+        let mut server = server.unwrap();
+        let mut ping = server.ping_pong().unwrap();
+        let (inbound_tx, mut inbound_rx) = mpsc::channel(8);
+        let closed = Arc::new(AtomicBool::new(false));
+        let mut drivers = JoinSet::new();
+        let closed_flag = closed.clone();
+        drivers.spawn(async move {
+            // Synthetic inactivity isolates the idle branch from control-frame
+            // activity; the real-peer test covers normal PING keepalive.
+            H2MuxServerSession::accept_loop(
+                server,
+                inbound_tx,
+                closed_flag,
+                ActivityTracker::already_idle(),
+            )
+            .await;
+        });
+        drivers.spawn(async move { client.await.unwrap() });
+
+        let location = crate::address::NetLocation::from_str("echo.test:1234", None).unwrap();
+        let (response, mut body) = sender
+            .send_request(
+                http::Request::builder()
+                    .uri("https://localhost/")
+                    .body(())
+                    .unwrap(),
+                false,
+            )
+            .unwrap();
+        body.send_data(
+            StreamRequest::tcp(location).encode().unwrap().freeze(),
+            false,
+        )
+        .unwrap();
+        let mut inbound = inbound_rx.recv().await.unwrap();
+        let mut stream = H2MuxStream::new(body, response.await.unwrap().into_body());
+        inbound.stream.write_all(b"before").await.unwrap();
+        let mut before = [0; 7];
+        stream.read_exact(&mut before).await.unwrap();
+        assert_eq!(&before, b"\0before");
+
+        tokio::time::advance(IDLE_TIMEOUT / 6).await;
+        writes.wait_for_goaway().await;
+        let drain_started = tokio::time::Instant::now();
+        // The ACK follows GOAWAY processing in the peer's read loop.
+        ping.ping(h2::Ping::opaque()).await.unwrap();
+        let error = sender.ready().await.unwrap_err();
+        assert!(error.is_go_away());
+        assert_eq!(error.reason(), Some(h2::Reason::NO_ERROR));
+        assert!(!closed.load(Ordering::Relaxed));
+
+        if finish_stream {
+            stream.write_all(b"after").await.unwrap();
+            let mut received = [0; 5];
+            inbound.stream.read_exact(&mut received).await.unwrap();
+            assert_eq!(&received, b"after");
+            inbound.stream.write_all(&received).await.unwrap();
+            stream.read_exact(&mut received).await.unwrap();
+            assert_eq!(&received, b"after");
+            stream.shutdown().await.unwrap();
+            assert_eq!(inbound.stream.read(&mut [0]).await.unwrap(), 0);
+            inbound.stream.shutdown().await.unwrap();
+            assert_eq!(stream.read(&mut [0]).await.unwrap(), 0);
+            drop(stream);
+            drop(inbound);
+        } else {
+            let before_deadline = SHUTDOWN_DRAIN_TIMEOUT - Duration::from_millis(1);
+            tokio::time::advance(before_deadline).await;
+            assert!(!closed.load(Ordering::Relaxed));
+            let mut byte = [0];
+            let read = inbound.stream.read(&mut byte);
+            tokio::pin!(read);
+            assert!(futures::poll!(&mut read).is_pending());
+            assert_eq!(drain_started.elapsed(), before_deadline);
+
+            tokio::time::advance(Duration::from_millis(1)).await;
+            assert!(read.await.is_err());
+            assert_eq!(drain_started.elapsed(), SHUTDOWN_DRAIN_TIMEOUT);
+        }
+        while let Some(result) = drivers.join_next().await {
+            result.unwrap();
+        }
+        assert!(closed.load(Ordering::Relaxed));
+        writes.assert_graceful_goaway();
+    }
+
+    #[tokio::test]
+    async fn dropping_server_closes_driver_and_waiting_streams() {
+        let (client, server) = tokio::io::duplex(65536);
+        let options = H2MuxOptions::default();
+        let (client, server) = tokio::join!(
+            H2MuxClientSession::new(client, &options),
+            H2MuxServerSession::new(server),
+        );
+        let mut client = client.unwrap();
+        let mut server = server.unwrap();
+        let driver = server.driver.clone();
+        let location = crate::address::NetLocation::from_str("example.com:443", None).unwrap();
+        let mut stream = client.open_tcp(&location).await.unwrap();
+        stream.write_all(b"probe").await.unwrap();
+        stream.flush().await.unwrap();
+        let inbound = timeout(Duration::from_secs(1), server.accept())
+            .await
+            .unwrap()
+            .unwrap();
+        drop(server);
+        timeout(Duration::from_secs(1), async {
+            while !driver.is_finished() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        drop(inbound);
+        drop(stream);
+    }
+}

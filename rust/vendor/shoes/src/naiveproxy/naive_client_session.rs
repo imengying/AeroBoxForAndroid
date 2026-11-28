@@ -1,0 +1,328 @@
+//! NaiveProxy client session for HTTP/2 multiplexing.
+//!
+//! This module manages a persistent H2 connection that can handle multiple
+//! concurrent CONNECT streams, enabling true HTTP/2 multiplexing on the client side.
+//!
+//! ## Design
+//!
+//! `NaiveClientSession` is cheaply cloneable - it wraps h2's `SendRequest` which
+//! internally uses `Arc<Mutex<...>>` for shared state. This follows the same pattern
+//! as the h2 crate's own examples and benchmarks.
+//!
+//! The handler caches a session together with its selected route. Once obtained,
+//! the session is cloned and used directly without holding cache locks.
+
+use std::io;
+use std::sync::Arc;
+
+use bytes::Bytes;
+use http::Version;
+#[cfg(test)]
+use http::{Method, Request};
+use log::debug;
+use tokio::sync::oneshot;
+
+use crate::address::{Address, NetLocation};
+use crate::async_stream::AsyncStream;
+use crate::http2::transport::TransportErrors;
+
+use super::h2_multi_stream::H2MultiStream;
+use super::naive_padding_stream::{NaivePaddingStream, PaddingDirection, PaddingType};
+use super::options::{Headers, Options};
+
+/// A client session managing a single H2 connection with multiplexing support.
+///
+/// This session maintains a persistent HTTP/2 connection to a NaiveProxy server
+/// and can create multiple CONNECT streams over the same connection.
+///
+/// `NaiveClientSession` is cheaply cloneable - cloning shares the underlying
+/// H2 connection (via h2's internal `Arc<Mutex<...>>`).
+#[derive(Clone)]
+pub struct NaiveClientSession {
+    pub(super) errors: TransportErrors,
+    /// The SendRequest handle - has internal Arc, cheap to clone
+    send_request: h2::client::SendRequest<Bytes>,
+    driver_handle: Arc<DriverHandle>,
+}
+
+struct DriverHandle {
+    driver: tokio::task::AbortHandle,
+    _drain: oneshot::Sender<()>,
+}
+
+impl NaiveClientSession {
+    /// Create a new client session from an established TLS stream.
+    ///
+    /// Performs H2 handshake and spawns the connection driver.
+    pub async fn new(stream: Box<dyn AsyncStream>) -> io::Result<Self> {
+        Self::with_options(stream, &Options::default()).await
+    }
+
+    pub async fn with_options(stream: Box<dyn AsyncStream>, options: &Options) -> io::Result<Self> {
+        options.validate()?;
+        let errors = TransportErrors::default();
+        let (send_request, mut connection) = h2::client::Builder::new()
+            .chromium_connect_mode(true)
+            // Fixed Android Naive/Cronet's client SETTINGS. The standard
+            // 16 KiB frame limit is implicit; MAX_CONCURRENT_STREAMS would
+            // constrain peer-created streams, which this client disables.
+            .header_table_size(65_536)
+            .enable_push(false)
+            .initial_window_size(options.stream_receive_window)
+            .initial_connection_window_size(options.session_receive_window)
+            .max_header_list_size(262_144)
+            .handshake(errors.wrap(stream))
+            .await
+            .map_err(|e| errors.map_with("H2 client handshake failed", e))?;
+        errors.start_driver();
+
+        let (drain_tx, drain_rx) = oneshot::channel();
+        let abort_handle = crate::network_tasks::spawn(async move {
+            // Retired sessions must flush queued DATA and END_STREAM before teardown.
+            let result = tokio::select! {
+                result = &mut connection => Some(result),
+                _ = drain_rx => tokio::time::timeout(crate::util::SHUTDOWN_TIMEOUT, connection).await.ok(),
+            };
+            if let Some(Err(e)) = result {
+                debug!("NaiveProxy client H2 connection ended: {}", e);
+            }
+        })
+        .abort_handle();
+
+        debug!("NaiveClientSession: H2 handshake complete, session ready for multiplexing");
+
+        Ok(Self {
+            errors,
+            send_request,
+            driver_handle: Arc::new(DriverHandle {
+                driver: abort_handle,
+                _drain: drain_tx,
+            }),
+        })
+    }
+
+    /// Check if this session is still usable for new streams.
+    pub fn is_ready(&self) -> bool {
+        !self.driver_handle.driver.is_finished()
+    }
+
+    pub fn same_generation(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.driver_handle, &other.driver_handle)
+    }
+
+    /// Open a new CONNECT stream to the specified target.
+    ///
+    /// Returns a stream wrapped with padding if enabled.
+    pub async fn open_stream(
+        &mut self,
+        target: &NetLocation,
+        auth_header: &str,
+        padding_enabled: bool,
+    ) -> io::Result<Box<dyn AsyncStream>> {
+        self.open_with_headers(target, auth_header, padding_enabled, &Headers::default())
+            .await
+    }
+
+    pub async fn open_with_headers(
+        &mut self,
+        target: &NetLocation,
+        auth_header: &str,
+        padding_enabled: bool,
+        headers: &Headers,
+    ) -> io::Result<Box<dyn AsyncStream>> {
+        let request = super::request::connect_request(
+            target,
+            auth_header,
+            padding_enabled,
+            headers,
+            Version::HTTP_2,
+        )?;
+
+        std::future::poll_fn(|cx| self.send_request.poll_ready(cx))
+            .await
+            .map_err(|e| self.errors.map_with("H2 session closed", e))?;
+        let (response_future, send_stream) = self
+            .send_request
+            .send_request(request, false)
+            .map_err(|e| self.errors.map_with("Failed to send CONNECT", e))?;
+
+        let response = response_future
+            .await
+            .map_err(|e| self.errors.map_with("CONNECT response error", e))?;
+
+        debug!(
+            "NaiveClientSession: CONNECT response: status={}",
+            response.status()
+        );
+
+        if response.status() != http::StatusCode::OK {
+            return Err(io::Error::other(format!(
+                "CONNECT failed with status: {}",
+                response.status()
+            )));
+        }
+
+        let padding_type = super::request::response_padding(response.headers(), padding_enabled)?;
+
+        let recv_stream = response.into_body();
+        let mut h2_stream = H2MultiStream::new(send_stream, recv_stream);
+        h2_stream.set_session_owner(self.clone());
+
+        let client_stream: Box<dyn AsyncStream> = if padding_type != PaddingType::None {
+            Box::new(NaivePaddingStream::new(
+                h2_stream,
+                PaddingDirection::Client,
+                padding_type,
+            ))
+        } else {
+            Box::new(h2_stream)
+        };
+
+        debug!("NaiveClientSession: opened stream to {}", target);
+
+        Ok(client_stream)
+    }
+}
+
+/// Format authority for CONNECT request
+pub(super) fn format_authority(location: &NetLocation) -> String {
+    match location.address() {
+        Address::Ipv6(addr) => format!("[{}]:{}", addr, location.port()),
+        Address::Ipv4(addr) => format!("{}:{}", addr, location.port()),
+        Address::Hostname(host) => format!("{}:{}", host, location.port()),
+    }
+}
+
+#[cfg(test)]
+mod transport_tests {
+    use super::*;
+    use crate::http2::transport::tests::{cases, peer};
+    use tokio::io::AsyncReadExt;
+
+    #[tokio::test]
+    async fn established_stream_preserves_transport_causes() {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            for (make_error, local) in cases() {
+                let (client, fault, mut sends, driver) = peer(make_error);
+                let mut session = NaiveClientSession::new(Box::new(client)).await.unwrap();
+                let mut stream = session
+                    .open_stream(
+                        &NetLocation::from_str("example.com:80", None).unwrap(),
+                        "Basic test",
+                        false,
+                    )
+                    .await
+                    .unwrap();
+                let _send = sends.recv().await.unwrap();
+                assert_eq!(stream.read_u8().await.unwrap(), b'x');
+                fault.inject();
+                let error = stream.read_u8().await.unwrap_err();
+                assert!(error.to_string().starts_with("H2 recv error: "));
+                assert_eq!(
+                    crate::clash_api::probes::local_failure(&error),
+                    local,
+                    "{error:?}"
+                );
+                drop(stream);
+                drop(session);
+                driver.abort();
+                let _ = driver.await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn last_owner_drain_is_bounded_when_peer_stalls() {
+        let (client, _peer) = tokio::io::duplex(64);
+        let mut session = NaiveClientSession::new(Box::new(client)).await.unwrap();
+        let request = Request::builder()
+            .method(Method::CONNECT)
+            .uri("example.com:443")
+            .body(())
+            .unwrap();
+        drop(session.send_request.send_request(request, false).unwrap());
+        let driver = session.driver_handle.driver.clone();
+        drop(session);
+        tokio::task::yield_now().await;
+        assert!(!driver.is_finished());
+        tokio::time::sleep(crate::util::SHUTDOWN_TIMEOUT + std::time::Duration::from_millis(1))
+            .await;
+        assert!(driver.is_finished());
+    }
+
+    #[tokio::test]
+    async fn active_stream_keeps_driver_after_session_slot_is_dropped() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (client, peer) = tokio::io::duplex(8192);
+        let server = tokio::spawn(async move {
+            let mut conn = h2::server::handshake(peer).await.unwrap();
+            let (req, mut respond) = conn.accept().await.unwrap().unwrap();
+            let send = respond
+                .send_response(http::Response::new(()), false)
+                .unwrap();
+            let mut stream = H2MultiStream::new(send, req.into_body());
+            let echo = async {
+                let mut data = [0; 4];
+                stream.read_exact(&mut data).await.unwrap();
+                stream.write_all(&data).await.unwrap();
+                stream.shutdown().await.unwrap();
+            };
+            tokio::select! { _ = echo => {}, _ = conn.accept() => {} }
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_millis(100), conn.accept()).await;
+        });
+        let mut session = NaiveClientSession::new(Box::new(client)).await.unwrap();
+        let weak = Arc::downgrade(&session.driver_handle);
+        let mut stream = session
+            .open_stream(
+                &NetLocation::from_str("example.com:443", None).unwrap(),
+                "Basic dTpw",
+                false,
+            )
+            .await
+            .unwrap();
+        drop(session);
+        assert!(weak.upgrade().is_some());
+        stream.write_all(b"test").await.unwrap();
+        let mut data = [0; 4];
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            stream.read_exact(&mut data),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(&data, b"test");
+        drop(stream);
+        assert!(weak.upgrade().is_none());
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[test]
+    fn test_format_authority_ipv4() {
+        use std::net::Ipv4Addr;
+        let loc = NetLocation::new(Address::Ipv4(Ipv4Addr::new(192, 168, 1, 1)), 8080);
+        assert_eq!(format_authority(&loc), "192.168.1.1:8080");
+    }
+
+    #[test]
+    fn test_format_authority_ipv6() {
+        use std::net::Ipv6Addr;
+        let loc = NetLocation::new(Address::Ipv6(Ipv6Addr::LOCALHOST), 443);
+        assert_eq!(format_authority(&loc), "[::1]:443");
+    }
+
+    #[test]
+    fn test_format_authority_hostname() {
+        let loc = NetLocation::new(Address::Hostname("example.com".to_string()), 443);
+        assert_eq!(format_authority(&loc), "example.com:443");
+    }
+}

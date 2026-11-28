@@ -1,0 +1,23 @@
+// Test-only registration over independent uTLS/Go primitives; not product code.
+package tls
+
+import "sync"
+
+var aeroboxAppleFixtureOnce sync.Once
+
+// AeroBoxEnableAppleCipherFixtures makes all nine explicitly tested suites
+// executable by the reference server. Three SHA2 suites already have uTLS
+// implementations but are absent from server preference lists. ECDHE-ECDSA
+// 3DES combines the existing ECDSA key agreement and Go 3DES-CBC primitive;
+// unmodified uTLS advertises c008 as a FAKE constant without registering it.
+func AeroBoxEnableAppleCipherFixtures() {
+	aeroboxAppleFixtureOnce.Do(func() {
+		EnableWeakCiphers()
+		utlsSupportedCipherSuites = append(utlsSupportedCipherSuites,
+			&cipherSuite{0xc008, 24, 20, 8, ecdheECDSAKA,
+				suiteECDHE | suiteECSign, cipher3DES, macSHA1, nil})
+		extra := []uint16{0xc024, 0xc028, 0x003d, 0xc008}
+		cipherSuitesPreferenceOrder = append(cipherSuitesPreferenceOrder, extra...)
+		cipherSuitesPreferenceOrderNoAES = append(cipherSuitesPreferenceOrderNoAES, extra...)
+	})
+}

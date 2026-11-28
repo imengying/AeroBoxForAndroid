@@ -1,0 +1,979 @@
+use super::*;
+use std::net::{IpAddr, Ipv4Addr};
+
+#[test]
+fn rule_and_standalone_action_share_legacy_chain_conversion() {
+    use serde_json::{Value, json};
+
+    let parse = |value: Value, standalone| -> Result<RuleActionConfig, String> {
+        if standalone {
+            serde_json::from_value(value).map_err(|error| error.to_string())
+        } else {
+            let mut value = value;
+            value["masks"] = json!("0.0.0.0/0");
+            serde_json::from_value::<RuleConfig>(value)
+                .map(|rule| rule.action)
+                .map_err(|error| error.to_string())
+        }
+    };
+    for proxy_field in ["client_proxy", "client_proxies"] {
+        for chain_field in ["client_chain", "client_chains"] {
+            for (proxies, count) in [
+                (json!(null), 0),
+                (json!([]), 0),
+                (json!("a"), 1),
+                (json!(["a"]), 1),
+                (json!(["a", "b"]), 2),
+            ] {
+                for (chains, has_chains) in [
+                    (json!(null), false),
+                    (json!([]), false),
+                    (json!(["c", "d"]), true),
+                ] {
+                    for action in ["allow", "block"] {
+                        let value =
+                            json!({"action":action, proxy_field:proxies, chain_field:chains});
+                        for standalone in [false, true] {
+                            let result = parse(value.clone(), standalone);
+                            if action == "block" {
+                                assert!(matches!(result.unwrap(), RuleActionConfig::Block));
+                            } else if count > 0 && has_chains {
+                                assert_eq!(
+                                    result.unwrap_err(),
+                                    "cannot specify both 'client_proxies' and 'client_chains'/'client_chain' in the same rule. \
+                                     'client_proxies' is deprecated - please use 'client_chains' instead."
+                                );
+                            } else {
+                                let RuleActionConfig::Allow { client_chains, .. } = result.unwrap()
+                                else {
+                                    panic!()
+                                };
+                                if count == 0 && !has_chains {
+                                    assert!(client_chains.is_unspecified());
+                                    continue;
+                                }
+                                let NoneOrSome::One(chain) = client_chains else {
+                                    panic!("expected one chain")
+                                };
+                                let hops: Vec<_> = chain
+                                    .hops
+                                    .iter()
+                                    .map(|hop| serde_json::to_value(hop).unwrap())
+                                    .collect();
+                                let expected = if count == 0 {
+                                    vec![json!("c"), json!("d")]
+                                } else if count == 1 {
+                                    vec![json!("a")]
+                                } else {
+                                    vec![json!({"pool":["a", "b"]})]
+                                };
+                                assert_eq!(hops, expected);
+                            }
+                        }
+                    }
+                }
+            }
+            for standalone in [false, true] {
+                let value =
+                    json!({"override_address":"host:not-a-port", proxy_field:"a", chain_field:"b"});
+                assert_eq!(
+                    parse(value, standalone).unwrap_err(),
+                    "invalid override_address 'host:not-a-port': expected format like 'host:port' or 'host'"
+                );
+            }
+        }
+    }
+}
+
+fn create_test_rule_config() -> RuleConfig {
+    RuleConfig {
+        criteria: RuleCriteria {
+            description: None,
+            expression: Expression::Legacy(OneOrSome::Some(vec![
+                NetLocationMask::from("192.168.0.0/16:80").unwrap(),
+                NetLocationMask::from("10.0.0.0/8:443").unwrap(),
+            ])),
+            ..Default::default()
+        },
+        action: RuleActionConfig::Allow {
+            override_address: Some(NetLocation::from_ip_addr(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                8080,
+            )),
+            client_chains: NoneOrSome::One(ClientChain {
+                hops: OneOrSome::One(ClientChainHop::Single(ConfigSelection::GroupName(
+                    "test-proxy-group".to_string(),
+                ))),
+            }),
+        },
+    }
+}
+
+#[test]
+fn legacy_masks_keep_scalar_and_list_serialization() {
+    for masks in [
+        "example.com",
+        "[example.com]",
+        "[example.com, '192.0.2.0/24']",
+    ] {
+        let rule: RuleConfig = serde_yaml::from_str(&format!("masks: {masks}")).unwrap();
+        let encoded = serde_yaml::to_value(&rule).unwrap();
+        let expected: serde_yaml::Value = serde_yaml::from_str(masks).unwrap();
+        assert_eq!(encoded["masks"], expected);
+    }
+    let default = serde_yaml::to_value(RuleConfig::default()).unwrap();
+    assert_eq!(default["masks"], "0.0.0.0/0");
+    let error = serde_yaml::from_str::<RuleConfig>("masks: []\naction: invalid")
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("rule expression list cannot be empty"),
+        "{error}"
+    );
+}
+
+#[test]
+fn mixed_masks_round_trip_without_reinterpreting_strings() {
+    for masks in [
+        "blocked",
+        "[blocked, {domain: [exact.example]}, '192.0.2.0/24']",
+        "{all: [blocked, {not: {destination_port: [80]}}]}",
+    ] {
+        let rule: RuleConfig = serde_yaml::from_str(&format!("masks: {masks}")).unwrap();
+        assert!(matches!(rule.action, RuleActionConfig::Allow { .. }));
+        let encoded = serde_yaml::to_string(&rule).unwrap();
+        let mut rule: RuleConfig = serde_yaml::from_str(&encoded).unwrap();
+        rule.compile(&mut crate::rules::Compiler::default())
+            .unwrap();
+        let predicate = rule.criteria.compiled.unwrap();
+        assert_eq!(
+            predicate.evaluate(Some("child.blocked"), None, 443),
+            crate::rules::Outcome::Match
+        );
+        assert_ne!(
+            predicate.evaluate(Some("other.example"), None, 443),
+            crate::rules::Outcome::Match
+        );
+    }
+}
+
+#[test]
+fn typed_rule_round_trip_and_validation() {
+    let input = "masks: {all: [{domain: [Example.com]}, {destination_port: [443]}]}\nno_resolve: true\naction: block";
+    let rule: RuleConfig = serde_yaml::from_str(input).unwrap();
+    let encoded = serde_yaml::to_string(&rule).unwrap();
+    let mut rule: RuleConfig = serde_yaml::from_str(&encoded).unwrap();
+    rule.compile(&mut crate::rules::Compiler::default())
+        .unwrap();
+    assert_eq!(
+        rule.criteria
+            .compiled
+            .as_ref()
+            .unwrap()
+            .evaluate(Some("example.com"), None, 443),
+        crate::rules::Outcome::Match
+    );
+    assert!(serde_yaml::to_string(&rule).is_err());
+    for input in [
+        "match: {any_destination: true}\nmasks: example.com",
+        "rule_sets: [old]",
+        "masks: {unknown: true}",
+        "masks: {domain: [a], ip_cidr: [\"::/0\"]}",
+        "masks: {path: a.srs, rule_group: other}",
+        "masks: {path: a.srs, fromat: srs}",
+        "masks: {path: a.srs, action: block}",
+        "masks: []",
+        "masks: {all: []}",
+        "masks: {any: []}",
+    ] {
+        assert!(
+            serde_yaml::from_str::<RuleConfig>(input).is_err(),
+            "{input}"
+        );
+    }
+}
+
+#[test]
+fn conditions_and_masks_share_grammar_and_round_trip_decisions() {
+    use crate::rules::Compiler;
+    use serde_json::json;
+
+    for expression in [
+        json!("example.com:443"),
+        json!(["example.com", "192.0.2.0/24"]),
+        json!({"masks": ["example.com", "192.0.2.0/24"]}),
+        json!({"domain": ["example.com"]}),
+        json!({"ip_cidr": ["192.0.2.0/24"]}),
+        json!({"all": [{"domain_suffix": ["example.com"]}, {"destination_port": [443]}]}),
+        json!(["example.com", {"not": {"destination_port": [80]}}]),
+        json!({"all": [
+            {"masks": ["example.com", "192.0.2.0/24"]},
+            {"any": [{"destination_port": [443]}, {"destination_port_range": ["8000:9000"]}]},
+            {"not": {"masks": "excluded.example.com"}}
+        ]}),
+    ] {
+        let mut rules: Vec<RuleConfig> = Vec::new();
+        for field in ["conditions", "masks", "mask"] {
+            let input = json!({field: expression, "no_resolve": true, "action": "allow",
+                "override_address": "127.0.0.1:8080", "client_chain": "outbound"});
+            rules.push(serde_json::from_value(input.clone()).unwrap());
+            rules.push(serde_yaml::from_str(&serde_yaml::to_string(&input).unwrap()).unwrap());
+        }
+
+        let encoded = serde_json::to_value(&rules[0]).unwrap();
+        assert_ne!(
+            encoded.get("masks").is_some(),
+            encoded.get("conditions").is_some()
+        );
+        assert_eq!(encoded["no_resolve"], true);
+        assert_eq!(encoded["override_address"], "127.0.0.1:8080");
+        assert_eq!(encoded["client_chains"], json!({"chain": "outbound"}));
+        let mut restored: RuleConfig =
+            serde_yaml::from_str(&serde_yaml::to_string(&encoded).unwrap()).unwrap();
+        assert_eq!(serde_json::to_value(&restored).unwrap(), encoded);
+        restored.compile(&mut Compiler::default()).unwrap();
+        let restored_predicate = restored.criteria.compiled.unwrap();
+
+        for mut rule in rules {
+            assert_eq!(
+                serde_json::to_value(&rule).unwrap(),
+                encoded,
+                "{expression}"
+            );
+            rule.compile(&mut Compiler::default()).unwrap();
+            let predicate = rule.criteria.compiled.unwrap();
+            for name in [
+                None,
+                Some("example.com"),
+                Some("excluded.example.com"),
+                Some("other.example"),
+            ] {
+                for ip in [
+                    None,
+                    Some("192.0.2.1".parse().unwrap()),
+                    Some("198.51.100.1".parse().unwrap()),
+                ] {
+                    for port in [80, 443, 8080] {
+                        assert_eq!(
+                            predicate.evaluate(name, ip, port),
+                            restored_predicate.evaluate(name, ip, port)
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn conditions_serialize_address_leaves_explicitly_and_keep_simple_masks_compact() {
+    use crate::rules::{Compiler, Outcome};
+    use serde_json::json;
+
+    for masks in [json!("example.com"), json!(["example.com", "192.0.2.0/24"])] {
+        let rule: RuleConfig =
+            serde_json::from_value(json!({"conditions": {"masks": masks}})).unwrap();
+        assert_eq!(
+            serde_json::to_value(rule).unwrap(),
+            json!({"masks": masks, "action": "allow"})
+        );
+    }
+    let mut rule: RuleConfig = serde_json::from_value(json!({"mask": {"all": [
+        ["example.com", "192.0.2.0/24"], {"not": "excluded.example.com"}, {"destination_port": [443]}
+    ]}, "action": "block"})).unwrap();
+    assert_eq!(
+        serde_json::to_value(&rule).unwrap(),
+        json!({"conditions": {"all": [
+        {"masks": ["example.com", "192.0.2.0/24"]}, {"not": {"masks": "excluded.example.com"}},
+        {"destination_port": [443]}
+    ]}, "action": "block"})
+    );
+    rule.compile(&mut Compiler::default()).unwrap();
+    let predicate = rule.criteria.compiled.as_ref().unwrap();
+    for (name, ip, port, expected) in [
+        (Some("example.com"), None, 443, Outcome::Match),
+        (
+            None,
+            Some("192.0.2.1".parse().unwrap()),
+            443,
+            Outcome::Match,
+        ),
+        (Some("excluded.example.com"), None, 443, Outcome::Miss),
+        (Some("example.com"), None, 80, Outcome::Miss),
+    ] {
+        assert_eq!(predicate.evaluate(name, ip, port), expected);
+    }
+    assert!(serde_json::to_value(rule).is_err());
+}
+
+#[test]
+fn conditions_reject_missing_ambiguous_and_invalid_matchers() {
+    use serde_json::json;
+
+    let mut invalid = vec![json!({}), json!({"action": "allow"})];
+    for field in ["conditions", "masks", "mask"] {
+        for value in [
+            json!(null),
+            json!(false),
+            json!([]),
+            json!({}),
+            json!({"all": []}),
+            json!({"any": []}),
+            json!({"unknown": true}),
+            json!({"masks": []}),
+            json!({"masks": null}),
+            json!({"masks": false}),
+            json!({"masks": {"domain": ["example.com"]}}),
+            json!({"masks": ["example.com", {"destination_port": [443]}]}),
+            json!({"masks": "example.com", "destination_port": [443]}),
+            json!({"domain": ["example.com"], "action": "block"}),
+        ] {
+            invalid.push(json!({field: value}));
+        }
+        for source in ["path", "url"] {
+            invalid.push(json!({source: "list.srs", field: "example.com"}));
+            invalid.push(json!({source: "list.srs", field: null}));
+        }
+    }
+    for input in invalid {
+        assert!(
+            serde_json::from_value::<RuleConfig>(input.clone()).is_err(),
+            "{input}"
+        );
+        assert!(
+            serde_yaml::from_str::<RuleConfig>(&serde_yaml::to_string(&input).unwrap()).is_err(),
+            "{input}"
+        );
+    }
+}
+
+#[test]
+fn conditions_field_diagnostics_identify_conflicting_spellings() {
+    use serde_json::json;
+
+    for field in ["conditions", "masks", "mask"] {
+        for other in ["conditions", "masks", "mask"] {
+            if field == other {
+                continue;
+            }
+            for value in [json!("example.com"), json!(null)] {
+                let input = json!({field: "example.com", other: value});
+                let errors = [
+                    serde_json::from_value::<RuleConfig>(input.clone())
+                        .unwrap_err()
+                        .to_string(),
+                    serde_yaml::from_str::<RuleConfig>(&serde_yaml::to_string(&input).unwrap())
+                        .unwrap_err()
+                        .to_string(),
+                ];
+                for error in errors {
+                    assert!(
+                        error
+                            .contains("a rule must specify only one of conditions, masks, or mask"),
+                        "{input}: {error}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_rule_config_serialization() {
+    let original = create_test_rule_config();
+    let yaml_str = serde_yaml::to_string(&original).expect("Failed to serialize");
+    println!("Rule config YAML:\n{yaml_str}");
+    let deserialized: RuleConfig = serde_yaml::from_str(&yaml_str).expect("Failed to deserialize");
+    assert!(matches!(
+        deserialized.action,
+        RuleActionConfig::Allow { .. }
+    ));
+}
+
+#[test]
+fn test_rule_config_block() {
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: block
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    assert!(matches!(result.unwrap().action, RuleActionConfig::Block));
+}
+
+#[test]
+fn test_rule_config_allow() {
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    assert!(matches!(
+        result.unwrap().action,
+        RuleActionConfig::Allow { .. }
+    ));
+}
+
+#[test]
+fn test_rule_config_with_override() {
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+override_address: "127.0.0.1:8080"
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    if let RuleActionConfig::Allow {
+        override_address, ..
+    } = result.unwrap().action
+    {
+        assert!(override_address.is_some());
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+// =========================================================================
+// ClientChain deserialization tests
+// =========================================================================
+
+#[test]
+fn test_client_chain_from_array_of_hops() {
+    // Array syntax: [hop1, hop2, ...]
+    let yaml = r#"
+- my-proxy-group
+- exit-proxy
+"#;
+    let result: Result<ClientChain, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    let chain = result.unwrap();
+    assert_eq!(chain.hops.len(), 2);
+}
+
+#[test]
+fn test_client_chain_from_object_with_chain_key() {
+    // Object syntax: { chain: [...] }
+    let yaml = r#"
+chain:
+  - my-proxy-group
+  - exit-proxy
+"#;
+    let result: Result<ClientChain, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    let chain = result.unwrap();
+    assert_eq!(chain.hops.len(), 2);
+}
+
+#[test]
+fn test_client_chain_from_single_string() {
+    // Single string: "group-name"
+    let yaml = r#"my-proxy-group"#;
+    let result: Result<ClientChain, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    let chain = result.unwrap();
+    assert_eq!(chain.hops.len(), 1);
+    assert!(matches!(
+        chain.hops.iter().next().unwrap(),
+        ClientChainHop::Single(ConfigSelection::GroupName(n)) if n == "my-proxy-group"
+    ));
+}
+
+#[test]
+fn test_client_chain_from_inline_config() {
+    // Inline config object (without 'chain' key)
+    let yaml = r#"
+address: "127.0.0.1:1080"
+protocol:
+  type: socks
+"#;
+    let result: Result<ClientChain, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    let chain = result.unwrap();
+    assert_eq!(chain.hops.len(), 1);
+    assert!(matches!(
+        chain.hops.iter().next().unwrap(),
+        ClientChainHop::Single(ConfigSelection::Config(_))
+    ));
+}
+
+#[test]
+fn test_client_chain_differentiates_chain_key_from_proxy_config() {
+    // Object with 'chain' key should be parsed as chain syntax
+    let yaml_chain = r#"
+chain:
+  - my-proxy
+  - exit-proxy
+"#;
+    let result: Result<ClientChain, _> = serde_yaml::from_str(yaml_chain);
+    assert!(result.is_ok());
+    let chain = result.unwrap();
+    assert_eq!(chain.hops.len(), 2); // Two hops from the chain array
+
+    // Object without 'chain' key should be parsed as inline proxy config
+    let yaml_proxy = r#"
+address: "127.0.0.1:1080"
+protocol:
+  type: socks
+"#;
+    let result: Result<ClientChain, _> = serde_yaml::from_str(yaml_proxy);
+    assert!(result.is_ok());
+    let chain = result.unwrap();
+    assert_eq!(chain.hops.len(), 1); // Single hop from inline config
+    assert!(matches!(
+        chain.hops.iter().next().unwrap(),
+        ClientChainHop::Single(ConfigSelection::Config(_))
+    ));
+}
+
+#[test]
+fn test_client_chain_empty_array_rejected() {
+    let yaml = r#"[]"#;
+    let result: Result<ClientChain, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("empty"), "Error should mention empty: {err}");
+}
+
+#[test]
+fn test_client_chain_empty_chain_key_rejected() {
+    let yaml = r#"
+chain: []
+"#;
+    let result: Result<ClientChain, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_err());
+}
+
+// =========================================================================
+// client_chains (plural) tests - multiple chains for round-robin
+// =========================================================================
+
+#[test]
+fn test_rule_config_with_single_client_chain_backward_compat() {
+    // Using singular 'client_chain' should still work
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_chain:
+  - my-proxy-group
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert_eq!(client_chains.len(), 1);
+        let chain = client_chains.iter().next().unwrap();
+        assert_eq!(chain.hops.len(), 1);
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+#[test]
+fn test_rule_config_with_multiple_chains_object_syntax() {
+    // Multiple chains using object syntax { chain: [...] }
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_chains:
+  - chain: [direct]
+  - chain: [proxy1, proxy2, proxy3]
+  - chain: [proxy4, proxy5]
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok(), "Parse error: {:?}", result.err());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert_eq!(client_chains.len(), 3);
+        let chains: Vec<_> = client_chains.iter().collect();
+        assert_eq!(chains[0].hops.len(), 1); // direct
+        assert_eq!(chains[1].hops.len(), 3); // proxy1, proxy2, proxy3
+        assert_eq!(chains[2].hops.len(), 2); // proxy4, proxy5
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+#[test]
+fn test_rule_config_with_multiple_chains_array_syntax() {
+    // Multiple chains using bare array syntax [[...], [...]]
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_chains:
+  - [direct]
+  - [proxy1, proxy2, proxy3]
+  - [proxy4, proxy5]
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok(), "Parse error: {:?}", result.err());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert_eq!(client_chains.len(), 3);
+        let chains: Vec<_> = client_chains.iter().collect();
+        assert_eq!(chains[0].hops.len(), 1);
+        assert_eq!(chains[1].hops.len(), 3);
+        assert_eq!(chains[2].hops.len(), 2);
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+#[test]
+fn test_rule_config_with_mixed_chain_syntax() {
+    // Mix of object and array syntax
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_chains:
+  - [direct]
+  - chain: [proxy1, proxy2]
+  - my-proxy-group
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok(), "Parse error: {:?}", result.err());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert_eq!(client_chains.len(), 3);
+        let chains: Vec<_> = client_chains.iter().collect();
+        assert_eq!(chains[0].hops.len(), 1); // [direct]
+        assert_eq!(chains[1].hops.len(), 2); // chain: [proxy1, proxy2]
+        assert_eq!(chains[2].hops.len(), 1); // my-proxy-group (single string)
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+#[test]
+fn test_rule_config_defaults_to_unspecified() {
+    // When no client_chains is specified, defaults to Unspecified
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert!(client_chains.is_unspecified());
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+#[test]
+fn test_rule_config_chains_with_pools() {
+    // Chains that contain pools at various hops
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_chains:
+  - chain:
+      - pool: [entry-us, entry-eu]
+      - exit-proxy
+  - chain:
+      - direct
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok(), "Parse error: {:?}", result.err());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert_eq!(client_chains.len(), 2);
+        let chains: Vec<_> = client_chains.iter().collect();
+        // First chain has 2 hops, first hop is a pool
+        assert_eq!(chains[0].hops.len(), 2);
+        assert!(matches!(
+            chains[0].hops.iter().next().unwrap(),
+            ClientChainHop::Pool(_)
+        ));
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+// =========================================================================
+// ClientChainHop tests (unchanged from before)
+// =========================================================================
+
+#[test]
+fn test_client_chain_hop_single_group_ref() {
+    let yaml = r#"my-proxy-group"#;
+    let result: Result<ClientChainHop, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    assert!(matches!(
+        result.unwrap(),
+        ClientChainHop::Single(ConfigSelection::GroupName(_))
+    ));
+}
+
+#[test]
+fn test_client_chain_hop_single_inline_config() {
+    let yaml = r#"
+address: "127.0.0.1:1080"
+protocol:
+  type: socks
+"#;
+    let result: Result<ClientChainHop, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    assert!(matches!(
+        result.unwrap(),
+        ClientChainHop::Single(ConfigSelection::Config(_))
+    ));
+}
+
+#[test]
+fn test_client_chain_hop_pool_group_refs() {
+    let yaml = r#"
+pool:
+  - us-proxies
+  - eu-proxies
+"#;
+    let result: Result<ClientChainHop, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    if let ClientChainHop::Pool(selections) = result.unwrap() {
+        let vec: Vec<_> = selections.into_vec();
+        assert_eq!(vec.len(), 2);
+        assert!(matches!(&vec[0], ConfigSelection::GroupName(n) if n == "us-proxies"));
+        assert!(matches!(&vec[1], ConfigSelection::GroupName(n) if n == "eu-proxies"));
+    } else {
+        panic!("Expected Pool");
+    }
+}
+
+#[test]
+fn test_client_chain_hop_pool_mixed() {
+    let yaml = r#"
+pool:
+  - my-proxy-group
+  - address: "127.0.0.1:1080"
+    protocol:
+      type: socks
+"#;
+    let result: Result<ClientChainHop, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    if let ClientChainHop::Pool(selections) = result.unwrap() {
+        let vec: Vec<_> = selections.into_vec();
+        assert_eq!(vec.len(), 2);
+        assert!(matches!(&vec[0], ConfigSelection::GroupName(_)));
+        assert!(matches!(&vec[1], ConfigSelection::Config(_)));
+    } else {
+        panic!("Expected Pool");
+    }
+}
+
+#[test]
+fn test_client_chain_hop_pool_cannot_be_empty() {
+    let yaml = r#"
+pool: []
+"#;
+    let result: Result<ClientChainHop, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("pool") || err.contains("empty"),
+        "Error should mention pool or empty: {err}"
+    );
+}
+
+#[test]
+fn test_client_chain_hop_pool_single_item() {
+    // OneOrSome allows a single item without array syntax
+    let yaml = r#"
+pool: my-proxy-group
+"#;
+    let result: Result<ClientChainHop, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    if let ClientChainHop::Pool(selections) = result.unwrap() {
+        let vec: Vec<_> = selections.into_vec();
+        assert_eq!(vec.len(), 1);
+        assert!(matches!(&vec[0], ConfigSelection::GroupName(n) if n == "my-proxy-group"));
+    } else {
+        panic!("Expected Pool");
+    }
+}
+
+#[test]
+fn test_rejects_both_client_proxies_and_client_chains() {
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_proxies:
+  - my-group
+client_chains:
+  - chain: [other-group]
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("cannot specify both"));
+}
+
+// =========================================================================
+// Serialization tests
+// =========================================================================
+
+#[test]
+fn test_chain_hop_serialization_roundtrip_single_group() {
+    let original = ClientChainHop::Single(ConfigSelection::GroupName("my-group".to_string()));
+    let yaml = serde_yaml::to_string(&original).unwrap();
+    println!("Single group YAML: {yaml}");
+    let deserialized: ClientChainHop = serde_yaml::from_str(&yaml).unwrap();
+    assert!(matches!(
+        deserialized,
+        ClientChainHop::Single(ConfigSelection::GroupName(_))
+    ));
+}
+
+#[test]
+fn test_chain_hop_serialization_roundtrip_single_config() {
+    let original = ClientChainHop::Single(ConfigSelection::Config(ClientConfig::default()));
+    let yaml = serde_yaml::to_string(&original).unwrap();
+    println!("Single config YAML: {yaml}");
+    let deserialized: ClientChainHop = serde_yaml::from_str(&yaml).unwrap();
+    assert!(matches!(
+        deserialized,
+        ClientChainHop::Single(ConfigSelection::Config(_))
+    ));
+}
+
+#[test]
+fn test_chain_hop_serialization_roundtrip_pool() {
+    let original = ClientChainHop::Pool(OneOrSome::Some(vec![
+        ConfigSelection::GroupName("group-a".to_string()),
+        ConfigSelection::Config(ClientConfig::default()),
+    ]));
+    let yaml = serde_yaml::to_string(&original).unwrap();
+    println!("Pool YAML: {yaml}");
+    assert!(yaml.contains("pool:"));
+    let deserialized: ClientChainHop = serde_yaml::from_str(&yaml).unwrap();
+    assert!(matches!(deserialized, ClientChainHop::Pool(_)));
+}
+
+#[test]
+fn test_client_chain_serialization_roundtrip() {
+    let original = ClientChain {
+        hops: OneOrSome::Some(vec![
+            ClientChainHop::Single(ConfigSelection::GroupName("entry".to_string())),
+            ClientChainHop::Single(ConfigSelection::GroupName("exit".to_string())),
+        ]),
+    };
+    let yaml = serde_yaml::to_string(&original).unwrap();
+    println!("ClientChain YAML:\n{yaml}");
+    assert!(yaml.contains("chain:"));
+    let deserialized: ClientChain = serde_yaml::from_str(&yaml).unwrap();
+    assert_eq!(deserialized.hops.len(), 2);
+}
+
+#[test]
+fn test_multi_hop_chain() {
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_chain:
+  - pool:
+      - entry-proxies-us
+      - entry-proxies-eu
+  - exit-proxies
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert_eq!(client_chains.len(), 1);
+        let chain = client_chains.iter().next().unwrap();
+        assert_eq!(chain.hops.len(), 2);
+        // First hop is a pool
+        assert!(matches!(
+            chain.hops.iter().next().unwrap(),
+            ClientChainHop::Pool(_)
+        ));
+        // Second hop is a single group ref
+        assert!(matches!(
+            chain.hops.iter().nth(1).unwrap(),
+            ClientChainHop::Single(ConfigSelection::GroupName(_))
+        ));
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+// =========================================================================
+// Complex multi-chain scenarios
+// =========================================================================
+
+#[test]
+fn test_direct_with_proxy_fallback() {
+    // Round-robin between direct and a proxy chain
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_chains:
+  - chain: [direct]
+  - chain:
+      - address: "proxy.example.com:1080"
+        protocol:
+          type: socks
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok(), "Parse error: {:?}", result.err());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert_eq!(client_chains.len(), 2);
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+#[test]
+fn test_geographic_load_balancing() {
+    // Different paths for different regions
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_chains:
+  - chain: [us-entry, asia-exit]
+  - chain: [eu-entry, asia-exit]
+  - chain: [direct]
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok(), "Parse error: {:?}", result.err());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert_eq!(client_chains.len(), 3);
+        let chains: Vec<_> = client_chains.iter().collect();
+        assert_eq!(chains[0].hops.len(), 2); // us-entry, asia-exit
+        assert_eq!(chains[1].hops.len(), 2); // eu-entry, asia-exit
+        assert_eq!(chains[2].hops.len(), 1); // direct
+    } else {
+        panic!("Expected Allow action");
+    }
+}
+
+#[test]
+fn test_complex_multi_hop_with_pools() {
+    // Per-hop load balancing within multi-chain selection
+    let yaml = r#"
+masks: 0.0.0.0/0
+action: allow
+client_chains:
+  - chain: [direct]
+  - chain:
+      - pool: [entry-us-1, entry-us-2, entry-eu-1]
+      - pool: [middle-relay-a, middle-relay-b]
+      - pool: [exit-asia, exit-europe]
+  - chain:
+      - fast-entry
+      - fast-exit
+"#;
+    let result: Result<RuleConfig, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_ok(), "Parse error: {:?}", result.err());
+    if let RuleActionConfig::Allow { client_chains, .. } = result.unwrap().action {
+        assert_eq!(client_chains.len(), 3);
+        let chains: Vec<_> = client_chains.iter().collect();
+
+        // Chain 1: direct (1 hop)
+        assert_eq!(chains[0].hops.len(), 1);
+
+        // Chain 2: 3 hops, all pools
+        assert_eq!(chains[1].hops.len(), 3);
+        for hop in chains[1].hops.iter() {
+            assert!(matches!(hop, ClientChainHop::Pool(_)));
+        }
+
+        // Chain 3: 2 hops
+        assert_eq!(chains[2].hops.len(), 2);
+    } else {
+        panic!("Expected Allow action");
+    }
+}

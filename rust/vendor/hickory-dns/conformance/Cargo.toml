@@ -1,0 +1,23 @@
+[workspace]
+members = ["compatibility-tests", "conformance-tests", "dns-test", "e2e-tests", "ede-dot-com", "test-server"]
+resolver = "2"
+
+[workspace.lints.rust]
+non_snake_case = "warn"
+non_upper_case_globals = "warn"
+rust_2018_idioms = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(nightly)'] }
+unnameable_types = "warn"
+unreachable_pub = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+bool_to_int_with_if = "allow"
+default_trait_access = "warn"
+manual_let_else = "warn"
+or_fun_call = "warn"
+single_component_path_imports = "allow"
+upper_case_acronyms = "allow"
+use_self = "warn"

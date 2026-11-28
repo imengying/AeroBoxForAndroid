@@ -1,0 +1,32 @@
+name: publish
+
+on:
+  release:
+    types:
+      - published
+
+env:
+  CARGO_WS_VERSION: "0.4.2"
+
+jobs:
+  publish:
+    name: publish
+    # wait for the cache from all-features
+    #  TODO: we really want this:
+    # needs: ./.github/workflows/test/platform-matrix
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+
+    - uses: dtolnay/rust-toolchain@stable
+
+    - uses: extractions/setup-just@v4
+
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-workspaces@${{ env.CARGO_WS_VERSION }}
+
+    - name: just publish
+      env:
+        CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      run: just publish

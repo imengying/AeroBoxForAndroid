@@ -1,0 +1,30 @@
+{
+  "module": "github.com/metacubex/utls",
+  "version": "v1.8.7",
+  "source": "https://github.com/MetaCubeX/utls/tree/v1.8.7",
+  "files": {
+    "aerobox_record_size_fixture.go": {
+      "original": null,
+      "patched": "15408e83d433d121385e1b09d175bf0b8c8c57bb5fc7244ee52e9423748e32a7"
+    },
+    "aerobox_renegotiation_fixture.go": {
+      "original": null,
+      "patched": "8487a32da50a7ad91cf3cca4263755011f8de66a774f5c4d772353edd025923a"
+    },
+    "conn.go": {
+      "original": "e8027769d42706f263ef78d76ebd6e8a592299407a1f86b88b9ba5217bfe7dba",
+      "patched": "4192d117882512b84df8ba811e3b696d3198c14b330bac28c45331c90542d867"
+    },
+    "handshake_messages.go": {
+      "original": "f6e0eb13900282b9e8aab5c940a881984c96bcb70dc30588adf79f9d18865cae",
+      "patched": "0badb71ffe41ffcfa87d23cd176f9c9a4344fd55690a81c767cf9c01e9b38736"
+    },
+    "handshake_server.go": {
+      "original": "21a257373df2bbed81022607f931d4b32b4843664dcadbb32ce7eb523ad11a04",
+      "patched": "769c7a3893c07544f7e6c1e0d848d36db52723ea445d0a407b3e19ae32e3d735"
+    }
+  },
+  "test_only": true,
+  "license_sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067",
+  "patch_sha256": "7772e6de76459304e96547941f57a42b6702310e1c19f7749c87d8c2cfa08e79"
+}

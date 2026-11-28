@@ -1,0 +1,26 @@
+//! AnyTLS protocol implementation for shoes
+//!
+//! AnyTLS is a TLS-based proxy protocol with:
+//! - Session multiplexing: Multiple proxy streams over a single TLS connection
+//! - Configurable padding: First N packets are padded to obscure fingerprints
+//! - Password authentication: SHA256-based user authentication
+//!
+//! Portions are derived from anytls-rs (<https://github.com/jxo-me/anytls-rs>)
+//! under the MIT License; see `THIRD_PARTY_NOTICES.md`.
+
+mod anytls_client_handler;
+mod anytls_client_pool;
+mod anytls_client_session;
+mod anytls_padding;
+mod anytls_server_handler;
+mod anytls_server_session;
+mod anytls_stream;
+mod anytls_types;
+
+#[cfg(test)]
+mod pool_tests;
+
+pub use anytls_client_handler::AnyTlsClientHandler;
+pub use anytls_client_pool::PoolOptions;
+pub use anytls_padding::PaddingFactory;
+pub use anytls_server_handler::AnyTlsServerHandler;

@@ -18,13 +18,12 @@ class BackupThemeTest {
         }
     }
 
-    @Test fun oldThemeAliasesAreNormalizedAndUnknownValuesRejected() {
-        for ((old, current) in mapOf("dark" to "on", "light" to "off")) {
-            val restored = PreferenceManager.restoredPreferences(emptyPreferences(), settings(old), 0L)
-            assertEquals(current, restored[stringPreferencesKey("dark_mode")])
+    @Test fun valuesOutsideTheSettingsUiChoicesAreRejected() {
+        for (mode in listOf("dark", "light", "invalid")) {
+            try {
+                PreferenceManager.validateSettings(settings(mode))
+                fail("Unknown theme accepted: $mode")
+            } catch (_: IllegalArgumentException) { }
         }
-        try {
-            PreferenceManager.validateSettings(settings("invalid")); fail("Unknown theme accepted")
-        } catch (_: IllegalArgumentException) { }
     }
 }

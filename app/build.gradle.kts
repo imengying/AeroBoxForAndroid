@@ -6,6 +6,62 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val rustPlatformTests = listOf(
+    Triple("testRustVpnLifecycle", "lifecycle", "VPN startup, cancellation and network refresh"),
+    Triple("testRustPlatformDns", "platform-dns", "Platform DNS completion and cancellation"),
+    Triple("testRustConnectionOwner", "connection-owner", "Original TUN connection ownership"),
+    Triple("testRustProbePlatforms", "probe-platforms", "Standalone probe sharing and network handover"),
+)
+rustPlatformTests.forEach { (name, script, summary) ->
+    tasks.register<Exec>(name) {
+        group = "verification"
+        description = "$summary with Android/JNI test boundaries"
+        workingDir(rootProject.projectDir)
+        environment("AEROBOX_KOTLIN_LIB", gradle.gradleHomeDir!!.resolve("lib").absolutePath)
+        environment("JAVA_HOME", System.getProperty("java.home"))
+        commandLine("bash", "rust/scripts/test-kotlin-$script.sh")
+    }
+}
+tasks.register("testRustPlatform") {
+    group = "verification"
+    description = "Run the Kotlin platform boundary regressions"
+    dependsOn(rustPlatformTests.map { it.first })
+}
+
+val rustAbis = providers.gradleProperty("AEROBOX_ABIS").orElse("arm64-v8a,armeabi-v7a,x86_64,x86")
+    .get().split(',').map(String::trim).distinct()
+require(rustAbis.isNotEmpty() && rustAbis.all { it in setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86") }) {
+    "AEROBOX_ABIS must contain supported Android ABIs separated by commas"
+}
+val rustProfile = providers.gradleProperty("AEROBOX_RUST_PROFILE").orElse("release")
+require(rustProfile.get() in setOf("release", "dev")) { "AEROBOX_RUST_PROFILE must be release or dev" }
+val rustJniDirectory = layout.buildDirectory.dir("generated/rust/jniLibs")
+abstract class RustNativeBuild : Exec() {
+    @get:OutputDirectory
+    abstract val jniDirectory: DirectoryProperty
+}
+
+val buildRustNative = tasks.register<RustNativeBuild>("buildRustNative") {
+    group = "build"
+    description = "Build the in-repository Rust JNI library for the selected Android ABIs"
+    workingDir(rootProject.file("rust"))
+    inputs.files(rootProject.fileTree("rust") {
+        exclude("**/target/**", "**/.git/**", "**/build/**", "**/*.md")
+        // Host tests and fixtures do not participate in the Android library.
+        exclude("docs/**", "tests/**", "android/tests/**", "scripts/test-*.sh")
+        exclude("crates/*/tests/**", "crates/*/validation/**")
+        exclude("vendor/shoes/tests/**", "vendor/shoes/benches/**", "vendor/shoes/examples/**", "vendor/shoes/scripts/**")
+    })
+    inputs.property("abis", rustAbis)
+    inputs.property("profile", rustProfile)
+    jniDirectory.set(rustJniDirectory)
+    doFirst { jniDirectory.get().asFile.deleteRecursively() }
+    environment("AEROBOX_JNI_DIR", rustJniDirectory.get().asFile.absolutePath)
+    environment("AEROBOX_BUILD_PROFILE", rustProfile.get())
+    environment("ANDROID_API_LEVEL", "31")
+    commandLine("bash", "android/build.sh", *rustAbis.toTypedArray())
+}
+
 android {
     namespace = "com.aerobox"
     compileSdk = 37
@@ -66,7 +122,7 @@ android {
         abi {
             isEnable = true
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            include(*rustAbis.toTypedArray())
             isUniversalApk = false
         }
     }
@@ -97,6 +153,9 @@ android {
 }
 
 androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(buildRustNative, RustNativeBuild::jniDirectory)
+    }
     beforeVariants(selector().all()) { variantBuilder ->
         variantBuilder.enableAndroidTest = false
         variantBuilder.hostTests[HostTestBuilder.UNIT_TEST_TYPE]?.enable = variantBuilder.buildType == "debug"
@@ -146,17 +205,6 @@ dependencies {
     implementation("org.yaml:snakeyaml:2.7")
     implementation("org.tukaani:xz:1.12")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
-
-    // Local builds use the sibling core checkout. CI supplies its pinned checkout.
-    val rustCoreAarPath = providers.gradleProperty("AEROBOX_CORE_AAR")
-        .orElse(providers.environmentVariable("AEROBOX_CORE_AAR"))
-        .orElse(rootProject.file("../core/target/android/aerobox-core.aar").absolutePath)
-    val rustCoreAar = rootProject.file(rustCoreAarPath.get())
-    check(rustCoreAar.isFile) {
-        "Rust core AAR is missing: $rustCoreAar. Build core/android/build-aar.sh first, " +
-            "or set -PAEROBOX_CORE_AAR=/absolute/path/aerobox-core.aar."
-    }
-    implementation(files(rustCoreAar))
 
     implementation("com.google.accompanist:accompanist-drawablepainter:0.37.3")
 }

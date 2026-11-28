@@ -1,0 +1,647 @@
+use std::io;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+use ipnetwork::IpNetwork;
+use tokio::sync::Mutex;
+
+use crate::address::NetLocation;
+use crate::resolver::{DnsExchangeFuture, ResolveFuture, Resolver};
+
+use super::exchange::RawDnsExchange;
+use super::proxy_runtime::ProxyRuntimeProvider;
+
+#[derive(Debug)]
+struct Snapshot {
+    loaded: Instant,
+    exchange: Arc<RawDnsExchange>,
+}
+
+#[derive(Debug)]
+pub(super) struct SystemResolver {
+    lookup: Arc<dyn Resolver>,
+    snapshot: Arc<Mutex<Option<Snapshot>>>,
+    forbidden: Arc<[IpNetwork]>,
+    timeout: Duration,
+}
+
+impl SystemResolver {
+    pub(super) async fn check_native_configuration(forbidden: Arc<[IpNetwork]>) -> io::Result<()> {
+        if forbidden.is_empty() {
+            return Ok(());
+        }
+        if let Some(endpoints) = crate::socket_policy::bootstrap_endpoints() {
+            return check_native_endpoints(
+                endpoints.iter().map(|endpoint| endpoint.ip()),
+                &forbidden,
+            );
+        }
+        tokio::task::spawn_blocking(move || {
+            let (mut config, _) = discover()?;
+            // Native lookup uses the OS configuration, not our filtered copy.
+            check_native_endpoints(
+                config.name_servers.iter().map(|server| server.ip),
+                &forbidden,
+            )?;
+            filter_endpoints(&mut config, &forbidden)
+        })
+        .await
+        .map_err(io::Error::other)?
+    }
+
+    pub(super) async fn check_configuration(forbidden: Arc<[IpNetwork]>) -> io::Result<()> {
+        if crate::socket_policy::bootstrap().is_some() {
+            return Ok(());
+        }
+        tokio::task::spawn_blocking(move || {
+            let (mut config, _) = discover()?;
+            filter_endpoints(&mut config, &forbidden)
+        })
+        .await
+        .map_err(io::Error::other)?
+    }
+
+    pub fn new(lookup: Arc<dyn Resolver>, forbidden: Arc<[IpNetwork]>, timeout: Duration) -> Self {
+        Self {
+            lookup,
+            snapshot: Arc::new(Mutex::new(None)),
+            forbidden,
+            timeout,
+        }
+    }
+    fn exchange_inner(
+        &self,
+        request: Vec<u8>,
+        deadline: Option<tokio::time::Instant>,
+    ) -> DnsExchangeFuture {
+        if let Some(bootstrap) = crate::socket_policy::bootstrap() {
+            return match deadline {
+                Some(deadline) => bootstrap.exchange_with_deadline(request, deadline),
+                None => bootstrap.exchange(request),
+            };
+        }
+        let snapshot = self.snapshot.clone();
+        let forbidden = self.forbidden.clone();
+        let lookup = self.lookup.clone();
+        let timeout = self.timeout;
+        Box::pin(async move {
+            let prepare = async {
+                let mut current = snapshot.lock().await;
+                if current
+                    .as_ref()
+                    .is_none_or(|value| value.loaded.elapsed() >= Duration::from_secs(30))
+                {
+                    let (mut config, mut options) = tokio::task::spawn_blocking(discover)
+                        .await
+                        .map_err(io::Error::other)??;
+                    filter_endpoints(&mut config, &forbidden)?;
+                    options.timeout = options.timeout.min(timeout);
+                    let chain = Arc::new(crate::tcp::chain_builder::build_direct_chain_group(
+                        lookup.clone(),
+                    ));
+                    let provider = ProxyRuntimeProvider::with_bootstrap(chain, lookup, timeout);
+                    *current = Some(Snapshot {
+                        loaded: Instant::now(),
+                        exchange: Arc::new(RawDnsExchange::new(
+                            config.name_servers,
+                            provider,
+                            options,
+                        )),
+                    });
+                }
+                Ok::<_, io::Error>(current.as_ref().unwrap().exchange.clone())
+            };
+            let exchange = match deadline {
+                Some(deadline) => {
+                    tokio::time::timeout_at(deadline, prepare)
+                        .await
+                        .map_err(|_| {
+                            io::Error::new(
+                                io::ErrorKind::TimedOut,
+                                "system DNS preparation timed out",
+                            )
+                        })??
+                }
+                None => prepare.await?,
+            };
+            let result = match deadline {
+                Some(deadline) => exchange.exchange_with_deadline(request, deadline).await,
+                None => exchange.exchange(request).await,
+            };
+            if result.as_ref().is_err_and(|error| {
+                !crate::resolver::dns_setup_pending(error)
+                    && !crate::resolver::dns_caller_deadline(error)
+                    && !crate::resources::is_exhausted(error)
+                    && error.kind() != io::ErrorKind::WouldBlock
+            }) {
+                let mut current = match deadline {
+                    Some(deadline) => {
+                        match tokio::time::timeout_at(deadline, snapshot.lock()).await {
+                            Ok(current) => current,
+                            Err(_) => return result,
+                        }
+                    }
+                    None => snapshot.lock().await,
+                };
+                if current
+                    .as_ref()
+                    .is_some_and(|value| Arc::ptr_eq(&value.exchange, &exchange))
+                {
+                    *current = None;
+                }
+            }
+            result
+        })
+    }
+}
+
+impl Resolver for SystemResolver {
+    fn resolve_location(&self, location: &NetLocation) -> ResolveFuture {
+        self.lookup.resolve_location(location)
+    }
+
+    fn exchange(&self, request: Vec<u8>) -> DnsExchangeFuture {
+        self.exchange_inner(request, None)
+    }
+
+    fn exchange_with_deadline(
+        &self,
+        request: Vec<u8>,
+        deadline: tokio::time::Instant,
+    ) -> DnsExchangeFuture {
+        self.exchange_inner(request, Some(deadline))
+    }
+}
+
+fn check_native_endpoints(
+    endpoints: impl Iterator<Item = std::net::IpAddr>,
+    forbidden: &[IpNetwork],
+) -> io::Result<()> {
+    for endpoint in endpoints {
+        if forbidden
+            .iter()
+            .any(|range| range.contains(endpoint.to_canonical()))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "system DNS endpoint overlaps a synthetic endpoint",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn filter_endpoints(config: &mut ResolverConfig, forbidden: &[IpNetwork]) -> io::Result<()> {
+    config.name_servers.retain(|server| {
+        !server.ip.is_unspecified()
+            && !forbidden
+                .iter()
+                .any(|range| range.contains(server.ip.to_canonical()))
+    });
+    if config.name_servers.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "system DNS has no usable underlying endpoints; configure dns.servers",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn discover() -> io::Result<(hickory_resolver::config::ResolverConfig, ResolverOpts)> {
+    hickory_resolver::system_conf::read_system_conf()
+        .map_err(|error| io::Error::other(error.to_string()))
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn discover() -> io::Result<(hickory_resolver::config::ResolverConfig, ResolverOpts)> {
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        "mobile host must supply underlying DNS via dns.servers; VPN system discovery is unsafe",
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hickory_resolver::config::{ConnectionConfig, NameServerConfig};
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn native_preflight_checks_managed_bootstrap_instead_of_os_dns() {
+        const CHILD: &str = "SHOES_NATIVE_PREFLIGHT_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            shoes_test_support::isolated::run_isolated(
+                "dns::system::tests::native_preflight_checks_managed_bootstrap_instead_of_os_dns",
+                CHILD,
+                "1",
+            );
+            return;
+        }
+        let (config, _) = discover().unwrap();
+        let os_endpoints: Vec<_> = config
+            .name_servers
+            .iter()
+            .map(|server| IpNetwork::from(server.ip.to_canonical()))
+            .collect();
+        let endpoint = ["192.0.2.53:53", "198.51.100.53:53"]
+            .into_iter()
+            .map(|value| value.parse::<std::net::SocketAddr>().unwrap())
+            .find(|endpoint| {
+                !os_endpoints
+                    .iter()
+                    .any(|range| range.contains(endpoint.ip()))
+            })
+            .unwrap();
+        let _policy = crate::socket_policy::SocketPolicy::install(
+            "tun-test".into(),
+            1,
+            1,
+            vec!["10.233.0.1/30".parse().unwrap()],
+            crate::dns::controlled_bootstrap(&[endpoint]).unwrap(),
+            vec![endpoint],
+        )
+        .unwrap();
+        SystemResolver::check_native_configuration(os_endpoints.into())
+            .await
+            .unwrap();
+        let error =
+            SystemResolver::check_native_configuration(Arc::from([IpNetwork::from(endpoint.ip())]))
+                .await
+                .unwrap_err();
+        assert!(
+            error.to_string().contains("system DNS endpoint overlaps"),
+            "{error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cached_system_exchange_retains_partial_at_caller_deadline() {
+        use hickory_resolver::proto::{
+            op::{Message, Query},
+            rr::{Name, RecordType},
+        };
+        use tokio::io::AsyncReadExt;
+
+        let (tcp, udp) = crate::dns::bind_tcp_and_udp().await;
+        let addr = udp.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let mut bytes = [0; 2048];
+            let (len, peer) = udp.recv_from(&mut bytes).await.unwrap();
+            let mut response = Message::from_vec(&bytes[..len]).unwrap().into_response();
+            response.metadata.truncation = true;
+            udp.send_to(&response.to_vec().unwrap(), peer)
+                .await
+                .unwrap();
+            let (mut stream, _) = tcp.accept().await.unwrap();
+            let len = stream.read_u16().await.unwrap();
+            let mut request = vec![0; len as usize];
+            stream.read_exact(&mut request).await.unwrap();
+            std::future::pending::<()>().await;
+        });
+        let lookup: Arc<dyn Resolver> = Arc::new(crate::resolver::NativeResolver::new());
+        let provider = ProxyRuntimeProvider::with_bootstrap(
+            Arc::new(crate::tcp::chain_builder::build_direct_chain_group(
+                lookup.clone(),
+            )),
+            lookup.clone(),
+            Duration::from_secs(1),
+        );
+        let connections = [ConnectionConfig::udp(), ConnectionConfig::tcp()].map(|mut config| {
+            config.port = addr.port();
+            config
+        });
+        let raw = RawDnsExchange::new(
+            vec![NameServerConfig::new(addr.ip(), true, connections.to_vec())],
+            provider,
+            ResolverOpts::default(),
+        );
+        let system = SystemResolver::new(lookup, Arc::from([]), Duration::from_secs(1));
+        *system.snapshot.lock().await = Some(Snapshot {
+            loaded: Instant::now(),
+            exchange: Arc::new(raw),
+        });
+        let mut request = Message::query();
+        request.metadata.id = 17;
+        request.add_query(Query::query(
+            Name::from_ascii("partial.test.").unwrap(),
+            RecordType::TXT,
+        ));
+        let reply = tokio::time::timeout(
+            Duration::from_secs(2),
+            system.exchange_with_deadline(
+                request.to_vec().unwrap(),
+                tokio::time::Instant::now() + Duration::from_millis(150),
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let reply = Message::from_vec(&reply).unwrap();
+        assert!(reply.metadata.truncation);
+        assert_eq!(reply.metadata.id, request.metadata.id);
+        assert_eq!(reply.queries, request.queries);
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[tokio::test]
+    async fn cached_snapshot_retention_tracks_deadlines_and_exchange_identity() {
+        use hickory_resolver::proto::{
+            op::{Message, Query},
+            rr::{Name, RecordType},
+        };
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use tokio_util::task::AbortOnDropHandle;
+
+        let udp = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let address = udp.local_addr().unwrap();
+        let respond = Arc::new(AtomicBool::new(true));
+        let replies = respond.clone();
+        let _server = AbortOnDropHandle::new(tokio::spawn(async move {
+            let mut bytes = [0; 2048];
+            loop {
+                let (len, peer) = udp.recv_from(&mut bytes).await.unwrap();
+                if replies.load(Ordering::Relaxed) {
+                    let reply = Message::from_vec(&bytes[..len]).unwrap().into_response();
+                    udp.send_to(&reply.to_vec().unwrap(), peer).await.unwrap();
+                }
+            }
+        }));
+        let lookup: Arc<dyn Resolver> = Arc::new(crate::resolver::NativeResolver::new());
+        let new_exchange = || {
+            let provider = ProxyRuntimeProvider::with_bootstrap(
+                Arc::new(crate::tcp::chain_builder::build_direct_chain_group(
+                    lookup.clone(),
+                )),
+                lookup.clone(),
+                Duration::from_secs(1),
+            );
+            let mut connection = ConnectionConfig::udp();
+            connection.port = address.port();
+            let mut options = ResolverOpts::default();
+            options.timeout = Duration::from_millis(100);
+            options.attempts = 1;
+            Arc::new(RawDnsExchange::new(
+                vec![NameServerConfig::new(address.ip(), true, vec![connection])],
+                provider,
+                options,
+            ))
+        };
+        let exchange = new_exchange();
+        let system = SystemResolver::new(lookup.clone(), Arc::from([]), Duration::from_secs(1));
+        *system.snapshot.lock().await = Some(Snapshot {
+            loaded: Instant::now(),
+            exchange: exchange.clone(),
+        });
+        let mut query = Message::query();
+        query.add_query(Query::query(
+            Name::from_ascii("snapshot.test.").unwrap(),
+            RecordType::A,
+        ));
+        let query = query.to_vec().unwrap();
+        system.exchange(query.clone()).await.unwrap();
+        respond.store(false, Ordering::Relaxed);
+        let error = system
+            .exchange_with_deadline(
+                query.clone(),
+                tokio::time::Instant::now() + Duration::from_millis(20),
+            )
+            .await
+            .unwrap_err();
+        assert!(crate::resolver::dns_caller_deadline(&error), "{error:?}");
+        assert!(Arc::ptr_eq(
+            &system.snapshot.lock().await.as_ref().unwrap().exchange,
+            &exchange
+        ));
+        respond.store(true, Ordering::Relaxed);
+        system.exchange(query.clone()).await.unwrap();
+        respond.store(false, Ordering::Relaxed);
+        let mut stale = system.exchange(query.clone());
+        assert!(futures::poll!(&mut stale).is_pending());
+        let replacement = new_exchange();
+        *system.snapshot.lock().await = Some(Snapshot {
+            loaded: Instant::now(),
+            exchange: replacement.clone(),
+        });
+        let error = tokio::time::timeout(Duration::from_secs(1), stale)
+            .await
+            .expect("superseded exchange did not time out")
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert!(!crate::resolver::dns_caller_deadline(&error));
+        assert!(!crate::resolver::dns_setup_pending(&error));
+        assert!(Arc::ptr_eq(
+            &system.snapshot.lock().await.as_ref().unwrap().exchange,
+            &replacement,
+        ));
+        respond.store(true, Ordering::Relaxed);
+        system.exchange(query.clone()).await.unwrap();
+        respond.store(false, Ordering::Relaxed);
+        let error = system.exchange(query).await.unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert!(!crate::resolver::dns_caller_deadline(&error));
+        assert!(!crate::resolver::dns_setup_pending(&error));
+        assert!(system.snapshot.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn refused_endpoint_discards_the_cached_system_snapshot() {
+        use hickory_resolver::proto::{
+            op::{Message, Query},
+            rr::{Name, RecordType},
+        };
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let lookup: Arc<dyn Resolver> = Arc::new(crate::resolver::NativeResolver::new());
+        let provider = ProxyRuntimeProvider::with_bootstrap(
+            Arc::new(crate::tcp::chain_builder::build_direct_chain_group(
+                lookup.clone(),
+            )),
+            lookup.clone(),
+            Duration::from_secs(1),
+        );
+        let mut connection = ConnectionConfig::tcp();
+        connection.port = address.port();
+        let system = SystemResolver::new(lookup, Arc::from([]), Duration::from_secs(1));
+        *system.snapshot.lock().await = Some(Snapshot {
+            loaded: Instant::now(),
+            exchange: Arc::new(RawDnsExchange::new(
+                vec![NameServerConfig::new(address.ip(), true, vec![connection])],
+                provider,
+                ResolverOpts::default(),
+            )),
+        });
+        let mut query = Message::query();
+        query.add_query(Query::query(
+            Name::from_ascii("refused.test.").unwrap(),
+            RecordType::A,
+        ));
+        drop(listener);
+        let error = system
+            .exchange_with_deadline(
+                query.to_vec().unwrap(),
+                tokio::time::Instant::now() + Duration::from_secs(1),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::ConnectionRefused, "{error:?}");
+        assert!(system.snapshot.lock().await.is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn cached_snapshot_survives_resource_exhaustion_admission_timeout_and_pending_setup() {
+        use crate::async_stream::{AsyncMessageStream, AsyncStream};
+        use crate::client_proxy_chain::{ClientChainGroup, ClientProxyChain, InitialHopEntry};
+        use crate::tcp::socket_connector::SocketConnector;
+        use hickory_resolver::proto::{
+            op::{Message, Query},
+            rr::{Name, RecordType},
+        };
+
+        #[derive(Clone, Copy, Debug)]
+        enum Failure {
+            Exhausted,
+            AdmissionTimeout,
+            PendingSetup,
+        }
+
+        #[async_trait::async_trait]
+        impl SocketConnector for Failure {
+            async fn connect(
+                &self,
+                _: &Arc<dyn Resolver>,
+                _: &crate::address::ResolvedLocation,
+            ) -> io::Result<Box<dyn AsyncStream>> {
+                match self {
+                    Self::Exhausted => Err(crate::resources::exhausted()),
+                    Self::AdmissionTimeout | Self::PendingSetup => std::future::pending().await,
+                }
+            }
+
+            async fn connect_udp_bidirectional(
+                &self,
+                _: &Arc<dyn Resolver>,
+                _: crate::address::ResolvedLocation,
+            ) -> io::Result<Box<dyn AsyncMessageStream>> {
+                unreachable!("snapshot retention fixture uses TCP")
+            }
+
+            fn bind_interface(&self) -> Option<&str> {
+                None
+            }
+        }
+
+        let mut query = Message::query();
+        query.add_query(Query::query(
+            Name::from_ascii("capacity.test.").unwrap(),
+            RecordType::A,
+        ));
+        let query = query.to_vec().unwrap();
+        for failure in [
+            Failure::Exhausted,
+            Failure::AdmissionTimeout,
+            Failure::PendingSetup,
+        ] {
+            let lookup: Arc<dyn Resolver> = Arc::new(crate::resolver::NativeResolver::new());
+            let chain = ClientChainGroup::new(vec![ClientProxyChain::new(
+                vec![InitialHopEntry::Direct(Arc::new(failure))],
+                vec![],
+            )]);
+            let provider = ProxyRuntimeProvider::with_bootstrap(
+                Arc::new(chain),
+                lookup.clone(),
+                Duration::from_secs(1),
+            );
+            let exchange = Arc::new(RawDnsExchange::new(
+                vec![NameServerConfig::new(
+                    "127.0.0.1".parse().unwrap(),
+                    true,
+                    vec![ConnectionConfig::tcp()],
+                )],
+                provider,
+                ResolverOpts::default(),
+            ));
+            let system = SystemResolver::new(lookup, Arc::from([]), Duration::from_secs(1));
+            *system.snapshot.lock().await = Some(Snapshot {
+                loaded: Instant::now(),
+                exchange: exchange.clone(),
+            });
+
+            let mut active = Vec::new();
+            if matches!(failure, Failure::AdmissionTimeout) {
+                // Fill raw exchange admission while the shared TCP setup stays pending.
+                for _ in 0..64 {
+                    let mut pending = Box::pin(exchange.exchange(query.clone()));
+                    assert!(futures::poll!(&mut pending).is_pending());
+                    active.push(pending);
+                }
+            }
+            let error = system
+                .exchange_with_deadline(
+                    query.clone(),
+                    tokio::time::Instant::now() + Duration::from_millis(10),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(
+                error.kind(),
+                match failure {
+                    Failure::Exhausted => io::ErrorKind::ConnectionRefused,
+                    Failure::AdmissionTimeout => io::ErrorKind::WouldBlock,
+                    Failure::PendingSetup => io::ErrorKind::TimedOut,
+                },
+                "{error:?}"
+            );
+            assert_eq!(
+                crate::resources::is_exhausted(&error),
+                matches!(failure, Failure::Exhausted)
+            );
+            assert_eq!(
+                crate::resolver::dns_setup_pending(&error),
+                matches!(failure, Failure::PendingSetup),
+                "{error:?}"
+            );
+            assert!(!crate::resolver::dns_caller_deadline(&error));
+            assert!(Arc::ptr_eq(
+                &system.snapshot.lock().await.as_ref().unwrap().exchange,
+                &exchange,
+            ));
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn caller_deadline_bounds_system_snapshot_lock_wait() {
+        let system = SystemResolver::new(
+            Arc::new(crate::resolver::NativeResolver::new()),
+            Arc::from([]),
+            Duration::from_secs(1),
+        );
+        let _guard = system.snapshot.lock().await;
+        let error = system
+            .exchange_with_deadline(
+                Vec::new(),
+                tokio::time::Instant::now() + Duration::from_millis(10),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn discovery_filters_fake_and_unspecified_but_keeps_real_loopback_stubs() {
+        let servers = ["198.18.0.1", "::ffff:198.18.0.1", "0.0.0.0", "127.0.0.53"]
+            .into_iter()
+            .map(|ip| {
+                NameServerConfig::new(ip.parse().unwrap(), true, vec![ConnectionConfig::udp()])
+            })
+            .collect();
+        let mut config = ResolverConfig::from_parts(None, vec![], servers);
+        filter_endpoints(&mut config, &["198.18.0.0/15".parse().unwrap()]).unwrap();
+        assert_eq!(config.name_servers.len(), 1);
+        assert_eq!(config.name_servers[0].ip.to_string(), "127.0.0.53");
+        assert!(filter_endpoints(&mut config, &["127.0.0.0/8".parse().unwrap()]).is_err());
+    }
+}

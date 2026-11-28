@@ -1,0 +1,11 @@
+[package]
+name = "ede-dot-com"
+edition = "2021"
+publish = false
+description = "tests that rely on the public DNS testing infrastructure extended-dns-errors.com."
+
+[dev-dependencies]
+dns-test = { path = "../dns-test" }
+
+[lints]
+workspace = true

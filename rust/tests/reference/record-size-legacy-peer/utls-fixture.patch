@@ -1,0 +1,360 @@
+--- /dev/null
++++ b/aerobox_record_size_fixture.go
+@@ -0,0 +1,11 @@
++// Test-only RFC8449 hooks. This package never enters the Rust/Android product.
++package tls
++
++func (c *Conn) AeroBoxFixtureRecordSize(first, second int, expected uint16) {
++	c.aeroboxRslEnabled = true
++	c.aeroboxRslFirst, c.aeroboxRslSecond = first, second
++	c.aeroboxRslAdvertised = expected
++}
++func (c *Conn) AeroBoxFixtureRecordSizes() (records [3]int, maximum [3]int) {
++	return c.in.aeroboxReadRecords, c.in.aeroboxReadMaximum
++}
+--- /dev/null
++++ b/aerobox_renegotiation_fixture.go
+@@ -0,0 +1,50 @@
++// Test-only extension to the pinned uTLS server. Never part of AeroBox's
++// runtime or native libraries. The original TLS record/key-exchange machinery
++// is retained; this entry point initiates RFC 5746 renegotiation for a client.
++package tls
++
++import (
++	"context"
++	"errors"
++)
++
++func (c *Conn) AeroBoxFixtureMode(mode string) { c.aeroboxRenegotiationMode = mode }
++func (c *Conn) AeroBoxFixtureHellos() [][]byte { return c.aeroboxClientHellos }
++func (c *Conn) AeroBoxFixtureTrace() []string  { return append([]string(nil), c.aeroboxFixtureTrace...) }
++func (c *Conn) AeroBoxFixtureHandshakes() int  { return c.handshakes }
++
++func (c *Conn) AeroBoxFixtureRenegotiate(config *Config, mode string) error {
++	c.handshakeMutex.Lock()
++	defer c.handshakeMutex.Unlock()
++	c.in.Lock()
++	defer c.in.Unlock()
++	if c.isClient || (c.vers < VersionTLS10 || c.vers > VersionTLS12) || !c.isHandshakeComplete.Load() || c.handshakeErr != nil {
++		return errors.New("fixture requires an established TLS1.0/1.1/1.2 server connection")
++	}
++	c.aeroboxFixtureTrace = append(c.aeroboxFixtureTrace, "hello-request")
++	c.out.Lock()
++	_, err := c.writeRecordLocked(recordTypeHandshake, []byte{0, 0, 0, 0})
++	c.out.Unlock()
++	if err != nil {
++		return err
++	}
++	if config != nil {
++		c.config = config.Clone()
++	}
++	c.aeroboxRenegotiationMode = mode
++	c.didResume = false
++	c.isHandshakeComplete.Store(false)
++	c.handshakeErr = c.serverHandshake(context.Background())
++	if c.handshakeErr == nil {
++		c.handshakes++
++	} else {
++		_, _ = c.flush()
++	}
++	return c.handshakeErr
++}
++
++// Test-only comparison of the independent TLS 1.0/1.1/1.2 key schedule across epochs.
++// The public Go API intentionally disallows exporters with renegotiation.
++func (c *Conn) AeroBoxFixtureExportKeyingMaterial() ([]byte, error) {
++	return c.ekm("aerobox-renegotiation", nil, 32)
++}
+--- a/conn.go
++++ b/conn.go
+@@ -25,6 +25,14 @@
+ // A Conn represents a secured connection.
+ // It implements the net.Conn interface.
+ type Conn struct {
++	aeroboxRslEnabled    bool
++	aeroboxRslFirst      int
++	aeroboxRslSecond     int
++	aeroboxRslAdvertised uint16
++
++	aeroboxRenegotiationMode string
++	aeroboxClientHellos      [][]byte
++	aeroboxFixtureTrace      []string
+ 	// constant
+ 	conn        net.Conn
+ 	isClient    bool
+@@ -170,6 +178,12 @@
+ // A halfConn represents one direction of the record layer
+ // connection, either sending or receiving.
+ type halfConn struct {
++	aeroboxReadLimit     int
++	aeroboxNextReadLimit int
++	aeroboxReadEpoch     int
++	aeroboxReadRecords   [3]int
++	aeroboxReadMaximum   [3]int
++
+ 	sync.Mutex
+ 
+ 	err     error  // first permanent error
+@@ -224,6 +238,8 @@
+ 	if hc.nextCipher == nil || hc.version == VersionTLS13 {
+ 		return alertInternalError
+ 	}
++	hc.aeroboxReadLimit = hc.aeroboxNextReadLimit
++	hc.aeroboxReadEpoch++
+ 	hc.cipher = hc.nextCipher
+ 	hc.mac = hc.nextMac
+ 	hc.nextCipher = nil
+@@ -465,6 +481,19 @@
+ 		plaintext = payload[:n]
+ 	}
+ 
++	if hc.cipher != nil && hc.version <= VersionTLS12 {
++		if hc.aeroboxReadLimit > 0 && len(plaintext) > hc.aeroboxReadLimit {
++			return nil, 0, alertRecordOverflow
++		}
++		epoch := hc.aeroboxReadEpoch
++		if epoch > 2 {
++			epoch = 2
++		}
++		hc.aeroboxReadRecords[epoch]++
++		if len(plaintext) > hc.aeroboxReadMaximum[epoch] {
++			hc.aeroboxReadMaximum[epoch] = len(plaintext)
++		}
++	}
+ 	hc.incSeq()
+ 	return plaintext, typ, nil
+ }
+@@ -767,6 +796,9 @@
+ 		}
+ 		switch data[0] {
+ 		case alertLevelWarning:
++			if alert(data[1]) == alertNoRenegotiation && c.aeroboxRenegotiationMode != "" {
++				return c.in.setErrorLocked(&net.OpError{Op: "remote error", Err: alert(data[1])})
++			}
+ 			// Drop the record on the floor and retry.
+ 			return c.retryReadRecord(expectChangeCipherSpec)
+ 		case alertLevelError:
+@@ -932,6 +964,9 @@
+ // In the interests of simplicity and determinism, this code does not attempt
+ // to reset the record size once the connection is idle, however.
+ func (c *Conn) maxPayloadSizeForWrite(typ recordType) int {
++	if !c.isClient && typ == recordTypeHandshake && (c.aeroboxRenegotiationMode == "fragment" || c.aeroboxRenegotiationMode == "inflight-fragment") {
++		return 97
++	}
+ 	if c.config.DynamicRecordSizingDisabled || typ != recordTypeApplicationData {
+ 		return maxPlaintext
+ 	}
+--- a/handshake_messages.go
++++ b/handshake_messages.go
+@@ -69,6 +69,8 @@
+ }
+ 
+ type clientHelloMsg struct {
++	aeroboxRecordSizeLimit *uint16
++
+ 	original                         []byte
+ 	vers                             uint16
+ 	random                           []byte
+@@ -528,6 +530,12 @@
+ 					return false
+ 				}
+ 			}
++		case 28:
++			var value uint16
++			if !extData.ReadUint16(&value) {
++				return false
++			}
++			m.aeroboxRecordSizeLimit = &value
+ 		case extensionStatusRequest:
+ 			// RFC 4366, Section 3.6
+ 			var statusType uint8
+@@ -746,6 +754,8 @@
+ }
+ 
+ type serverHelloMsg struct {
++	aeroboxRecordSizeLimit *uint16
++
+ 	original                     []byte
+ 	vers                         uint16
+ 	random                       []byte
+@@ -778,6 +788,12 @@
+ 
+ func (m *serverHelloMsg) marshal() ([]byte, error) {
+ 	var exts cryptobyte.Builder
++	if m.aeroboxRecordSizeLimit != nil {
++		exts.AddUint16(28)
++		exts.AddUint16(2)
++		exts.AddUint16(*m.aeroboxRecordSizeLimit)
++	}
++
+ 	if m.ocspStapling {
+ 		exts.AddUint16(extensionStatusRequest)
+ 		exts.AddUint16(0) // empty extension_data
+--- a/handshake_server.go
++++ b/handshake_server.go
+@@ -5,6 +5,7 @@
+ package tls
+ 
+ import (
++	"bytes"
+ 	"context"
+ 	"crypto"
+ 	"crypto/ecdsa"
+@@ -46,6 +47,7 @@
+ 		return err
+ 	}
+ 
++	c.aeroboxClientHellos = append(c.aeroboxClientHellos, append([]byte(nil), clientHello.original...))
+ 	if c.vers == VersionTLS13 {
+ 		hs := serverHandshakeStateTLS13{
+ 			c:           c,
+@@ -95,7 +97,7 @@
+ 			return err
+ 		}
+ 		c.clientFinishedIsFirst = false
+-		if err := hs.readFinished(nil); err != nil {
++		if err := hs.readFinished(c.clientFinished[:]); err != nil {
+ 			return err
+ 		}
+ 	} else {
+@@ -118,7 +120,7 @@
+ 		if err := hs.sendSessionTicket(); err != nil {
+ 			return err
+ 		}
+-		if err := hs.sendFinished(nil); err != nil {
++		if err := hs.sendFinished(c.serverFinished[:]); err != nil {
+ 			return err
+ 		}
+ 		if _, err := c.flush(); err != nil {
+@@ -210,6 +212,17 @@
+ 
+ 	hs.hello = new(serverHelloMsg)
+ 	hs.hello.vers = c.vers
++	if c.handshakes > 0 && c.aeroboxRenegotiationMode == "changed-version" {
++		// Alter only the authenticated handshake claim. The containing record
++		// still uses the old epoch/version, so the client must check the
++		// ServerHello version rather than merely reject a record header.
++		if c.vers == VersionTLS10 {
++			hs.hello.vers = VersionTLS11
++		} else {
++			hs.hello.vers = c.vers - 1
++		}
++		c.aeroboxFixtureTrace = append(c.aeroboxFixtureTrace, "serverhello-version-changed")
++	}
+ 
+ 	foundCompression := false
+ 	// We only support null compression, so check that the client offered it.
+@@ -243,13 +256,55 @@
+ 		return err
+ 	}
+ 
+-	if len(hs.clientHello.secureRenegotiation) != 0 {
+-		c.sendAlert(alertHandshakeFailure)
+-		return errors.New("tls: initial handshake had non-empty renegotiation extension")
+-	}
+-
++	if c.handshakes == 0 {
++		if len(hs.clientHello.secureRenegotiation) != 0 {
++			c.sendAlert(alertHandshakeFailure)
++			return errors.New("tls: initial handshake had non-empty renegotiation extension")
++		}
++	} else {
++		if !bytes.Equal(hs.clientHello.secureRenegotiation, c.clientFinished[:]) {
++			c.sendAlert(alertHandshakeFailure)
++			return errors.New("fixture: client renegotiation binding is incorrect")
++		}
++		hs.hello.secureRenegotiation = append(append([]byte(nil), c.clientFinished[:]...), c.serverFinished[:]...)
++		switch c.aeroboxRenegotiationMode {
++		case "bad-binding":
++			hs.hello.secureRenegotiation[0] ^= 1
++		case "bad-server-binding":
++			hs.hello.secureRenegotiation[12] ^= 1
++		case "short-binding":
++			hs.hello.secureRenegotiation = hs.hello.secureRenegotiation[:12]
++		}
++	}
++
++	if c.aeroboxRslEnabled {
++		if hs.clientHello.aeroboxRecordSizeLimit == nil || *hs.clientHello.aeroboxRecordSizeLimit != c.aeroboxRslAdvertised {
++			return errors.New("fixture: missing or incorrect client record_size_limit")
++		}
++		selected := c.aeroboxRslFirst
++		if c.handshakes > 0 {
++			selected = c.aeroboxRslSecond
++		}
++		c.in.aeroboxNextReadLimit = 16384
++		if selected >= 0 {
++			value := uint16(selected)
++			hs.hello.aeroboxRecordSizeLimit = &value
++			c.in.aeroboxNextReadLimit = selected
++		}
++	}
+ 	hs.hello.extendedMasterSecret = hs.clientHello.extendedMasterSecret
++	if c.aeroboxRenegotiationMode == "no-ems" || c.aeroboxRenegotiationMode == "ems-downgrade" {
++		hs.hello.extendedMasterSecret = false
++	}
+ 	hs.hello.secureRenegotiationSupported = hs.clientHello.secureRenegotiationSupported
++	if c.aeroboxRenegotiationMode == "omit-binding" || c.aeroboxRenegotiationMode == "initial-no-binding" {
++		hs.hello.secureRenegotiationSupported = false
++		hs.hello.secureRenegotiation = nil
++	}
++	if c.aeroboxRenegotiationMode == "initial-nonempty" {
++		hs.hello.secureRenegotiationSupported = true
++		hs.hello.secureRenegotiation = []byte{1}
++	}
+ 	hs.hello.compressionMethod = compressionNone
+ 	if len(hs.clientHello.serverName) > 0 {
+ 		c.serverName = hs.clientHello.serverName
+@@ -449,6 +504,9 @@
+ 
+ // checkForResumption reports whether we should perform resumption on this connection.
+ func (hs *serverHandshakeState) checkForResumption() error {
++	if hs.c.handshakes > 0 {
++		return nil
++	}
+ 	c := hs.c
+ 
+ 	if c.config.SessionTicketsDisabled {
+@@ -888,15 +946,41 @@
+ func (hs *serverHandshakeState) sendFinished(out []byte) error {
+ 	c := hs.c
+ 
++	if c.handshakes > 0 && (c.aeroboxRenegotiationMode == "inflight" || c.aeroboxRenegotiationMode == "inflight-fragment") {
++		c.out.Lock()
++		_, err := c.writeRecordLocked(recordTypeApplicationData, []byte("old-data"))
++		c.out.Unlock()
++		if err != nil {
++			return err
++		}
++	}
++	if c.handshakes > 0 && (c.aeroboxRenegotiationMode == "inflight" || c.aeroboxRenegotiationMode == "inflight-fragment") {
++		c.aeroboxFixtureTrace = append(c.aeroboxFixtureTrace, "old-epoch-application-data")
++	}
+ 	if err := c.writeChangeCipherRecord(); err != nil {
+ 		return err
+ 	}
+-
++	c.aeroboxFixtureTrace = append(c.aeroboxFixtureTrace, "server-change-cipher-spec")
++	if c.handshakes > 0 && c.aeroboxRenegotiationMode == "early-data" {
++		c.out.Lock()
++		_, err := c.writeRecordLocked(recordTypeApplicationData, []byte("unverified"))
++		c.out.Unlock()
++		if err != nil {
++			return err
++		}
++	}
++	if c.handshakes > 0 && c.aeroboxRenegotiationMode == "early-data" {
++		c.aeroboxFixtureTrace = append(c.aeroboxFixtureTrace, "new-epoch-unverified-application-data")
++	}
+ 	finished := new(finishedMsg)
+ 	finished.verifyData = hs.finishedHash.serverSum(hs.masterSecret)
++	if c.handshakes > 0 && c.aeroboxRenegotiationMode == "bad-finished" {
++		finished.verifyData[0] ^= 1
++	}
+ 	if _, err := hs.c.writeHandshakeRecord(finished, &hs.finishedHash); err != nil {
+ 		return err
+ 	}
++	c.aeroboxFixtureTrace = append(c.aeroboxFixtureTrace, "server-finished")
+ 
+ 	copy(out, finished.verifyData)
+ 

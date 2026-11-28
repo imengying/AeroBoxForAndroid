@@ -1,0 +1,112 @@
+[package]
+name = "hickory-util"
+
+description = """
+Utilities that complement Hickory DNS.
+"""
+
+documentation = "https://docs.rs/crate/hickory-util"
+readme = "README.md"
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[features]
+tls-aws-lc-rs = [
+    "hickory-net/tls-aws-lc-rs",
+    "hickory-resolver/tls-aws-lc-rs",
+    "__tls",
+]
+https-aws-lc-rs = [
+    "hickory-net/https-aws-lc-rs",
+    "hickory-resolver/https-aws-lc-rs",
+    "tls-aws-lc-rs",
+    "__https",
+]
+quic-aws-lc-rs = [
+    "hickory-resolver/quic-aws-lc-rs",
+    "tls-aws-lc-rs",
+    "__quic",
+]
+h3-aws-lc-rs = [
+    "hickory-resolver/h3-aws-lc-rs",
+    "quic-aws-lc-rs",
+    "__h3",
+]
+
+tls-ring = [
+    "hickory-net/tls-ring",
+    "hickory-resolver/tls-ring",
+    "__tls",
+]
+https-ring = [
+    "hickory-net/https-ring",
+    "hickory-resolver/https-ring",
+    "tls-ring",
+    "__https",
+]
+quic-ring = [
+    "hickory-resolver/quic-ring",
+    "tls-ring",
+    "__quic",
+]
+h3-ring = [
+    "hickory-resolver/h3-ring",
+    "quic-ring",
+    "__h3",
+]
+
+__tls = ["dep:rustls"]
+__https = []
+__quic = []
+__h3 = []
+
+webpki-roots = [
+    "dep:webpki-roots",
+    "hickory-net/webpki-roots",
+    "hickory-resolver/webpki-roots",
+]
+rustls-platform-verifier = [
+    "hickory-net/rustls-platform-verifier",
+    "hickory-resolver/rustls-platform-verifier",
+]
+
+dnssec-aws-lc-rs = ["hickory-proto/dnssec-aws-lc-rs", "hickory-resolver/dnssec-aws-lc-rs", "__dnssec"]
+dnssec-ring = ["hickory-proto/dnssec-ring", "hickory-resolver/dnssec-ring", "__dnssec"]
+__dnssec = []
+
+[dependencies]
+clap = { workspace = true, default-features = false, features = [
+    "std",
+    "cargo",
+    "derive",
+    "color",
+    "suggestions",
+    "help",
+    "usage",
+] }
+console.workspace = true
+data-encoding.workspace = true
+rustls = { workspace = true, optional = true }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "std"] }
+hickory-proto = { workspace = true }
+hickory-net = { workspace = true, features = ["tokio"] }
+hickory-resolver = { workspace = true, features = ["recursor", "system-config", "tokio"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+webpki-roots = { workspace = true, optional = true }
+
+[package.metadata.cargo-all-features]
+skip_optional_dependencies = true
+max_combination_size = 2
+denylist = ["__tls", "__https", "__quic", "__h3", "__dnssec"]
+
+[lints]
+workspace = true

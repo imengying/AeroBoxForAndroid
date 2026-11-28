@@ -1,0 +1,1562 @@
+use super::*;
+use crate::config::{GlobalLimits, GroupType, ResolvedClientHop};
+use crate::control::selection::{Choices, SelectionView};
+use crate::option_util::OneOrSome;
+use crate::tcp::proxy_connector_impl::create_proxy_connector;
+use std::io;
+
+struct Leaf {
+    origin: Option<MemberOrigin>,
+    direct: bool,
+    initial: Option<Arc<InitialHopEntry>>,
+    proxy: Option<Arc<dyn ProxyConnector>>,
+    udp: bool,
+}
+
+const TCP: u8 = 1;
+const UDP: u8 = 2;
+const BOTH: u8 = TCP | UDP;
+
+impl Leaf {
+    fn carrier_input(&self, udp: bool) -> u8 {
+        if !udp {
+            return TCP;
+        }
+        if !self.udp {
+            return 0;
+        }
+        let datagram = self.proxy.as_ref().map_or_else(
+            || match self.initial.as_deref() {
+                Some(InitialHopEntry::Direct(_)) => true,
+                Some(InitialHopEntry::Proxy { proxy, .. }) => proxy.requires_datagram_carrier(),
+                None => false,
+            },
+            |proxy| proxy.requires_datagram_carrier(),
+        );
+        if datagram { UDP } else { TCP }
+    }
+}
+
+struct SelectedLeaf<'a> {
+    leaf: &'a Leaf,
+    shared_groups: usize,
+}
+
+enum Node {
+    Client(Leaf),
+    Sequence(Vec<Node>),
+    Choice {
+        name: String,
+        kind: GroupType,
+        labels: Vec<String>,
+        members: Vec<Node>,
+        next: [AtomicU32; 2],
+        static_eligible_indices: Option<[Vec<usize>; 2]>,
+    },
+}
+
+pub(crate) struct Composition {
+    root: Node,
+    selection: Option<Arc<SelectionView>>,
+}
+
+struct Selection<'a> {
+    choices: &'a Choices,
+    view: Option<&'a SelectionView>,
+    udp_flow: bool,
+}
+
+fn unsupported() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::Unsupported,
+        "selected branch cannot carry this flow",
+    )
+}
+
+impl Composition {
+    #[cfg(unix)]
+    pub(super) fn tcp_selection_indices(&self) -> Vec<u32> {
+        let mut indices = Vec::new();
+        self.root.visit_tcp_counters(&mut |counter| {
+            indices.push(counter.load(Ordering::Relaxed));
+        });
+        indices
+    }
+
+    #[cfg(unix)]
+    pub(super) fn restore_tcp_selection_indices(&self, indices: &[u32]) {
+        let mut count = 0;
+        self.root.visit_tcp_counters(&mut |_| count += 1);
+        assert_eq!(indices.len(), count);
+        let mut indices = indices.iter();
+        self.root.visit_tcp_counters(&mut |counter| {
+            counter.store(*indices.next().unwrap(), Ordering::Relaxed);
+        });
+    }
+
+    #[cfg(test)]
+    pub(super) fn from_connectors(
+        initial: Vec<InitialHopEntry>,
+        subsequent: Vec<Vec<Box<dyn ProxyConnector>>>,
+    ) -> Arc<Self> {
+        let mut nodes = vec![Node::pool(
+            initial
+                .into_iter()
+                .map(|entry| {
+                    Node::Client(Leaf {
+                        origin: None,
+                        direct: matches!(entry, InitialHopEntry::Direct(_)),
+                        udp: entry.supports_udp(),
+                        initial: Some(Arc::new(entry)),
+                        proxy: None,
+                    })
+                })
+                .collect(),
+        )];
+        nodes.extend(subsequent.into_iter().map(|pool| {
+            Node::pool(
+                pool.into_iter()
+                    .map(|proxy| {
+                        Node::Client(Leaf {
+                            origin: None,
+                            direct: false,
+                            udp: proxy.supports_udp(),
+                            initial: None,
+                            proxy: Some(Arc::from(proxy)),
+                        })
+                    })
+                    .collect(),
+            )
+        }));
+        Arc::new(Self {
+            root: Node::sequence(nodes),
+            selection: None,
+        })
+    }
+    pub(super) fn build(
+        hops: OneOrSome<ResolvedClientHop>,
+        resolver: Arc<dyn Resolver>,
+        limits: GlobalLimits,
+    ) -> io::Result<Arc<Self>> {
+        crate::config::composition::validate(&hops)?;
+        let selection = hops
+            .iter()
+            .flat_map(crate::config::composition::clients)
+            .find_map(|client| {
+                client
+                    .control
+                    .as_ref()
+                    .map(|origin| origin.selection.clone())
+            });
+        let root = sequence(hops, true, &resolver, limits)?;
+        Ok(Arc::new(Self { root, selection }))
+    }
+
+    pub(super) fn select(&self, udp: bool) -> io::Result<SelectedPath> {
+        let choices = self
+            .selection
+            .as_ref()
+            .map(|view| view.snapshot())
+            .unwrap_or_default();
+        let selection = Selection {
+            choices: &choices,
+            view: self.selection.as_deref(),
+            udp_flow: udp,
+        };
+        let mut leaves = Vec::new();
+        self.root.select(udp, &selection, &mut leaves)?;
+        Ok(pinned(&leaves))
+    }
+
+    pub(super) fn supports_udp(&self) -> bool {
+        self.root.supports_udp()
+    }
+    pub(super) fn num_hops(&self) -> usize {
+        self.root.num_hops()
+    }
+    pub(super) fn direct_only(&self) -> bool {
+        self.root.direct_only()
+    }
+    pub(super) fn may_connect_directly(&self) -> bool {
+        self.root.may_connect_directly()
+    }
+}
+
+#[cfg(test)]
+impl Composition {
+    fn test_pools(&self) -> Vec<Vec<&Leaf>> {
+        fn collect<'a>(node: &'a Node, start: usize, pools: &mut Vec<Vec<&'a Leaf>>) -> usize {
+            match node {
+                Node::Client(leaf) => {
+                    pools.resize_with(pools.len().max(start + 1), Vec::new);
+                    pools[start].push(leaf);
+                    start + 1
+                }
+                Node::Sequence(nodes) => nodes
+                    .iter()
+                    .fold(start, |offset, node| collect(node, offset, pools)),
+                Node::Choice { members, .. } => members
+                    .iter()
+                    .map(|member| collect(member, start, pools))
+                    .max()
+                    .unwrap(),
+            }
+        }
+        let mut pools = Vec::new();
+        collect(&self.root, 0, &mut pools);
+        pools
+    }
+
+    pub(super) fn test_select_indices(&self, udp: bool) -> io::Result<Vec<usize>> {
+        let selected = self.select(udp)?;
+        let pools = self.test_pools();
+        let mut indices = vec![
+            pools[0]
+                .iter()
+                .position(|leaf| Arc::ptr_eq(leaf.initial.as_ref().unwrap(), &selected.initial))
+                .unwrap(),
+        ];
+        for (index, hop) in selected.subsequent.iter().enumerate() {
+            indices.push(
+                pools[index + 1]
+                    .iter()
+                    .position(|leaf| {
+                        leaf.proxy
+                            .as_ref()
+                            .is_some_and(|proxy| Arc::ptr_eq(proxy, hop))
+                    })
+                    .unwrap(),
+            );
+        }
+        Ok(indices)
+    }
+}
+
+fn sequence(
+    hops: OneOrSome<ResolvedClientHop>,
+    first: bool,
+    resolver: &Arc<dyn Resolver>,
+    limits: GlobalLimits,
+) -> io::Result<Node> {
+    let mut nodes = Vec::new();
+    for (index, hop) in hops.into_vec().into_iter().enumerate() {
+        nodes.push(node(hop, first && index == 0, resolver, limits)?);
+    }
+    if nodes.is_empty() {
+        return Err(crate::config::composition::invalid("chain cannot be empty"));
+    }
+    Ok(Node::sequence(nodes))
+}
+
+fn node(
+    hop: ResolvedClientHop,
+    first: bool,
+    resolver: &Arc<dyn Resolver>,
+    limits: GlobalLimits,
+) -> io::Result<Node> {
+    match hop {
+        ResolvedClientHop::Single(mut config) => {
+            let origin = config.control.clone();
+            let direct = config.protocol.is_direct();
+            let (initial, proxy, udp) = if first {
+                config.control = None;
+                let chain = crate::tcp::chain_builder::build_client_proxy_chain_with_limits(
+                    OneOrSome::One(ResolvedClientHop::Single(config)),
+                    resolver.clone(),
+                    limits,
+                )?;
+                let ChainPlan::Fixed(path) = chain.plan else {
+                    unreachable!("single leaf builds a fixed path")
+                };
+                let entry = path.initial;
+                let udp = entry.supports_udp();
+                (Some(entry), None, udp)
+            } else {
+                let proxy: Arc<dyn ProxyConnector> = Arc::from(
+                    create_proxy_connector(config, resolver.clone())?.ok_or_else(unsupported)?,
+                );
+                let udp = proxy.supports_udp();
+                (None, Some(proxy), udp)
+            };
+            Ok(Node::Client(Leaf {
+                origin,
+                direct,
+                initial,
+                proxy,
+                udp,
+            }))
+        }
+        ResolvedClientHop::Choice(choice) => {
+            let mut members = Vec::new();
+            for member in choice.members {
+                members.push(sequence(member.hops, first, resolver, limits)?);
+            }
+            let static_eligible_indices = (choice.group_type == GroupType::RoundRobin
+                && !members.iter().any(Node::contains_selector))
+            .then(|| {
+                [
+                    (0..members.len()).collect(),
+                    members
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, member)| member.supports_udp().then_some(index))
+                        .collect(),
+                ]
+            });
+            Ok(Node::Choice {
+                name: choice.name,
+                kind: choice.group_type,
+                labels: choice.labels,
+                members,
+                next: [AtomicU32::new(0), AtomicU32::new(0)],
+                static_eligible_indices,
+            })
+        }
+    }
+}
+
+fn pinned(leaves: &[SelectedLeaf<'_>]) -> SelectedPath {
+    let (origins, shared_groups) = leaves
+        .iter()
+        .map(|selected| (selected.leaf.origin.clone(), selected.shared_groups))
+        .unzip();
+    let subsequent_hops: Vec<_> = leaves
+        .iter()
+        .skip(1)
+        .map(|selected| selected.leaf.proxy.as_ref().unwrap().clone())
+        .collect();
+    SelectedPath {
+        origins,
+        shared_groups,
+        initial: leaves[0].leaf.initial.as_ref().unwrap().clone(),
+        subsequent: subsequent_hops,
+    }
+}
+
+impl Node {
+    fn sequence(mut nodes: Vec<Self>) -> Self {
+        if nodes.len() == 1 {
+            nodes.pop().unwrap()
+        } else {
+            Self::Sequence(nodes)
+        }
+    }
+
+    #[cfg(test)]
+    fn pool(mut members: Vec<Self>) -> Self {
+        if members.len() == 1 {
+            return members.pop().unwrap();
+        }
+        let eligible = [
+            (0..members.len()).collect(),
+            members
+                .iter()
+                .enumerate()
+                .filter_map(|(index, member)| member.supports_udp().then_some(index))
+                .collect(),
+        ];
+        Self::Choice {
+            name: String::new(),
+            kind: GroupType::RoundRobin,
+            labels: Vec::new(),
+            members,
+            next: [AtomicU32::new(0), AtomicU32::new(0)],
+            static_eligible_indices: Some(eligible),
+        }
+    }
+    #[cfg(unix)]
+    fn visit_tcp_counters(&self, visitor: &mut impl FnMut(&AtomicU32)) {
+        match self {
+            Self::Client(_) => {}
+            Self::Sequence(nodes) => {
+                for node in nodes {
+                    node.visit_tcp_counters(visitor);
+                }
+            }
+            Self::Choice { next, members, .. } => {
+                visitor(&next[0]);
+                for member in members {
+                    member.visit_tcp_counters(visitor);
+                }
+            }
+        }
+    }
+
+    fn num_hops(&self) -> usize {
+        match self {
+            Self::Client(_) => 1,
+            Self::Sequence(nodes) => nodes.iter().map(Self::num_hops).sum(),
+            Self::Choice { members, .. } => members.iter().map(Self::num_hops).max().unwrap_or(0),
+        }
+    }
+    fn contains_selector(&self) -> bool {
+        match self {
+            Self::Client(_) => false,
+            Self::Sequence(nodes) => nodes.iter().any(Self::contains_selector),
+            Self::Choice { kind, members, .. } => {
+                matches!(kind, GroupType::Selector) || members.iter().any(Self::contains_selector)
+            }
+        }
+    }
+    fn supports_udp(&self) -> bool {
+        self.carrier_inputs(true, None) != 0
+    }
+    fn direct_only(&self) -> bool {
+        match self {
+            Self::Client(leaf) => leaf.direct,
+            Self::Sequence(_) => false,
+            Self::Choice { members, .. } => members.iter().all(Self::direct_only),
+        }
+    }
+    fn may_connect_directly(&self) -> bool {
+        match self {
+            Self::Client(leaf) => leaf.direct,
+            Self::Sequence(_) => false,
+            Self::Choice { members, .. } => members.iter().any(Self::may_connect_directly),
+        }
+    }
+    /// Possible input carriers for the requested output. Composing this two-state
+    /// relation preserves prefix requirements through nested choices and chains.
+    fn carrier_inputs(&self, udp: bool, choices: Option<&Choices>) -> u8 {
+        match self {
+            Self::Client(leaf) => leaf.carrier_input(udp),
+            Self::Sequence(nodes) => {
+                nodes
+                    .iter()
+                    .rev()
+                    .fold(if udp { UDP } else { TCP }, |required, node| {
+                        (if required & TCP != 0 {
+                            node.carrier_inputs(false, choices)
+                        } else {
+                            0
+                        }) | (if required & UDP != 0 {
+                            node.carrier_inputs(true, choices)
+                        } else {
+                            0
+                        })
+                    })
+            }
+            Self::Choice {
+                name,
+                kind,
+                labels,
+                members,
+                ..
+            } => members
+                .iter()
+                .enumerate()
+                .fold(0, |inputs, (index, member)| {
+                    if *kind != GroupType::Selector
+                        || choices.is_none_or(|choices| choices.get(name) == Some(&labels[index]))
+                    {
+                        inputs | member.carrier_inputs(udp, choices)
+                    } else {
+                        inputs
+                    }
+                }),
+        }
+    }
+
+    fn select<'a>(
+        &'a self,
+        require_udp: bool,
+        selection: &Selection<'_>,
+        leaves: &mut Vec<SelectedLeaf<'a>>,
+    ) -> io::Result<()> {
+        self.select_with_carrier(require_udp, BOTH, selection, leaves)
+            .map(|_| ())
+    }
+
+    fn select_with_carrier<'a>(
+        &'a self,
+        require_udp: bool,
+        allowed_input: u8,
+        selection: &Selection<'_>,
+        leaves: &mut Vec<SelectedLeaf<'a>>,
+    ) -> io::Result<bool> {
+        match self {
+            Self::Client(leaf) => {
+                let input = leaf.carrier_input(require_udp);
+                if input & allowed_input == 0 {
+                    return Err(unsupported());
+                }
+                leaves.push(SelectedLeaf {
+                    leaf,
+                    shared_groups: 0,
+                });
+                Ok(input == UDP)
+            }
+            Self::Sequence(nodes) => {
+                if self.carrier_inputs(require_udp, Some(selection.choices)) & allowed_input == 0 {
+                    return Err(unsupported());
+                }
+                let mut available = vec![allowed_input];
+                for node in nodes {
+                    let previous = *available.last().unwrap();
+                    let tcp = node.carrier_inputs(false, Some(selection.choices)) & previous != 0;
+                    let udp = node.carrier_inputs(true, Some(selection.choices)) & previous != 0;
+                    available.push(if tcp { TCP } else { 0 } | if udp { UDP } else { 0 });
+                }
+                let mut required = require_udp;
+                let mut blocks = Vec::with_capacity(nodes.len());
+                for (index, node) in nodes.iter().enumerate().rev() {
+                    let mut block = Vec::new();
+                    required = node.select_with_carrier(
+                        required,
+                        available[index],
+                        selection,
+                        &mut block,
+                    )?;
+                    blocks.push(block);
+                }
+                for block in blocks.into_iter().rev() {
+                    leaves.extend(block);
+                }
+                Ok(required)
+            }
+            Self::Choice {
+                name,
+                kind,
+                labels,
+                members,
+                next,
+                static_eligible_indices,
+            } => {
+                let selected = if let Some(eligible) = static_eligible_indices
+                    .as_ref()
+                    .filter(|_| allowed_input == BOTH)
+                {
+                    let eligible = &eligible[usize::from(require_udp)];
+                    if eligible.is_empty() {
+                        return Err(unsupported());
+                    }
+                    eligible[next[usize::from(selection.udp_flow)].fetch_add(1, Ordering::Relaxed)
+                        as usize
+                        % eligible.len()]
+                } else {
+                    let eligible: Vec<_> = members
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, member)| {
+                            ((*kind != GroupType::Selector
+                                || selection.choices.get(name) == Some(&labels[index]))
+                                && member.carrier_inputs(require_udp, Some(selection.choices))
+                                    & allowed_input
+                                    != 0)
+                                .then_some(index)
+                        })
+                        .collect();
+                    if eligible.is_empty() {
+                        return Err(unsupported());
+                    }
+                    match kind {
+                        GroupType::UrlTest(_) => {
+                            let view = selection.view.ok_or_else(unsupported)?;
+                            let names = eligible
+                                .iter()
+                                .map(|index| labels[*index].as_str())
+                                .collect();
+                            let selected = view
+                                .automatic
+                                .0
+                                .get(name)
+                                .ok_or_else(unsupported)?
+                                .choose(&names, selection.udp_flow)
+                                .ok_or_else(unsupported)?;
+                            eligible
+                                .into_iter()
+                                .find(|index| labels[*index] == selected)
+                                .unwrap()
+                        }
+                        _ => {
+                            eligible[next[usize::from(selection.udp_flow)]
+                                .fetch_add(1, Ordering::Relaxed)
+                                as usize
+                                % eligible.len()]
+                        }
+                    }
+                };
+                let start = leaves.len();
+                let input_udp = members[selected].select_with_carrier(
+                    require_udp,
+                    allowed_input,
+                    selection,
+                    leaves,
+                )?;
+                if !name.is_empty() {
+                    // A choice occurrence reports its ancestry on its first tracked hop only.
+                    // Separate occurrences retain their names, even with identical paths.
+                    let mut reported = false;
+                    for selected in &mut leaves[start..] {
+                        if let Some(depth) = selected.leaf.origin.as_ref().and_then(|origin| {
+                            origin.path.iter().position(|(group, _)| group == name)
+                        }) {
+                            if reported {
+                                selected.shared_groups = selected.shared_groups.max(depth + 1);
+                            }
+                            reported = true;
+                        }
+                    }
+                }
+                Ok(input_udp)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn native_udp_filters_prefixes_without_consuming_tcp_choices() {
+        let (chain, _) = build(
+            json!([
+                {"clash_api_address":"127.0.0.1:0","secret":"fixture-only"},
+                {"client_group":"entry","client_chains":[
+                    {"name":"tcp-only","chain":[{"address":"192.0.2.1:80","protocol":{"type":"http"}}]},
+                    {"name":"datagrams","chain":[{"address":"192.0.2.2:1080","protocol":{"type":"socks"}}]}
+                ]},
+                {"client_group":"exit","client_chain":{"address":"192.0.2.3:443","protocol":{"type":"shadowsocks","cipher":"aes-128-gcm","password":"test"}}}
+            ]),
+            json!(["entry", "exit"]),
+        );
+        assert!(chain.supports_udp());
+        for iteration in 0..8 {
+            let udp = chain.select(true).unwrap();
+            assert_eq!(
+                udp.origin(0).unwrap().path[0],
+                ("entry".into(), "datagrams".into())
+            );
+            assert!(udp.supports_udp());
+            let tcp = chain.select(false).unwrap();
+            assert_eq!(
+                tcp.origin(0).unwrap().path[0].1.as_str(),
+                if iteration % 2 == 0 {
+                    "tcp-only"
+                } else {
+                    "datagrams"
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn stream_udp_exit_remains_eligible_after_tcp_only_prefix() {
+        let (chain, _) = build(
+            json!([
+                {"clash_api_address":"127.0.0.1:0","secret":"fixture-only"},
+                {"client_group":"entry","client_chain":{"address":"192.0.2.1:80","protocol":{"type":"http"}}},
+                {"client_group":"exit","client_chains":[
+                    {"name":"native","chain":[{"address":"192.0.2.2:1080","protocol":{"type":"socks"}}]},
+                    {"name":"stream","chain":[{"address":"192.0.2.3:443","protocol":{"type":"vless","user_id":"550e8400-e29b-41d4-a716-446655440000"}}]}
+                ]}
+            ]),
+            json!(["entry", {"pool":["exit"]}]),
+        );
+        assert!(chain.supports_udp());
+        for _ in 0..8 {
+            let path = chain.select(true).unwrap();
+            assert_eq!(
+                path.origin(1).unwrap().path[0],
+                ("exit".into(), "stream".into())
+            );
+            assert!(path.supports_udp());
+        }
+    }
+
+    #[test]
+    fn native_udp_checks_selected_prefix_and_offline_chain_capability() {
+        let (chain, catalog) = build(
+            json!([
+                {"clash_api_address":"127.0.0.1:0","secret":"fixture-only"},
+                {"client_group":"entry","type":"selector","client_chains":[
+                    {"name":"tcp-only","chain":[{"address":"192.0.2.1:80","protocol":{"type":"http"}}]},
+                    {"name":"datagrams","chain":[{"address":"192.0.2.2:1080","protocol":{"type":"socks"}}]}
+                ]},
+                {"client_group":"exit","client_chain":{"address":"192.0.2.3:1080","protocol":{"type":"socks"}}},
+                {"client_group":"blocked","client_chain":[
+                    {"address":"192.0.2.1:80","protocol":{"type":"http"}},
+                    {"address":"192.0.2.3:1080","protocol":{"type":"socks"}}
+                ]},
+                {"client_group":"possible","client_chain":["entry","exit"]}
+            ]),
+            json!("possible"),
+        );
+        let mut owner = crate::control::selection::SelectionOwner::new(None).unwrap();
+        owner.activate(catalog.selection.clone()).unwrap();
+        assert!(chain.supports_udp());
+        assert_eq!(
+            chain.select(true).unwrap_err().kind(),
+            io::ErrorKind::Unsupported
+        );
+        owner.select("entry", "datagrams").unwrap();
+        assert!(chain.select(true).unwrap().supports_udp());
+        for (name, supported) in [("blocked", false), ("possible", true)] {
+            let config = catalog.route(name).unwrap();
+            assert_eq!(
+                crate::tcp::chain_builder::supports_udp_offline(&config).unwrap(),
+                supported
+            );
+            let fixed = crate::tcp::chain_builder::try_build_client_proxy_chain(
+                config.hops,
+                Arc::new(crate::resolver::NativeResolver::new()),
+            )
+            .unwrap();
+            assert_eq!(fixed.supports_udp(), supported);
+        }
+    }
+
+    fn build(
+        mut config: serde_json::Value,
+        chain: serde_json::Value,
+    ) -> (ClientProxyChain, crate::control::catalog::Catalog) {
+        use crate::config::{ResolvedConfig, ResolvedRuleActionConfig};
+        config.as_array_mut().unwrap().push(json!({
+            "address":"127.0.0.1:0", "protocol":{"type":"socks"},
+            "rules":[{"mask":"0.0.0.0/0", "action":"allow", "client_chain":chain}]
+        }));
+        let mut validated =
+            crate::config::create_server_configs(serde_json::from_value(config).unwrap()).unwrap();
+        let ResolvedConfig::Server(server) = &validated.configs[0] else {
+            panic!()
+        };
+        let ResolvedRuleActionConfig::Allow { client_chains, .. } =
+            &server.rules.iter().next().unwrap().action
+        else {
+            panic!()
+        };
+        let chain = crate::tcp::chain_builder::try_build_client_proxy_chain(
+            client_chains.iter().next().unwrap().hops.clone(),
+            Arc::new(crate::resolver::NativeResolver::new()),
+        )
+        .unwrap();
+        (chain, validated.catalog.take().unwrap())
+    }
+
+    fn fixture() -> (ClientProxyChain, crate::control::catalog::Catalog) {
+        build(
+            json!([
+                {"client_group":"entry","client_chains":[{"name":"entrance","address":"192.0.2.1:80","protocol":{"type":"http"}}]},
+                {"client_group":"exit","client_chains":[{"name":"exit-leaf","address":"192.0.2.2:80","protocol":{"type":"vless","user_id":"550e8400-e29b-41d4-a716-446655440000"}}]},
+                {"client_group":"out","type":"selector","client_chains":[{"chain": ["entry"]},{"name":"via-exit","chain":["entry","exit"]},{"chain": ["direct"]}]}
+            ]),
+            json!("out"),
+        )
+    }
+
+    #[test]
+    fn forwarding_and_probe_routes_select_the_same_paths() {
+        let (forwarding, catalog) = build(
+            json!([
+                {"client_group":"left","client_chain":{"name":"a","address":"192.0.2.1:80","protocol":{"type":"http"}}},
+                {"client_group":"right","client_chain":{"name":"b","address":"192.0.2.2:80","protocol":{"type":"vless","user_id":"550e8400-e29b-41d4-a716-446655440000"}}},
+                {"client_group":"alias","client_chain":"left"},
+                {"client_group":"manual","type":"selector","client_chains":[{"chain":["alias"]},{"chain":["right"]}]},
+                {"client_group":"auto","type":"url-test","url":"http://probe.invalid/","client_chains":[{"chain":["left"]},{"chain":["right"]}]},
+                {"client_group":"out","client_chains":[
+                    {"name":"via","chain":["manual","right"]},
+                    {"chain":["right"]},
+                    {"name":"pooled","chain":[{"pool":["manual","auto"]}]}
+                ]}
+            ]),
+            json!(["out", "out"]),
+        );
+        let hops = catalog.route("out").unwrap().hops.into_vec();
+        let probe = crate::tcp::chain_builder::try_build_client_proxy_chain(
+            OneOrSome::Some(hops.iter().chain(&hops).cloned().collect()),
+            Arc::new(crate::resolver::NativeResolver::new()),
+        )
+        .unwrap();
+        let mut owner = crate::control::selection::SelectionOwner::new(None).unwrap();
+        owner.activate(catalog.selection.clone()).unwrap();
+        let selected = |chain: &ClientProxyChain, udp| {
+            chain
+                .select(udp)
+                .map(|path| {
+                    let initial = match path.initial.as_ref() {
+                        InitialHopEntry::Proxy { proxy, .. } => proxy.proxy_location().clone(),
+                        _ => panic!("fixture contains only proxy clients"),
+                    };
+                    let endpoints = std::iter::once(initial)
+                        .chain(
+                            path.subsequent
+                                .iter()
+                                .map(|proxy| proxy.proxy_location().clone()),
+                        )
+                        .collect::<Vec<_>>();
+                    let origins = path
+                        .origins
+                        .iter()
+                        .map(|origin| {
+                            let origin = origin.as_ref().unwrap();
+                            (origin.name.clone(), origin.path.clone())
+                        })
+                        .collect::<Vec<_>>();
+                    (endpoints, origins, path.route_names())
+                })
+                .unwrap()
+        };
+        for member in ["alias", "right", "alias"] {
+            owner.select("manual", member).unwrap();
+            catalog
+                .selection
+                .automatic
+                .record("left", "http://probe.invalid/", Some(10));
+            catalog
+                .selection
+                .automatic
+                .record("right", "http://probe.invalid/", Some(100));
+            for _ in 0..12 {
+                for udp in [false, true] {
+                    assert_eq!(selected(&forwarding, udp), selected(&probe, udp));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn mixed_length_selection_pins_the_whole_path_and_fails_udp_closed() {
+        let (chain, catalog) = fixture();
+        assert!(chain.may_connect_directly());
+        assert!(!chain.is_direct_only());
+        let tree = chain.composition().unwrap();
+        let mut owner = crate::control::selection::SelectionOwner::new(None).unwrap();
+        owner.activate(catalog.selection.clone()).unwrap();
+        let single = tree.select(false).unwrap();
+        assert_eq!(single.num_hops(), 1);
+        assert_eq!(
+            tree.select(true).unwrap_err().kind(),
+            io::ErrorKind::Unsupported
+        );
+        owner.select("out", "via-exit").unwrap();
+        let two = tree.select(true).unwrap();
+        assert_eq!(two.num_hops(), 2);
+        assert!(two.supports_udp());
+        assert_eq!(two.origin(0).unwrap().name.as_ref(), "entrance");
+        assert_eq!(two.origin(1).unwrap().name.as_ref(), "exit-leaf");
+        assert_eq!(
+            two.route_names(),
+            ["exit-leaf", "exit", "entrance", "entry", "out"]
+        );
+        for hop in 0..2 {
+            let origin = two.origin(hop).unwrap();
+            assert_eq!(origin.path[0], ("out".into(), "via-exit".into()));
+            assert!(Arc::ptr_eq(&origin.selection, &catalog.selection));
+        }
+        owner.select("out", "DIRECT").unwrap();
+        let direct = tree.select(true).unwrap();
+        assert!(direct.is_direct_only());
+        assert_eq!(direct.origin(0).unwrap().name.as_ref(), "DIRECT");
+        assert_eq!(two.num_hops(), 2);
+        assert!(!single.is_direct_only());
+        let resolver: Arc<dyn Resolver> = Arc::new(crate::resolver::NativeResolver::new());
+        let target: ResolvedLocation = crate::address::NetLocation::from_str("192.0.2.2:80", None)
+            .unwrap()
+            .into();
+        let before = two.selected_route(&resolver).prefix(target.clone());
+        owner.select("out", "via-exit").unwrap();
+        let again = tree.select(false).unwrap();
+        let after = again.selected_route(&resolver).prefix(target);
+        assert_eq!(
+            before.route_key(),
+            after.route_key(),
+            "reselecting a path must retain its carrier identities"
+        );
+    }
+
+    #[test]
+    fn route_names_preserve_nested_aliases_and_repeated_group_occurrences() {
+        for kind in ["round-robin", "selector", "url-test"] {
+            let leaf = |name| {
+                json!({
+                    "name":name, "address":"192.0.2.1:443",
+                    "protocol":{"type":"vless","user_id":"550e8400-e29b-41d4-a716-446655440000"}
+                })
+            };
+            let mut config = json!([
+                {"clash_api_address":"127.0.0.1:0","secret":"test"},
+                {"client_group":"a","client_chain":leaf("first")},
+                {"client_group":"b","client_chain":leaf("second")},
+                {"client_group":"inner","type":kind,"client_chains":[{"name":"via","chain":["a","b"]}]},
+                {"client_group":"alias","client_chain":"inner"},
+                {"client_group":"outer","type":kind,"client_chains":[{"name":"twice","chain":["alias","alias"]}]},
+                {"client_group":"pooled","client_chain":{"chain":[{"pool":["alias"]}]}},
+                {"client_group":"mixed","type":kind,"client_chains":[{"name":"pool-and-leaf","chain":["pooled","a"]}]},
+                {"client_group":"fixed-alias","client_chain":"a"}
+            ]);
+            if kind == "url-test" {
+                for group in config.as_array_mut().unwrap() {
+                    if group["type"] == kind {
+                        group["url"] = json!("http://192.0.2.9/");
+                    }
+                }
+            }
+            for (route, expected) in [
+                (
+                    json!("alias"),
+                    vec!["second", "b", "first", "a", "inner", "alias"],
+                ),
+                (
+                    json!(["alias", "alias"]),
+                    vec![
+                        "second", "b", "first", "a", "inner", "alias", "second", "b", "first", "a",
+                        "inner", "alias",
+                    ],
+                ),
+                (
+                    json!("outer"),
+                    vec![
+                        "second", "b", "first", "a", "inner", "alias", "second", "b", "first", "a",
+                        "inner", "alias", "outer",
+                    ],
+                ),
+                (
+                    json!("mixed"),
+                    vec![
+                        "first", "a", "second", "b", "first", "a", "inner", "alias", "pooled",
+                        "mixed",
+                    ],
+                ),
+                (
+                    json!(["fixed-alias", "fixed-alias"]),
+                    vec!["first", "a", "fixed-alias", "first", "a", "fixed-alias"],
+                ),
+            ] {
+                let (chain, _) = build(config.clone(), route.clone());
+                for udp in [false, true] {
+                    let path = chain.select(udp).unwrap();
+                    assert_eq!(path.route_names(), expected, "{kind}, {route}, UDP={udp}");
+                    assert_eq!(path.origins.len(), path.num_hops());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn route_names_keep_direct_stage_and_anonymous_catalog_identity() {
+        let (chain, catalog) = build(
+            json!([
+                {"client_group":"a1-entrypoint","client_chain":"direct"},
+                {"client_group":"a1-reality-vision-vless","client_chain":["a1-entrypoint",
+                    {"address":"192.0.2.1:443","protocol":{"type":"vless","user_id":"550e8400-e29b-41d4-a716-446655440000"}}
+                ]},
+                {"client_group":"a1-selected","type":"selector","client_chain":"a1-reality-vision-vless"}
+            ]),
+            json!("a1-selected"),
+        );
+        for udp in [false, true] {
+            let path = chain.select(udp).unwrap();
+            assert_eq!(path.num_hops(), 2);
+            assert!(matches!(path.initial.as_ref(), InitialHopEntry::Direct(_)));
+            assert_eq!(
+                path.subsequent[0].proxy_location().to_string(),
+                "192.0.2.1:443"
+            );
+            let names = path.route_names();
+            assert_eq!(
+                names,
+                [
+                    "client-2-1",
+                    "DIRECT",
+                    "a1-entrypoint",
+                    "a1-reality-vision-vless",
+                    "a1-selected"
+                ]
+            );
+            for name in &names {
+                assert!(catalog.nodes.contains_key(name), "{name}");
+            }
+        }
+    }
+
+    #[test]
+    fn route_names_ignore_untracked_leaves_without_losing_shared_ancestry() {
+        fn clear_origins(node: &mut Node, names: &[&str]) {
+            match node {
+                Node::Client(leaf) => {
+                    if leaf
+                        .origin
+                        .as_ref()
+                        .is_some_and(|origin| names.contains(&origin.name.as_ref()))
+                    {
+                        leaf.origin = None;
+                    }
+                }
+                Node::Sequence(nodes) | Node::Choice { members: nodes, .. } => {
+                    for node in nodes {
+                        clear_origins(node, names);
+                    }
+                }
+            }
+        }
+        for (untracked, expected) in [
+            (vec!["entrance"], vec!["exit-leaf", "exit", "out"]),
+            (vec!["exit-leaf"], vec!["entrance", "entry", "out"]),
+            (vec!["entrance", "exit-leaf"], vec![]),
+        ] {
+            let (mut chain, catalog) = fixture();
+            let mut owner = crate::control::selection::SelectionOwner::new(None).unwrap();
+            owner.activate(catalog.selection.clone()).unwrap();
+            owner.select("out", "via-exit").unwrap();
+            let ChainPlan::Composed(tree) = &mut chain.plan else {
+                panic!()
+            };
+            clear_origins(&mut Arc::get_mut(tree).unwrap().root, &untracked);
+            for udp in [false, true] {
+                let path = chain.select(udp).unwrap();
+                assert_eq!(path.num_hops(), 2);
+                assert_eq!(path.origins.len(), 2);
+                assert_eq!(path.route_names(), expected);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn forwarding_failure_rechecks_only_the_selected_automatic_group() {
+        use std::time::Duration;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::time::{Instant, timeout};
+
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let address = format!("127.0.0.1:{}", listener.local_addr().unwrap().port());
+        let member =
+            |name| json!({"name":name,"chain":[{"address":address,"protocol":{"type":"socks"}}]});
+        let (chain, catalog) = build(
+            json!([
+                {"client_group":"auto","type":"url-test","url":"http://probe.invalid/",
+                 "client_chains":[member("a"),member("b")]},
+                {"client_group":"other","type":"url-test","url":"http://probe.invalid/",
+                 "client_chains":[member("c"),member("d")]},
+                {"client_group":"out","type":"selector","default":"auto",
+                 "client_chains":[{"chain":["auto"]},{"chain":["other"]}]}
+            ]),
+            json!("out"),
+        );
+        let automatic = &catalog.selection.automatic;
+        for (member, delay) in [("a", 1), ("b", 100), ("c", 1), ("d", 100)] {
+            automatic.record(member, "http://probe.invalid/", Some(delay));
+        }
+        let now = Instant::now();
+        for group in automatic.0.values() {
+            assert_eq!(group.due_members(now), Some(0..2));
+            assert!(group.due_members(now + Duration::from_secs(1)).is_none());
+        }
+        let resolver: Arc<dyn Resolver> = Arc::new(crate::resolver::NativeResolver::new());
+        let target = NetLocation::from_str("192.0.2.1:80", None).unwrap();
+        let peer = async {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut greeting = [0; 3];
+            stream.read_exact(&mut greeting).await.unwrap();
+            assert_eq!(greeting, [5, 1, 0]);
+            stream.shutdown().await.unwrap();
+        };
+        let (_, result) = timeout(Duration::from_secs(5), async {
+            tokio::join!(peer, chain.connect_tcp(target.into(), &resolver))
+        })
+        .await
+        .unwrap();
+        let error = result
+            .err()
+            .expect("peer must close during SOCKS negotiation");
+        assert_eq!(error.kind(), io::ErrorKind::ConnectionAborted);
+        assert_eq!(
+            automatic.0["auto"].due_members(now + Duration::from_secs(1)),
+            Some(0..2)
+        );
+        assert!(
+            automatic.0["other"]
+                .due_members(now + Duration::from_secs(1))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn same_length_alternatives_never_mix_their_hops() {
+        for kind in ["selector", "round-robin"] {
+            let (chain, catalog) = build(
+                json!([
+                    {"clash_api_address":"127.0.0.1:0","secret":"test"},
+                    {"client_group":"out","type":kind,"client_chains":[
+                        {"name":"left","chain":[{"address":"192.0.2.1:80","protocol":{"type":"http"}},{"address":"192.0.2.2:80","protocol":{"type":"http"}}]},
+                        {"name":"right","chain":[{"address":"192.0.2.3:80","protocol":{"type":"http"}},{"address":"192.0.2.4:80","protocol":{"type":"http"}}]}
+                    ]}
+                ]),
+                json!("out"),
+            );
+            let tree = chain.composition().unwrap();
+            let mut owner = crate::control::selection::SelectionOwner::new(None).unwrap();
+            owner.activate(catalog.selection.clone()).unwrap();
+            for index in 0..20 {
+                let left = index % 2 == 0;
+                if kind == "selector" {
+                    owner
+                        .select("out", if left { "left" } else { "right" })
+                        .unwrap();
+                }
+                let pinned = tree.select(false).unwrap();
+                let InitialHopEntry::Proxy { proxy, .. } = pinned.initial.as_ref() else {
+                    panic!()
+                };
+                assert_eq!(
+                    proxy.proxy_location().to_string(),
+                    if left { "192.0.2.1:80" } else { "192.0.2.3:80" }
+                );
+                assert_eq!(
+                    pinned.subsequent[0].proxy_location().to_string(),
+                    if left { "192.0.2.2:80" } else { "192.0.2.4:80" }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn url_test_selects_complete_mixed_length_members_by_chain_label() {
+        let (chain, catalog) = build(
+            json!([{"client_group":"out", "type":"url-test", "url":"http://probe.invalid/", "tolerance":10,
+            "client_chains":[
+                {"name":"short", "chain":[{"name":"a", "address":"192.0.2.1:80", "protocol":{"type":"http"}}]},
+                {"name":"long", "chain":[
+                    {"name":"b", "address":"192.0.2.2:80", "protocol":{"type":"http"}},
+                    {"name":"c", "address":"192.0.2.3:80", "protocol":{"type":"vless", "user_id":"550e8400-e29b-41d4-a716-446655440000"}}
+                ]}
+            ]}]),
+            json!("out"),
+        );
+        let automatic = &catalog.selection.automatic;
+        automatic.record("short", "http://probe.invalid/", Some(10));
+        automatic.record("long", "http://probe.invalid/", Some(100));
+        let short = chain.select(false).unwrap().into_owned();
+        assert_eq!(short.num_hops(), 1);
+        assert_eq!(short.origin(0).unwrap().name.as_ref(), "a");
+        automatic.record("short", "http://probe.invalid/", Some(100));
+        automatic.record("long", "http://probe.invalid/", Some(10));
+        let long = chain.select(false).unwrap().into_owned();
+        assert_eq!(long.num_hops(), 2);
+        for (hop, name) in ["b", "c"].into_iter().enumerate() {
+            let origin = long.origin(hop).unwrap();
+            assert_eq!(origin.name.as_ref(), name);
+            assert_eq!(origin.path[0], ("out".into(), "long".into()));
+        }
+        automatic.record("short", "http://probe.invalid/", Some(1));
+        automatic.record("long", "http://probe.invalid/", Some(100));
+        assert_eq!(
+            chain
+                .select(false)
+                .unwrap()
+                .origin(0)
+                .unwrap()
+                .name
+                .as_ref(),
+            "a"
+        );
+        assert_eq!(chain.select(true).unwrap().num_hops(), 2);
+    }
+
+    #[tokio::test]
+    async fn forwarding_wakes_nested_lazy_groups() {
+        use crate::async_stream::{AsyncReadMessage, AsyncWriteMessage};
+        use std::time::Duration;
+        use tokio::time::Instant;
+
+        tokio::time::timeout(Duration::from_secs(5), async {
+            for activity in ["tcp", "udp"] {
+                let (chain, catalog) = build(json!([
+                    {"client_group":"inner", "type":"url-test", "url":"http://probe.invalid/", "interval":10,
+                     "client_chain":{"name":"local", "protocol":{"type":"direct"}}},
+                    {"client_group":"outer", "type":"url-test", "url":"http://probe.invalid/", "interval":10,
+                     "client_chain":"inner"}
+                ]), json!("outer"));
+                let groups = &catalog.selection.automatic.0;
+                let start = Instant::now();
+                let due = start + Duration::from_secs(10);
+                for group in groups.values() {
+                    assert!(group.due_members(start).is_some());
+                    assert!(group.due_members(due).is_none());
+                }
+                let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+                let target: ResolvedLocation = crate::address::NetLocation::from_ip_addr(
+                    "127.0.0.1".parse().unwrap(), listener.local_addr().unwrap().port(),
+                ).into();
+                let resolver: Arc<dyn Resolver> = Arc::new(crate::resolver::NativeResolver::new());
+                if activity == "udp" {
+                    let peer = tokio::net::UdpSocket::bind("0.0.0.0:0").await.unwrap();
+                    let udp_target = crate::address::NetLocation::from_ip_addr(
+                        "127.0.0.1".parse().unwrap(), peer.local_addr().unwrap().port(),
+                    ).into();
+                    let mut stream = chain.connect_udp_bidirectional(&resolver, udp_target).await.unwrap();
+                    futures::future::poll_fn(|cx| std::pin::Pin::new(&mut stream).poll_write_message(cx, b"demand"))
+                        .await.unwrap();
+                    let mut bytes = [0; 32];
+                    let (size, source) = peer.recv_from(&mut bytes).await.unwrap();
+                    assert_eq!(&bytes[..size], b"demand");
+                    peer.send_to(b"reply", source).await.unwrap();
+                    let mut buf = tokio::io::ReadBuf::new(&mut bytes);
+                    futures::future::poll_fn(|cx| std::pin::Pin::new(&mut stream).poll_read_message(cx, &mut buf))
+                        .await.unwrap();
+                    assert_eq!(buf.filled(), b"reply");
+                } else {
+                    drop(chain.connect_tcp(target.clone(), &resolver).await.unwrap());
+                    drop(listener.accept().await.unwrap());
+                }
+                for group in groups.values() {
+                    assert!(group.due_members(due).is_some());
+                    assert!(group.due_members(due + Duration::from_secs(1)).is_none());
+                }
+                drop(listener);
+                if activity == "tcp" {
+                    let error = chain.connect_tcp(target.clone(), &resolver).await.err().unwrap();
+                    assert_eq!(error.kind(), io::ErrorKind::ConnectionRefused);
+                    for group in groups.values() {
+                        assert!(group.due_members(due + Duration::from_secs(1)).is_some());
+                    }
+                    let background = crate::control::url_test::BACKGROUND.scope((), async {
+                        chain.connect_tcp(target, &resolver).await
+                    }).await;
+                    assert!(background.is_err());
+                    for group in groups.values() {
+                        assert!(group.due_members(due + Duration::from_secs(2)).is_none());
+                    }
+                }
+            }
+        }).await.unwrap();
+    }
+
+    #[test]
+    fn config_round_robin_precomputes_transport_indices() {
+        const MEMBERS: usize = 2048;
+        let members: Vec<_> = (0..MEMBERS)
+            .map(|index| {
+                json!({"chain":[{
+                    "name":format!("member-{index}"),"address":"192.0.2.1:80",
+                    "protocol":{"type":if index % 2 == 0 { "http" } else { "direct" }}
+                }]})
+            })
+            .collect();
+        let (chain, _) = build(
+            json!([
+                {"clash_api_address":"127.0.0.1:0","secret":"test"},
+                {"client_group":"out","client_chains":members}
+            ]),
+            json!("out"),
+        );
+        let tree = chain.composition().unwrap();
+        let Node::Choice {
+            static_eligible_indices: Some(indices),
+            ..
+        } = &tree.root
+        else {
+            panic!("policy-free round-robin must use precomputed indices")
+        };
+        assert_eq!(indices[0], (0..MEMBERS).collect::<Vec<_>>());
+        assert_eq!(indices[1], (1..MEMBERS).step_by(2).collect::<Vec<_>>());
+        for index in 0..MEMBERS + 2 {
+            for (udp, expected) in [(false, index % MEMBERS), (true, (2 * index + 1) % MEMBERS)] {
+                let pinned = tree.select(udp).unwrap();
+                assert_eq!(
+                    pinned.origin(0).unwrap().name.as_ref(),
+                    format!("member-{expected}")
+                );
+            }
+        }
+
+        for kind in ["selector", "url-test"] {
+            let mut dynamic = json!({"client_group":"dynamic","type":kind,"client_chain":"direct"});
+            if kind == "url-test" {
+                dynamic["url"] = json!("http://192.0.2.1/");
+            }
+            let (chain, _) = build(
+                json!([dynamic, {"client_group":"out","client_chains":[{"chain":["dynamic"]},{"chain":["direct"]}]}]),
+                json!("out"),
+            );
+            let Node::Choice {
+                static_eligible_indices,
+                ..
+            } = &chain.composition().unwrap().root
+            else {
+                panic!()
+            };
+            assert_eq!(
+                static_eligible_indices.is_some(),
+                kind == "url-test",
+                "{kind}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn download_rotation_resumes_nested_and_repeated_choices() {
+        let config = json!([
+            {"clash_api_address":"127.0.0.1:0","secret":"test"},
+            {"client_group":"inner","client_chains":[
+                {"chain":[{"name":"a","address":"192.0.2.1:80","protocol":{"type":"http"}}]},
+                {"chain":[{"name":"b","address":"192.0.2.2:80","protocol":{"type":"http"}}]}
+            ]},
+            {"client_group":"out","client_chains":[
+                {"name":"short","chain":["inner"]},
+                {"name":"long","chain":["inner","inner"]}
+            ]}
+        ]);
+        let route = json!(["out", "out"]);
+        let select = |chain: &ClientProxyChain| {
+            chain
+                .composition()
+                .unwrap()
+                .select(false)
+                .unwrap()
+                .origins
+                .into_iter()
+                .map(|pool| {
+                    let origin = pool.unwrap();
+                    (origin.name, origin.path)
+                })
+                .collect::<Vec<_>>()
+        };
+        let (original, _) = build(config.clone(), route.clone());
+        for _ in 0..7 {
+            select(&original);
+        }
+        let state = original.tcp_selection_indices();
+        assert_eq!(state.len(), 8);
+        let (mut resumed, _) = build(config, route);
+        resumed.restore_tcp_selection_indices(&state);
+        for _ in 0..32 {
+            assert_eq!(select(&original), select(&resumed));
+            assert_eq!(
+                original.tcp_selection_indices(),
+                resumed.tcp_selection_indices()
+            );
+        }
+    }
+
+    #[test]
+    fn nonterminal_choices_rotate_tcp_and_udp_independently() {
+        for nested_selector in [false, true] {
+            let (chain, _) = build(
+                json!([
+                    {"client_group":"entry","client_chain":{"name":"a","address":"192.0.2.1:80","protocol":{"type":"http"}}},
+                    {"client_group":"inner","type":"selector","client_chain":"entry"},
+                    {"client_group":"out","client_chains":[
+                        {"chain":[if nested_selector { "inner" } else { "entry" }]},
+                        {"chain":[{"name":"b","address":"192.0.2.2:80","protocol":{"type":"http"}}]}
+                    ]}
+                ]),
+                json!(["out", {"pool":[
+                    {"name":"c","address":"192.0.2.3:80","protocol":{"type":"http"}},
+                    {"name":"d","address":"192.0.2.4:80","protocol":{"type":"http"}}
+                ]}, {"address":"192.0.2.5:80","protocol":{"type":"vless","user_id":"550e8400-e29b-41d4-a716-446655440000"}}]),
+            );
+            let tree = chain.composition().unwrap();
+            for index in 0..8 {
+                let expected = if index % 2 == 0 {
+                    ["a", "c"]
+                } else {
+                    ["b", "d"]
+                };
+                for udp in [false, true] {
+                    #[cfg(unix)]
+                    let before = tree.tcp_selection_indices();
+                    let pinned = tree.select(udp).unwrap();
+                    for (hop, name) in expected.into_iter().enumerate() {
+                        assert_eq!(pinned.origin(hop).unwrap().name.as_ref(), name);
+                    }
+                    #[cfg(unix)]
+                    if udp {
+                        assert_eq!(tree.tcp_selection_indices(), before);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rejected_udp_paths_do_not_advance_earlier_round_robin_choices() {
+        let (chain, catalog) = build(
+            json!([
+                {"client_group":"prefix","client_chains":[
+                    {"name":"short","chain":[{"name":"a","address":"192.0.2.1:80","protocol":{"type":"http"}}]},
+                    {"name":"long","chain":[
+                        {"name":"b","address":"192.0.2.2:80","protocol":{"type":"http"}},
+                        {"name":"c","address":"192.0.2.3:80","protocol":{"type":"http"}}
+                    ]}
+                ]},
+                {"client_group":"exit","type":"selector","default":"tcp","client_chains":[
+                    {"chain":[{"name":"tcp","address":"192.0.2.4:80","protocol":{"type":"http"}}]},
+                    {"chain":[{"name":"udp","address":"192.0.2.5:80","protocol":{"type":"vless","user_id":"550e8400-e29b-41d4-a716-446655440000"}}]}
+                ]}
+            ]),
+            json!(["prefix", "exit"]),
+        );
+        let tree = chain.composition().unwrap();
+        let mut owner = crate::control::selection::SelectionOwner::new(None).unwrap();
+        owner.activate(catalog.selection.clone()).unwrap();
+        let names = |udp| {
+            tree.select(udp)
+                .unwrap()
+                .origins
+                .iter()
+                .map(|origin| origin.as_ref().unwrap().name.to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names(false), ["a", "tcp"]);
+        for _ in 0..3 {
+            assert_eq!(
+                tree.select(true).unwrap_err().kind(),
+                io::ErrorKind::Unsupported
+            );
+        }
+        owner.select("exit", "udp").unwrap();
+        assert_eq!(names(true), ["a", "udp"]);
+        assert_eq!(names(false), ["b", "c", "udp"]);
+        owner.select("exit", "tcp").unwrap();
+        assert_eq!(
+            tree.select(true).unwrap_err().kind(),
+            io::ErrorKind::Unsupported
+        );
+        owner.select("exit", "udp").unwrap();
+        assert_eq!(names(true), ["b", "c", "udp"]);
+        assert_eq!(names(false), ["a", "udp"]);
+    }
+
+    #[test]
+    fn nonterminal_url_test_keeps_tcp_and_udp_incumbents_separate() {
+        let (chain, catalog) = build(
+            json!([{"client_group":"out","type":"url-test","url":"http://192.0.2.1/","tolerance":50,"client_chains":[
+                {"chain":[{"name":"a","address":"192.0.2.1:80","protocol":{"type":"http"}}]},
+                {"chain":[{"name":"b","address":"192.0.2.2:80","protocol":{"type":"http"}}]}
+            ]}]),
+            json!(["out", {"address":"192.0.2.3:80","protocol":{"type":"vless","user_id":"550e8400-e29b-41d4-a716-446655440000"}}]),
+        );
+        let tree = chain.composition().unwrap();
+        let automatic = &catalog.selection.automatic;
+        automatic.record("a", "http://192.0.2.1/", Some(100));
+        automatic.record("b", "http://192.0.2.1/", Some(120));
+        assert_eq!(
+            tree.select(false).unwrap().origin(0).unwrap().name.as_ref(),
+            "a"
+        );
+        automatic.record("a", "http://192.0.2.1/", Some(120));
+        automatic.record("b", "http://192.0.2.1/", Some(100));
+        assert_eq!(
+            tree.select(true).unwrap().origin(0).unwrap().name.as_ref(),
+            "b"
+        );
+        assert_eq!(
+            tree.select(false).unwrap().origin(0).unwrap().name.as_ref(),
+            "a"
+        );
+    }
+
+    #[test]
+    fn url_test_uses_group_samples_across_callers_without_overriding_round_robin() {
+        let (chain, catalog) = build(
+            json!([{"client_group":"out","type":"url-test","url":"http://192.0.2.1/","client_chains":[
+                {"chain":[{"name":"primary","address":"192.0.2.10:80","protocol":{"type":"http"}}]},
+                {"chain":[{"name":"backup","address":"192.0.2.11:80","protocol":{"type":"http"}}]}
+            ]}]),
+            json!([{"pool":[
+                {"address":"192.0.2.50:80","protocol":{"type":"http"}},
+                {"address":"192.0.2.51:80","protocol":{"type":"http"}}
+            ]}, "out", "out"]),
+        );
+        let other = crate::tcp::chain_builder::try_build_client_proxy_chain(
+            catalog.route("out").unwrap().hops,
+            Arc::new(crate::resolver::NativeResolver::new()),
+        )
+        .unwrap();
+        catalog
+            .selection
+            .automatic
+            .record("primary", "http://192.0.2.1/", Some(100));
+        catalog
+            .selection
+            .automatic
+            .record("backup", "http://192.0.2.1/", Some(1));
+        assert_eq!(chain.select_indices(false).unwrap(), [0, 1, 1]);
+        assert_eq!(chain.select_indices(false).unwrap(), [1, 1, 1]);
+        assert_eq!(other.select_indices(false).unwrap(), [1]);
+        assert_eq!(catalog.selection.automatic.0.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn pinned_chain_keeps_connectors_after_composition_is_dropped() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+            let (chain, _) = build(
+                json!([{"client_group":"out", "type":"selector", "client_chains":[
+                    {"chain":[{"name":"local", "protocol":{"type":"direct"}}]},
+                    {"chain":["direct"]}
+                ]}]),
+                json!("out"),
+            );
+            let composition = chain.composition().unwrap();
+            let weak = Arc::downgrade(composition);
+            let pinned = composition.select(false).unwrap();
+            drop(chain);
+            assert!(weak.upgrade().is_none());
+            assert_eq!(pinned.origin(0).unwrap().name.as_ref(), "local");
+
+            let target = crate::address::NetLocation::from_str(
+                &format!("127.0.0.1:{}", listener.local_addr().unwrap().port()),
+                None,
+            )
+            .unwrap();
+            let resolver: Arc<dyn Resolver> = Arc::new(crate::resolver::NativeResolver::new());
+            let mut connection = pinned.connect_tcp(target.into(), &resolver).await.unwrap();
+            connection.client_stream.write_all(b"pinned").await.unwrap();
+            let (mut peer, _) = listener.accept().await.unwrap();
+            let mut received = [0; 6];
+            peer.read_exact(&mut received).await.unwrap();
+            assert_eq!(&received, b"pinned");
+        })
+        .await
+        .unwrap();
+    }
+
+    #[test]
+    fn probe_connectors_do_not_advance_forwarding_counters_or_reselect_pinned_flows() {
+        let (chain, catalog) = build(
+            json!([
+                {"client_group":"pool","client_chains":[
+                    {"chain": [{"name":"a","address":"192.0.2.1:80","protocol":{"type":"http"}}]},
+                    {"chain": [{"name":"b","address":"192.0.2.2:80","protocol":{"type":"http"}}]}
+                ]},
+                {"client_group":"auto","type":"url-test","url":"http://192.0.2.3/",
+                 "client_chains":[{"chain": ["pool"]},{"chain": ["direct"]}]}
+            ]),
+            json!("auto"),
+        );
+        let resolver: Arc<dyn Resolver> = Arc::new(crate::resolver::NativeResolver::new());
+        let probe = crate::tcp::chain_builder::try_build_client_proxy_chain(
+            catalog.route("pool").unwrap().hops,
+            resolver,
+        )
+        .unwrap();
+        for _ in 0..3 {
+            probe.composition().unwrap().select(false).unwrap();
+        }
+        let pinned = chain.composition().unwrap().select(false).unwrap();
+        let InitialHopEntry::Proxy { proxy, .. } = pinned.initial.as_ref() else {
+            panic!()
+        };
+        assert_eq!(proxy.proxy_location().to_string(), "192.0.2.1:80");
+        catalog
+            .selection
+            .automatic
+            .record("DIRECT", "http://192.0.2.3/", Some(1));
+        assert!(
+            chain
+                .composition()
+                .unwrap()
+                .select(false)
+                .unwrap()
+                .is_direct_only()
+        );
+        assert!(!pinned.is_direct_only());
+        assert_eq!(proxy.proxy_location().to_string(), "192.0.2.1:80");
+    }
+}

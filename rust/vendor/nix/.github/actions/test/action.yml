@@ -1,0 +1,39 @@
+name: 'Test'
+description: 'Test nix'
+inputs:
+  # This is required
+  TARGET:
+    required: true
+
+  SUDO:
+    description: 'Set it to an empty string to run the tests as the current user, leave it with the default value to test with "sudo"'
+    required: false
+    default: sudo --preserve-env=HOME 
+
+  TOOL: 
+    description: 'Tool used to involve the test command, can be cargo or cross'
+    required: false
+    default: cargo
+
+  RUSTFLAGS: 
+    required: false
+    default: -D warnings -A unknown-lints
+
+  RUSTDOCFLAGS:
+    required: false
+    default: -D warnings
+
+runs:
+  using: "composite"
+  steps:
+    - name: set up Rust env
+      shell: bash
+      run: |
+        echo "RUSTFLAGS=${{ inputs.RUSTFLAGS }}" >> $GITHUB_ENV
+        echo "RUSTDOCFLAGS=${{ inputs.RUSTDOCFLAGS }}" >> $GITHUB_ENV
+        # Enable backtrace to make debugging easier
+        echo "RUST_BACKTRACE=1" >> $GITHUB_ENV
+
+    - name: test
+      shell: bash
+      run: ${{ inputs.SUDO }} $(which ${{ inputs.TOOL }}) test --target ${{ inputs.TARGET }}

@@ -343,6 +343,15 @@ private fun NetworkDetectCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val ip = when {
+        result.ipv4 is IpDetectionResult.Reachable -> "\u2066${result.ipv4.address}\u2069"
+        result.ipv6 is IpDetectionResult.Reachable -> "\u2066${result.ipv6.address}\u2069"
+        result.ipv4 == IpDetectionResult.Checking || result.ipv6 == IpDetectionResult.Checking ->
+            stringResource(R.string.detecting_ip)
+        result.ipv4 == IpDetectionResult.Failed || result.ipv6 == IpDetectionResult.Failed ->
+            stringResource(R.string.network_probe_failed)
+        else -> stringResource(R.string.network_probe_not_tested)
+    }
     Card(
         onClick = onClick,
         modifier = modifier
@@ -364,26 +373,16 @@ private fun NetworkDetectCard(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            NetworkDetectionRow("IPv4", result.ipv4)
-            NetworkDetectionRow("IPv6", result.ipv6)
+            Text(
+                text = ip,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
-}
-
-@Composable
-private fun NetworkDetectionRow(family: String, result: IpDetectionResult) {
-    val status = when (result) {
-        IpDetectionResult.NotTested -> stringResource(R.string.network_probe_not_tested)
-        IpDetectionResult.Checking -> stringResource(R.string.detecting_ip)
-        IpDetectionResult.Disabled -> stringResource(R.string.network_probe_disabled)
-        IpDetectionResult.Failed -> stringResource(R.string.network_probe_failed)
-        is IpDetectionResult.Reachable -> "\u2066${result.address}\u2069"
-    }
-    Text(
-        text = "$family · $status",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)

@@ -1,0 +1,385 @@
+use std::io;
+
+#[cfg(test)]
+use super::resolved::ResolvedClientChain as ClientChain;
+use super::resolved::{ResolvedClientConfig as ClientConfig, ResolvedClientHop as ClientChainHop};
+use crate::option_util::OneOrSome;
+
+pub(crate) const MAX_NODES: usize = 16_384;
+pub(crate) const MAX_DEPTH: usize = 64;
+pub(crate) const MAX_HOPS: usize = 64;
+
+pub(crate) fn invalid(message: impl Into<String>) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidInput, message.into())
+}
+
+pub(crate) fn clients(hop: &ClientChainHop) -> Box<dyn Iterator<Item = &ClientConfig> + '_> {
+    super::plan_ops::clients(hop)
+}
+
+#[cfg(test)]
+pub(crate) fn pool_choice(members: Vec<ClientChain>) -> ClientChainHop {
+    super::plan_ops::pool_choice(members)
+}
+
+pub(crate) fn client_nodes(_: &ClientConfig, _: usize) -> io::Result<usize> {
+    Ok(1)
+}
+
+pub(crate) fn validate(hops: &OneOrSome<ClientChainHop>) -> io::Result<()> {
+    super::plan_ops::validate(hops, client_nodes, validate_position)
+}
+
+pub(super) fn validate_position(client: &ClientConfig, offset: usize) -> io::Result<()> {
+    client.validate_quic_key_exchange(offset == 0)?;
+    crate::quic_client::validate_resolved(client, offset == 0)?;
+    validate_position_flags(client.protocol.is_direct(), offset)
+}
+
+pub(super) fn validate_position_flags(direct: bool, offset: usize) -> io::Result<()> {
+    if offset != 0 {
+        if direct {
+            return Err(invalid(format!(
+                "Direct connectors can only be used at hop 0, not hop {offset}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{
+        ResolvedConfig as Config, ResolvedRuleActionConfig as RuleActionConfig, ValidatedConfigs,
+        create_server_configs,
+    };
+    use serde_json::{Value, json};
+
+    fn measure(hop: &ClientChainHop, depth: usize) -> io::Result<(usize, usize)> {
+        crate::config::plan_ops::measure(hop, depth, client_nodes)
+    }
+
+    fn proxy(name: &str) -> Value {
+        json!({"name":name,"address":"192.0.2.1:443","protocol":{"type":"http"}})
+    }
+
+    fn validate(value: Value) -> io::Result<ValidatedConfigs> {
+        create_server_configs(serde_json::from_value(value).map_err(io::Error::other)?)
+    }
+
+    fn route(value: &ValidatedConfigs) -> &ClientChain {
+        let Config::Server(server) = &value.configs[0] else {
+            panic!()
+        };
+        let rule = server.rules.iter().next().unwrap();
+        let RuleActionConfig::Allow { client_chains, .. } = &rule.action else {
+            panic!()
+        };
+        client_chains.iter().next().unwrap()
+    }
+
+    #[test]
+    fn group_wrappers_are_alternatives_and_bare_lists_are_sequences() {
+        let base = json!([
+            {"client_group":"a", "client_chains":[proxy("a-leaf")]},
+            {"client_group":"b", "client_chains":[proxy("b-leaf")]},
+            {"client_group":"out", "client_chains":[{"chain": ["a"]},{"chain": ["b"]}]},
+            {"address":"127.0.0.1:0","protocol":{"type":"socks"},
+             "rules":[{"mask":"0.0.0.0/0","action":"allow","client_chain":"out"}]}
+        ]);
+        let choices = validate(base.clone()).unwrap();
+        let hop = route(&choices).hops.iter().next().unwrap();
+        let ClientChainHop::Choice(group) = hop else {
+            panic!("group alternatives must remain a choice")
+        };
+        assert_eq!(group.members.len(), 2);
+        assert!(
+            group
+                .members
+                .iter()
+                .all(|member| member.hops.iter().count() == 1)
+        );
+        assert_eq!(measure(hop, 0).unwrap().1, 1);
+        let mut sequential = base;
+        sequential[2]["client_chains"] = json!(["a", "b"]);
+        let sequential = validate(sequential).unwrap();
+        let hop = route(&sequential).hops.iter().next().unwrap();
+        let ClientChainHop::Choice(group) = hop else {
+            panic!("multi-hop members must retain their choice boundary")
+        };
+        assert_eq!(group.members.len(), 1);
+        assert_eq!(group.members[0].hops.iter().count(), 2);
+        assert_eq!(measure(hop, 0).unwrap().1, 2);
+    }
+
+    #[test]
+    fn named_groups_compose_different_length_paths_without_crossing_branches() {
+        let validated = validate(json!([
+            {"client_group":"a1-selected","type":"selector","client_chains":[proxy("a1")]},
+            {"client_group":"nl-hop","client_chains":[proxy("nl")]},
+            {"client_group":"a1-selected-nl","client_chains":[{"chain":["a1-selected","nl-hop"]}]},
+            {"client_group":"geo-reddit-selected","type":"selector","default":"a1-selected-nl",
+             "client_chains":[{"chain": ["a1-selected"]},{"chain": ["a1-selected-nl"]},{"chain": ["direct"]}]},
+            {"address":"127.0.0.1:0","protocol":{"type":"socks"},
+             "rules":[{"mask":"0.0.0.0/0","action":"allow","client_chain":"geo-reddit-selected"}]}
+        ]))
+        .unwrap();
+        let ClientChainHop::Choice(group) = route(&validated).hops.iter().next().unwrap() else {
+            panic!()
+        };
+        assert_eq!(group.labels, ["a1-selected", "a1-selected-nl", "DIRECT"]);
+        assert_eq!(
+            group
+                .members
+                .iter()
+                .map(|chain| measure(chain.hops.iter().next().unwrap(), 0).unwrap().1)
+                .collect::<Vec<_>>(),
+            [1, 2, 1]
+        );
+        let catalog = validated.catalog.unwrap();
+        assert_eq!(
+            catalog.selection.snapshot()["geo-reddit-selected"],
+            "a1-selected-nl"
+        );
+        let named = catalog.route("a1-selected-nl").unwrap();
+        assert_eq!(measure(named.hops.iter().next().unwrap(), 0).unwrap().1, 2);
+    }
+
+    #[test]
+    fn group_pool_stages_are_available_to_forwarding_and_probe_routes() {
+        for field in ["client_chain", "client_chains"] {
+            let validated = validate(json!([
+                {"client_group":"a", "client_chain":proxy("a-leaf")},
+                {"client_group":"b", "client_chain":proxy("b-leaf")},
+                {"client_group":"exit", "client_chain":proxy("exit-leaf")},
+                {"client_group":"out", "type":"selector", "default":"pooled",
+                 field:{"name":"pooled", "chain":[{"pool":["a", "b"]}, "exit"]}},
+                {"address":"127.0.0.1:0", "protocol":{"type":"socks"},
+                 "rules":[{"mask":"0.0.0.0/0", "client_chain":"out"}]}
+            ]))
+            .unwrap();
+            let probe = validated.catalog.as_ref().unwrap().route("out").unwrap();
+            for chain in [route(&validated), &probe] {
+                let ClientChainHop::Choice(group) = chain.hops.iter().next().unwrap() else {
+                    panic!()
+                };
+                assert_eq!(group.labels, ["pooled"]);
+                let hops: Vec<_> = group.members[0].hops.iter().collect();
+                assert_eq!(hops.len(), 2);
+                let ClientChainHop::Choice(pool) = hops[0] else {
+                    panic!()
+                };
+                assert_eq!(pool.members.len(), 2);
+                assert_eq!(
+                    clients(hops[0])
+                        .map(|client| client.name.as_deref().unwrap())
+                        .collect::<Vec<_>>(),
+                    ["a-leaf", "b-leaf"]
+                );
+                assert_eq!(
+                    clients(hops[1]).next().unwrap().name.as_deref(),
+                    Some("exit-leaf")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn group_chain_wrappers_are_strict_and_selector_labels_are_explicit() {
+        for members in [
+            json!([]),
+            json!([{"chain":[]}]),
+            json!([{"chain":["direct"],"typo":true}]),
+            json!([{"chain":["direct"],"protocol":{"type":"direct"}}]),
+            json!([{"chain":[{"chain":["direct"]}]}]),
+        ] {
+            assert!(
+                validate(json!([{"client_group":"out","client_chains":members}])).is_err(),
+                "{members}"
+            );
+        }
+        assert!(validate(json!([{"client_group":"out","type":"selector","client_chains":[{"chain":["direct", proxy("exit")]}]}])).is_err());
+        validate(json!([{"client_group":"out","type":"selector","client_chains":[{"name":"local","chain":["direct"]}]}])).unwrap();
+        assert!(
+            validate(json!([
+                {"client_group":"out","client_chains":[{"name":"local","chain":["direct"]}]},
+                {"client_group":"bad","client_chains":["local"]}
+            ]))
+            .is_err(),
+            "choice labels must not create a routing namespace"
+        );
+    }
+
+    #[test]
+    fn chain_references_participate_in_cycle_detection() {
+        for members in [json!([{"chain":["a"]}]), json!([{"chain":["b"]}])] {
+            assert!(
+                validate(json!([
+                    {"client_group":"a","client_chains":members},
+                    {"client_group":"b","client_chains":["a"]}
+                ]))
+                .err()
+                .unwrap()
+                .to_string()
+                .to_ascii_lowercase()
+                .contains("circular dependency")
+            );
+        }
+    }
+
+    #[test]
+    fn unused_groups_and_nested_choices_obey_physical_hop_restrictions() {
+        for members in [
+            json!([{"chain":[proxy("first"),"direct"]}]),
+            json!([{"chain":[proxy("first"),"tail"]}]),
+        ] {
+            let error = validate(json!([
+                {"client_group":"tail","client_chains":[{"chain": ["direct"]},{"chain": [proxy("last")]}]},
+                {"client_group":"out","client_chains":members}
+            ]))
+            .err()
+            .unwrap();
+            assert!(error.to_string().contains("hop 0"), "{error}");
+        }
+    }
+
+    #[test]
+    fn physical_hop_limit_counts_sequences_and_the_longest_alternative() {
+        let hops = |name: &str, length: usize| {
+            (0..length)
+                .map(|index| proxy(&format!("{name}-{index}")))
+                .collect::<Vec<_>>()
+        };
+        let server = |chain: Value| {
+            json!({"address":"127.0.0.1:0","protocol":{"type":"socks"},
+                "rules":[{"mask":"0.0.0.0/0","client_chain":chain}]})
+        };
+        let assert_length = |chain: &ClientChain, expected| {
+            super::validate(&chain.hops).unwrap();
+            assert_eq!(
+                chain
+                    .hops
+                    .iter()
+                    .map(|hop| measure(hop, 0).unwrap().1)
+                    .sum::<usize>(),
+                expected
+            );
+        };
+        let assert_limit = |error: io::Error| {
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+            assert!(error.to_string().contains("64 hops"), "{error}");
+        };
+
+        let inline = validate(json!([server(json!(hops("inline", 64)))])).unwrap();
+        assert_length(route(&inline), 64);
+        assert_limit(
+            validate(json!([server(json!(hops("inline", 65)))]))
+                .err()
+                .unwrap(),
+        );
+
+        for (prefix, alternatives, used, accepted) in [
+            (0, [64, 64], true, true),
+            (0, [1, 64], true, true),
+            (1, [1, 63], true, true),
+            (1, [1, 64], true, false),
+            (0, [1, 65], true, false),
+            (0, [1, 65], false, false),
+        ] {
+            let mut stages = hops("prefix", prefix);
+            stages.push(json!("choices"));
+            let branches: Vec<_> = alternatives
+                .into_iter()
+                .enumerate()
+                .map(|(index, length)| {
+                    let name = format!("branch-{index}");
+                    json!({"name":name,"chain":hops(&name, length)})
+                })
+                .collect();
+            let mut config = vec![
+                json!({"client_group":"choices","type":"selector","default":"branch-0",
+                    "client_chains":branches}),
+                json!({"client_group":"out","client_chains":stages}),
+            ];
+            if used {
+                config.push(server(json!("out")));
+            }
+            let result = validate(json!(config));
+            if accepted {
+                let validated = result.unwrap();
+                let expected = prefix + alternatives.into_iter().max().unwrap();
+                assert_length(route(&validated), expected);
+                let probe = validated.catalog.as_ref().unwrap().route("out").unwrap();
+                assert_length(&probe, expected);
+            } else {
+                assert_limit(result.err().unwrap());
+            }
+        }
+    }
+
+    #[test]
+    fn expansion_is_bounded_before_exponential_materialization() {
+        let mut groups = vec![json!({"client_group":"g0","client_chains":["direct"]})];
+        for index in 1..20 {
+            let previous = format!("g{}", index - 1);
+            groups.push(
+                json!({"client_group":format!("g{index}"),"client_chains":[{"chain": [previous]},{"chain": [previous]}]}),
+            );
+        }
+        let error = validate(json!(groups)).err().unwrap();
+        assert!(error.to_string().contains("16384 nodes"), "{error}");
+    }
+
+    #[test]
+    fn fixed_aliases_have_the_same_depth_in_forwarding_and_probe_routes() {
+        for explicit_chain in [false, true] {
+            let mut groups =
+                vec![json!({"client_group":"g0","type":"selector","client_chains":["direct"]})];
+            for index in 1..256 {
+                let previous = format!("g{}", index - 1);
+                let member = if explicit_chain {
+                    json!({"chain":[previous]})
+                } else {
+                    json!(previous)
+                };
+                groups.push(json!({"client_group":format!("g{index}"),"client_chains":[member]}));
+            }
+            let validated = validate(json!(groups)).unwrap();
+            let chain = validated.catalog.unwrap().route("g255").unwrap();
+            super::validate(&chain.hops).unwrap();
+        }
+    }
+
+    #[test]
+    fn probe_node_budget_counts_normalized_routes_not_fixed_alias_visits() {
+        let mut groups = vec![json!({"client_group":"g0","client_chains":[proxy("leaf")]})];
+        for index in 1..=16 {
+            groups.push(json!({"client_group":format!("g{index}"),"client_chains":[format!("g{}",index-1)]}));
+        }
+        groups.extend([
+            json!({"client_group":"wide","client_chains":vec![json!({"chain":["g16"]});1024]}),
+            json!({"client_group":"out","type":"selector",
+                "client_chains":["wide"]}),
+        ]);
+        let validated = validate(json!(groups)).unwrap();
+        let catalog = validated.catalog.unwrap();
+        for (name, nodes) in [("wide", 1025), ("out", 1026)] {
+            let chain = catalog.route(name).unwrap();
+            assert_eq!(
+                measure(chain.hops.iter().next().unwrap(), 0).unwrap().0,
+                nodes
+            );
+            super::validate(&chain.hops).unwrap();
+        }
+    }
+
+    #[test]
+    fn repeated_url_test_references_validate_within_the_node_budget() {
+        let members = vec![json!({"chain":["auto"]}); 2048];
+        validate(json!([
+            {"client_group":"auto","type":"url-test","url":"http://probe.invalid/","client_chains":["direct"]},
+            {"client_group":"wide","client_chains":members}
+        ])).unwrap();
+    }
+}

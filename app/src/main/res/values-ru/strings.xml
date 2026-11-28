@@ -386,7 +386,6 @@
     <string name="node_edit_reality_public_key">Открытый ключ Reality</string>
     <string name="node_edit_reality_short_id">Короткий ID Reality</string>
     <string name="network_probe_not_tested">Не проверено</string>
-    <string name="network_probe_disabled">Отключено</string>
     <string name="network_probe_failed">Нет ответа; нажмите для повтора</string>
     <string name="settings_fake_dns_title">Совместимость доменов (FakeIP)</string>
     <string name="settings_fake_dns_summary">Ядро прокси выбирает адреса сайтов; действует в режимах прокси</string>

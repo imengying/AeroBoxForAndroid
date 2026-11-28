@@ -1,7 +1,6 @@
 package com.aerobox.core.native
 
 import android.content.Context
-import android.net.NetworkCapabilities
 import android.util.Log
 import com.aerobox.AeroBoxApplication
 import com.aerobox.core.logging.CrashDiagnostics
@@ -58,29 +57,8 @@ object RustCore {
         catch (error: Exception) { error.message ?: "unknown error" }
     }
 
-    private val probesLock = Any()
-    private var standalone: PhysicalNetworkCallbacks? = null
-    private var probeUsers = 0
-    private fun acquireProbePlatform(): PhysicalNetworkCallbacks = synchronized(probesLock) {
-        val platform = standalone ?: run {
-            val connectivity = AeroBoxApplication.connectivity
-            val network = connectivity.activeNetwork?.takeIf {
-                connectivity.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) == true
-            } ?: error("No physical network available for latency test")
-            PhysicalNetworkCallbacks(applicationContext, connectivity, network).also {
-                try { it.startNetworkMonitoring() } catch (failure: Throwable) { it.close(); throw failure }
-                standalone = it
-            }
-        }
-        probeUsers++
-        platform
-    }
-    private fun releaseProbePlatform(platform: PhysicalNetworkCallbacks) = synchronized(probesLock) {
-        check(standalone === platform && probeUsers > 0)
-        if (--probeUsers == 0) {
-            standalone = null
-            platform.close()
-        }
+    private val probePlatforms by lazy {
+        StandaloneProbePlatforms(applicationContext, AeroBoxApplication.connectivity)
     }
 
     suspend fun urlTestOutbound(
@@ -91,16 +69,20 @@ object RustCore {
         platformInterface: RustCoreNative.PlatformCallbacks?
     ): Int = withContext(Dispatchers.IO) {
         awaitReady()
-        var temporary: PhysicalNetworkCallbacks? = null
         try {
-            val platform = platformInterface ?: acquireProbePlatform().also { temporary = it }
-            RustCoreNative.urlTestConfig(configContent, outboundTag, testUrl, timeoutMs.toLong(), platform)
+            if (platformInterface != null) {
+                RustCoreNative.urlTestConfig(configContent, outboundTag, testUrl, timeoutMs.toLong(), platformInterface)
+            } else {
+                probePlatforms.use { platform ->
+                    RustCoreNative.urlTestConfig(configContent, outboundTag, testUrl, timeoutMs.toLong(), platform)
+                }
+            }
         } catch (error: CancellationException) { throw error }
         catch (error: Exception) {
             val message = error.message ?: "unknown error"
             Log.w(TAG, "urlTestOutbound failed: $message")
             RuntimeLogBuffer.appendError("urlTestOutbound failed: $message")
             -1
-        } finally { temporary?.let(::releaseProbePlatform) }
+        }
     }
 }

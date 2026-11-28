@@ -1,0 +1,329 @@
+---
+title: "TUN Config"
+description: shoes tun config configuration.
+---
+
+TUN (network TUNnel) devices operate at the IP layer (Layer 3), allowing shoes to act as a transparent VPN.
+
+```yaml
+# Linux: Create TUN device by name
+device_name: string            # Device name (e.g., "tun0")
+address: string                # Device IP address (e.g., "10.0.0.1")
+netmask: string?               # Netmask (e.g., "255.255.255.0")
+destination: string?           # Gateway/destination (Linux only)
+
+# iOS/Android: Use existing file descriptor
+device_fd: int                 # FD from VpnService (Android) or NEPacketTunnelProvider (iOS)
+
+# Common settings
+mtu: 1500                      # Default: 1500 (Linux), 9000 (Android), 4064 (iOS)
+tcp_enabled: true              # Default: true
+udp_enabled: true              # Default: true
+icmp_enabled: true             # Default: true
+dns_hijack: true               # Optional: intercept TCP/UDP port 53 independently of fake-IP
+
+# Routing rules
+rules: [RuleConfig]
+```
+
+**Platform notes:**
+- **Linux**: Requires root or `CAP_NET_ADMIN`. Creates device with specified name/address.
+- **Android**: Use `device_fd` from `VpnService.Builder.establish()`. Routes configured via VpnService.
+- **iOS**: Use `device_fd` from `NEPacketTunnelProvider.packetFlow`.
+
+## Resource limits and device framing
+
+`resource_limits` is an optional object on the TUN entry. Omitted admission
+limits are unlimited; a specified admission limit must be positive.
+
+| Field | Default | Constraint |
+| --- | --- | --- |
+| `tcp_buffer_size` | 131,072 bytes (128 KiB) | 1,024-16,777,216 bytes |
+| `tcp_memory_bytes` | Unlimited | At least four times `tcp_buffer_size` |
+| `max_tcp_connections` | Unlimited | Positive integer |
+| `max_udp_sessions` | Unlimited | Positive integer |
+| `max_udp_destinations` | Unlimited | Positive integer |
+| `max_udp_destinations_per_session` | Unlimited | Positive integer |
+| `max_udp_queued_bytes` | Unlimited | At least 65,535 bytes |
+
+Each TCP flow in the TUN stack has four buffers, totaling 512 KiB of capacity at the
+default size, plus other connection overhead. Without admission caps, total
+buffer capacity grows with the connection count. Set `tcp_buffer_size: 32768`
+for a lower-memory 32 KiB setting, or use `tcp_memory_bytes` to bound admission.
+A memory budget admits at most `tcp_memory_bytes / (4 * tcp_buffer_size)` flows;
+it does not include other process memory. WireGuard retains its separate
+32 KiB buffer default.
+
+**Upgrade note:** If `tcp_memory_bytes` is set without `tcp_buffer_size`, the
+new default lowers the memory-derived connection limit: a 32 MiB budget permits
+64 flows instead of 256. Previously valid budgets below 524,288 bytes now fail
+validation with the new default. Explicitly set `tcp_buffer_size: 32768` to
+retain the previous buffer size and admission calculation.
+
+When both TCP memory and connection caps are set, the lower effective
+connection count applies. These limits are separate from
+[process-wide admission](/config/global-settings/#admission-caps).
+
+UDP replies wait for capacity in the bounded response and TUN-output queues
+rather than dropping packets when a burst briefly fills either queue. Upload
+queues hold up to 128 packets per stage (TUN ingress, source session, and
+destination); saturation still drops packets so a slow destination cannot block
+other flows. Kernel UDP buffers and TUN device queues can also drop packets
+under overload.
+`max_udp_queued_bytes` limits queued upload payloads, not all UDP memory;
+`tcp_buffer_size` does not change UDP queue capacity.
+
+`segmentation_offload` controls TCPv4 transmit offload on a created Linux
+device. Omission tries it automatically and falls back to ordinary packets if
+initialization fails; `false` disables it and `true` requires it at startup.
+Explicit enablement is rejected with `device_fd`, packet-information headers,
+or non-Linux devices. IPv6 continues using ordinary MTU-sized packets.
+
+Devices shoes creates on iOS and macOS always use four-byte packet-information
+headers; this cannot be disabled. For a supplied `device_fd`,
+`packet_information` defaults to `true` on iOS/macOS and `false` elsewhere.
+If an iOS or macOS app supplies a header-less FD, including one bridged from
+the packet-flow API, explicitly set `packet_information: false`. This setting
+does not configure routes in the host VPN service.
+
+**Example (Linux):**
+```yaml
+- device_name: "tun0"
+  address: "10.0.0.1"
+  netmask: "255.255.255.0"
+  mtu: 1500
+  tcp_enabled: true
+  udp_enabled: true
+  rules:
+    - masks: "0.0.0.0/0"
+      action: allow
+      client_chain:
+        address: "proxy.example.com:443"
+        protocol:
+          type: tls
+          protocol:
+            type: vless
+            user_id: "uuid"
+```
+
+### Managed Linux Desktop Capture
+
+`auto_route: true` gives the shoes process ownership of one nonpersistent TUN,
+private routing table, policy rules, nftables table, and optional per-link DNS
+configuration. It captures host-originated TCP/UDP using conntrack-aware output
+marking. Both protocols use the existing TUN engine unless `auto_redirect: true`
+selects kernel TCP REDIRECT. The system `nft` executable runs only for control-plane
+changes and reconciliation, not per packet or connection.
+
+See [the desktop example](/examples/tun_desktop/) and
+[the systemd unit on master](https://github.com/cfal/shoes/blob/master/examples/shoes-desktop.service).
+These are manual deployment examples, not files installed by the release archive.
+The unit expects the binary at `/usr/local/bin/shoes` and configuration at
+`/etc/shoes/desktop.yaml`; install it as
+`/etc/systemd/system/shoes-desktop.service` to run under systemd. The
+configuration example forwards DIRECT; replace its `rules` with the desired
+proxy policy before using it as a proxy.
+
+```yaml
+- device_name: shoes0
+  auto_route: true
+  auto_redirect: true
+  addresses: [10.233.0.1/30, 'fd73:686f:6573::1/126']
+  bootstrap_dns: ['1.1.1.1:53', '9.9.9.9:53']
+  auto_dns: true
+  dns_hijack: true
+  dns:
+    servers: ['udp://1.1.1.1', 'tcp://1.1.1.1']
+  rules: allow-all-direct
+```
+
+| Field | Managed Behavior |
+|---|---|
+| `auto_route` | Enables process-owned Linux capture; default `false` |
+| `auto_redirect` | Uses kernel TCP REDIRECT; requires `auto_route`; default `false` |
+| `addresses` | One local CIDR per family; cannot combine with manual `address`, `netmask`, `destination`, or supplied FDs |
+| `route_address` | Captured destination CIDRs; default `[0.0.0.0/0, '::/0']` |
+| `route_exclude_address` | Explicit destination exclusions, including DNS except automatic DNS endpoints; default empty |
+| `bootstrap_dns` | Required literal real DNS socket addresses, never a loopback stub or TUN subnet |
+| `auto_dns` | Attempts to publish transient systemd-resolved settings on the owned link; default `true` |
+| `dns_hijack` | Intercepts TCP/UDP port 53; defaults `true` when managed, otherwise follows fake-IP policy |
+| `linux.table` | Private route table; default `12000` |
+| `linux.rule_priority` | Policy rule priority; default `12000` |
+| `linux.capture_mark` | Capture bit; default `536870912` (`0x20000000`) |
+| `linux.bypass_mark` | shoes socket bypass bit; default `1073741824` (`0x40000000`) |
+| `linux.mark_mask` | Combined reserved bits; default `1610612736` (`0x60000000`) |
+
+Requirements: Linux, `/dev/net/tun`, trusted system `nft` with JSON support, and
+network-administration privileges. Automatic DNS additionally requires a running
+systemd-resolved, `busctl` with JSON support, and authorization to
+configure the owned link. Automatic DNS setup and cleanup are best-effort, with
+bounded helper calls. Missing services, failed namespace checks, and configuration
+errors produce warnings rather than stopping capture. Failed setup may leave
+partial per-link settings until cleanup; system DNS routing through shoes is not
+guaranteed in that case. Resolver settings are not continuously monitored or
+restored after external changes, and resolver restarts do not stop the proxy.
+Namespace checks assume a standard local system bus whose
+listener and daemon share a PID namespace, with procfs mounted for that namespace;
+resolved must share shoes' network namespace. Custom bus arrangements should use
+`auto_dns: false`. Restart shoes to reapply automatic DNS after restarting the
+resolver or system bus. The supplied
+service runs as root with a bounded
+capability set. File capabilities on shoes alone do not grant privileges to
+`nft` children or authorize resolved changes.
+
+Use `auto_dns: false` for externally managed DNS. shoes never rewrites
+`/etc/resolv.conf`. Bootstrap and native resolution use protected shoes sockets
+while managed mode is active; listener bind addresses must be literal IPs.
+Real DNS does not require fake-IP. Automatic DNS requires interception and room
+after each interface address for its adjacent virtual DNS endpoint. Settings are
+published after ingress workers start, without a separate DNS readiness probe.
+The owned link disables DNS-over-TLS, DNSSEC validation, LLMNR, and mDNS;
+upstream encryption and DNS policy belong in shoes' `dns` configuration.
+Cleanup attempts to revert per-link settings on the owned interface, even if
+another manager changed them while shoes was running. Removing the owned TUN also
+discards its transient resolver settings. Other links are not changed.
+Automatically published virtual DNS endpoints remain reachable over TCP/UDP
+port 53 even when `route_address` omits their subnet or `route_exclude_address`
+covers it.
+The managed TUN subnet is reserved for ingress:
+forwarding a connection back to that subnet is rejected, except local DNS handling.
+
+Native default routes are not required for startup or capture. A late policy
+rule at priority `32768`, only for families selected by `route_address`, sends
+locally originated, unmarked traffic without an
+earlier native route through the TUN for classification. IPv4-only or IPv6-only
+underlays can therefore carry both destination families through a suitable
+proxy. Protected Shoes outbounds never use this fallback: DIRECT connections
+and the transport to a proxy still require native connectivity in their own
+family. Explicit native unreachable, prohibit, and blackhole routes remain
+effective.
+
+Native routes can disappear or return without restarting capture. Connections
+started without a native route use the TUN's address as their source; existing
+captured flows retain their classification when connectivity changes. This does
+not guarantee recovery of sockets whose source address disappeared or whose
+connection attempt already failed. Traffic excluded from capture is dropped
+if its only route is the fallback, rather than being sent to a proxy.
+
+For explicitly IPv4-only capture, configure only an IPv4 address and
+`route_address: [0.0.0.0/0]`; IPv6
+then remains native. This is not an IPv6 blocking policy.
+
+When IPv6 is configured, shoes enables it on the owned TUN before assigning
+addresses, even if the interface inherits `net.ipv6.conf.default.disable_ipv6=1`.
+It does not change `all`, `default`, loopback, or physical-interface IPv6 settings.
+IPv4-only configurations leave the TUN's inherited IPv6 setting unchanged.
+
+TCP REDIRECT requires usable loopback for each accelerated family. If a loopback
+address is unavailable at startup, or IPv6 is disabled on loopback, shoes warns
+and uses the TUN TCP engine for that family instead. Traffic remains captured;
+other families can still use REDIRECT. This choice is retained across reloads;
+restart shoes after restoring loopback to enable acceleration. Losing loopback
+connectivity for an accelerated family, through address removal, IPv6 disablement,
+or taking the interface down, causes reconciliation to fail and the managed
+session to shut down.
+
+Loopback, local destinations, multicast, broadcast, link-local destinations,
+and connected networks remain native. DNS to connected networks is intercepted
+unless explicitly excluded. Replies to inbound services remain native. Existing
+tracked native flows remain native, including unreplied UDP; captured flows retain
+their selection. Traffic excluded from conntrack by foreign NOTRACK rules remains
+native.
+New TCP capture starts only with connection establishment. Invalid conntrack
+packets selected for capture are dropped. UDP flows created
+before conntrack was enabled cannot be identified reliably and may reset.
+Applications explicitly bound to a physical device remain native in both modes;
+address-bound TCP/UDP clients are supported. REDIRECT requires an unused adjacent
+virtual peer in each TUN subnet. Its private routes use that peer as their next
+hop, and only traffic routed through that peer is redirected. Traffic to the peer
+itself, including virtual DNS, stays on the TUN engine.
+Foreign-marked traffic is left to existing policy. Unsupported protocols remain
+native; ICMP handling is the existing synthetic echo behavior, not remote ICMP
+forwarding. This is host capture, not gateway or container forwarding.
+
+Conflicting tables, priorities (including the fixed fallback priority `32768`),
+mark reservations, or preceding nonlocal policy
+rules cause startup rejection. Other VPNs and firewall managers require explicit
+coexistence validation; shoes does not override foreign firewall decisions.
+REDIRECT also rejects native routes using its virtual peer as a gateway and
+opaque nexthop-object routes. Captured replies carry the capture mark before
+mark-aware reverse-path filtering.
+No universal VPN, firewall, resolver-manager, or distribution compatibility is
+promised.
+
+Reload retains the interface, capture, and redirect listener identities. Managed
+TUN topology configuration changes require restart and are rejected before retiring live workers.
+Ordinary worker reloads can reset existing connections and briefly interrupt
+traffic, but do not disable capture. Failed ordinary reloads roll back on the same
+network lease. Unexpected owned routing changes or a missing private firewall
+table cause orderly shutdown. Resolver-setting changes do not.
+
+After startup, changes to the underlying main-table default path, gateway, or
+explicit preferred source, and loss of the selected source address, trigger recovery
+in place. Ordinary IPv6 privacy-address rotation does not reset existing flows.
+Both IP families are monitored. A
+complete outage pauses forwarding until an underlay returns; temporary recovery
+failures are retried without removing capture. Recovery rebuilds DNS and proxy
+transports from the accepted in-memory configuration, not from edited files.
+Recovery shares worker startup and activation with configuration reload. After
+starting workers, it rechecks the underlay before resuming the controller, starting
+certificate workers, and admitting TCP/Unix connections. This is not an atomic
+barrier for all forwarding: managed ingress, QUIC, and WireGuard can start earlier.
+DNS bootstrap uses the configured lookup deadlines; slow or unbounded lookups
+can delay recovery, but shutdown remains cancellable.
+Explicit reloads wait while offline and can replace a configuration that prevents
+workers from restarting once an underlay is available, without first rebuilding
+the accepted DNS configuration.
+If worker startup or activation rejects a recovery reload while the underlay is
+stable, its workers are cleaned up and forwarding remains paused. Recovery
+schedules the accepted configuration for another attempt after two seconds, rather
+than immediately rolling back or re-reading the rejected file. An underlay change
+detected after worker startup instead keeps the reload pending for a later attempt,
+without another file edit or SIGHUP. Cleanup and network ownership failures still
+cause shutdown.
+The TUN, REDIRECT ports, fake-IP mappings, and explicit selector choices remain
+owned and retained. WireGuard peer hostnames are refreshed best-effort; a failed
+refresh retains the previous endpoints rather than blocking unrelated workers. Old flows,
+pending connections, and connections draining from earlier reloads are cancelled.
+Applications must reconnect; requests are not replayed and existing TCP/QUIC
+sessions are not migrated. TUN TCP resets are best-effort.
+
+Detection uses netlink notifications and periodic checks, with a short settling
+delay. It observes kernel route/source selection for representative off-link
+destinations, not Internet reachability or every destination-specific policy.
+Packet loss, captive portals, or a Wi-Fi change that preserves the observed
+routing and carrier state may not trigger recovery. Explicit `bind_interface`
+and listen-address settings remain fixed; they are never silently moved to another
+interface. A reset affects all proxy workers in this process, including local
+listeners.
+
+shoes exclusively owns its token-named `inet` nftables table, including all of its
+contents. Do not add rules, chains, or sets to that table: external changes inside
+it are neither audited nor preserved. Cleanup removes the exact owned table even
+if its contents have changed; other tables are left untouched. Connected-network
+sets are updated atomically through nftables and cached in memory, not journaled
+as firewall snapshots.
+
+A TUN egress guard is installed before its routes become usable. Activation
+atomically enables classification; deactivation atomically returns to a
+drop-only policy and attempts DNS cleanup. Only authorized captured traffic
+can leave through the TUN while active. Shutdown removes owned routing and the
+owned interface before removing the guard, so unselected traffic cannot enter
+the TUN during preparation or teardown.
+SIGKILL cannot run cleanup: the service's `ExecStopPost` invokes
+`shoes cleanup-tun`, and the next managed startup also reconciles stale state.
+Recovery uses a private namespace-scoped journal under `/run/shoes` to track
+cleanup identity and pending operations, not firewall policies. Interface and
+routing ownership checks remain strict; conflicting changes are refused, with
+errors reported. Temporary outages and lost connections are possible. Cached fake
+addresses may outlive shutdown. There is
+no kill switch, no automatic DIRECT fallback on upstream failure, and no
+uninterrupted fail-open guarantee.
+Outstanding helper processes retain the namespace lock, so recovery fails rather
+than racing a helper that could still commit. The service terminates remaining
+helpers before `ExecStopPost`; standalone operators must let them finish or stop
+them before retrying cleanup.
+The service retries without a start-rate limit. Read failures during
+reconciliation currently trigger cleanup and a supervised restart, not in-place
+repair. Cleanup errors retain the journal for retry. Until the owned table is
+removed, stale TCP REDIRECT rules can continue to reject connections.

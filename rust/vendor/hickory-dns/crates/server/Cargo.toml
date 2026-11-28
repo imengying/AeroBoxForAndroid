@@ -1,0 +1,142 @@
+[package]
+name = "hickory-server"
+
+description = """
+hickory-server is a library for integrating safe and secure DNS servers into
+an async Tokio application. It supports a variety of protocol features
+(DNSSEC, TSIG, SIG(0), DoT, DoQ, DoH). Servers can be operated in an authoritative
+role, or as a forwarding resolver, stub resolver, or a recursive resolver
+(experimental).
+"""
+
+documentation = "https://docs.rs/hickory-server"
+
+readme = "README.md"
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+
+[features]
+# Recursive Resolution is Experimental!
+recursor = ["hickory-resolver/recursor"]
+resolver = ["dep:hickory-resolver"]
+sqlite = ["dep:rusqlite"]
+blocklist = ["resolver"]
+toml = ["dep:toml", "hickory-resolver?/toml"]
+metrics = ["hickory-resolver?/metrics", "dep:metrics"]
+
+tls-aws-lc-rs = [
+    "hickory-net/tls-aws-lc-rs",
+    "hickory-resolver?/tls-aws-lc-rs",
+    "__tls",
+]
+https-aws-lc-rs = [
+    "hickory-net/https-aws-lc-rs",
+    "hickory-resolver?/https-aws-lc-rs",
+    "tls-aws-lc-rs",
+    "__https",
+]
+quic-aws-lc-rs = [
+    "hickory-net/quic-aws-lc-rs",
+    "hickory-resolver?/quic-aws-lc-rs",
+    "tls-aws-lc-rs",
+    "__quic",
+]
+h3-aws-lc-rs = [
+    "hickory-net/h3-aws-lc-rs",
+    "hickory-resolver?/h3-aws-lc-rs",
+    "quic-aws-lc-rs",
+    "__h3",
+]
+
+tls-ring = [
+    "hickory-net/tls-ring",
+    "hickory-resolver?/tls-ring",
+    "__tls",
+]
+https-ring = [
+    "hickory-net/https-ring",
+    "hickory-resolver?/https-ring",
+    "tls-ring",
+    "__https",
+]
+quic-ring = [
+    "hickory-net/quic-ring",
+    "hickory-resolver?/quic-ring",
+    "tls-ring",
+    "__quic",
+]
+h3-ring = [
+    "hickory-net/h3-ring",
+    "hickory-resolver?/h3-ring",
+    "quic-ring",
+    "__h3",
+]
+
+__tls = ["dep:rustls", "dep:tokio-rustls"]
+__https = ["dep:h2", "dep:http", "__tls"]
+__quic = ["__tls"]
+__h3 = ["dep:h3", "dep:h3-quinn", "__quic"]
+
+dnssec-aws-lc-rs = ["hickory-proto/dnssec-aws-lc-rs", "hickory-resolver?/dnssec-aws-lc-rs", "serde/rc", "__dnssec"]
+dnssec-ring = ["hickory-proto/dnssec-ring", "hickory-resolver?/dnssec-ring", "serde/rc", "__dnssec"]
+__dnssec = []
+
+webpki-roots = ["hickory-resolver?/webpki-roots"]
+rustls-platform-verifier = ["hickory-resolver?/rustls-platform-verifier"]
+
+testing = []
+
+[dependencies]
+async-trait.workspace = true
+toml = { workspace = true, optional = true }
+bytes.workspace = true
+cfg-if.workspace = true
+data-encoding.workspace = true
+futures-util = { workspace = true, default-features = false, features = ["std"] }
+h2 = { workspace = true, features = ["stream"], optional = true }
+h3 = { workspace = true, optional = true }
+h3-quinn = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+ipnet = { workspace = true, features = ["serde", "std"] }
+prefix-trie.workspace = true
+rusqlite = { workspace = true, features = ["bundled", "time"], optional = true }
+rustls = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
+time.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "sync"] }
+tokio-rustls = { workspace = true, optional = true }
+tokio-util.workspace = true
+hickory-proto = { workspace = true, features = ["serde"] }
+hickory-net = { workspace = true, features = ["tokio"] }
+hickory-resolver = { workspace = true, features = ["serde", "system-config", "tokio"], optional = true }
+metrics = { workspace = true, optional = true }
+
+[dev-dependencies]
+futures-executor = { workspace = true, default-features = false, features = ["std"] }
+test-support.workspace = true
+tokio = { workspace = true, features = ["macros", "rt"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "std"] }
+
+[package.metadata.docs.rs]
+all-features = true
+default-target = "x86_64-unknown-linux-gnu"
+targets = ["x86_64-apple-darwin", "x86_64-pc-windows-msvc"]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[package.metadata.cargo-all-features]
+skip_optional_dependencies = true
+max_combination_size = 2
+denylist = ["__tls", "__https", "__quic", "__h3", "__dnssec"]

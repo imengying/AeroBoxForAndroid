@@ -74,10 +74,6 @@ internal class VpnStateStore(private val now: () -> Long = System::currentTimeMi
         }
     }
 
-    fun updateNode(node: ProxyNode?) {
-        mutable.update { if (it.isConnected) it.copy(currentNode = node) else it }
-    }
-
     fun updateTraffic(uploadSpeed: Long, downloadSpeed: Long, uploadDelta: Long, downloadDelta: Long) {
         mutable.update { if (!it.isConnected) it else it.copy(traffic = TrafficStats(uploadSpeed, downloadSpeed,
             (it.traffic.totalUpload + uploadDelta).coerceAtLeast(0L), (it.traffic.totalDownload + downloadDelta).coerceAtLeast(0L))) }

@@ -1,0 +1,377 @@
+use async_trait::async_trait;
+use tokio::io::AsyncWriteExt;
+
+use crate::address::{Address, NetLocation, ResolvedLocation};
+use crate::async_stream::AsyncMessageStream;
+use crate::async_stream::AsyncStream;
+use crate::tcp::tcp_handler::{TcpClientHandler, TcpClientSetupResult};
+use crate::util::{allocate_vec, write_all};
+use crate::uuid_util::parse_vmess_user_id;
+
+use super::encryption::ClientEncryption;
+use super::vision_stream::{VisionStream, VisionWriteErrorPolicy};
+use super::vision_transport::VisionTransport;
+use super::vless_message_stream::VlessMessageStream;
+use super::vless_response_stream::VlessResponseStream;
+use super::vless_util::{COMMAND_MUX, COMMAND_TCP, COMMAND_UDP, vision_flow_addon_data};
+
+pub struct VlessTcpClientHandler {
+    user_id: Box<[u8]>,
+    udp_enabled: bool,
+    encryption: Option<ClientEncryption>,
+    vision: bool,
+    packet_encoding: Option<crate::packet_encoding::PacketEncoding>,
+    resolver: Option<std::sync::Arc<dyn crate::resolver::Resolver>>,
+}
+
+impl std::fmt::Debug for VlessTcpClientHandler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VlessTcpClientHandler")
+            .field("user_id", &self.user_id)
+            .field("udp_enabled", &self.udp_enabled)
+            .finish()
+    }
+}
+
+impl VlessTcpClientHandler {
+    pub(crate) fn with_packet_encoding(
+        mut self,
+        encoding: Option<crate::packet_encoding::PacketEncoding>,
+        resolver: std::sync::Arc<dyn crate::resolver::Resolver>,
+    ) -> std::io::Result<Self> {
+        if self.vision {
+            encoding
+                .unwrap_or(crate::packet_encoding::PacketEncoding::Xudp)
+                .validate_vision()?;
+        }
+        self.packet_encoding = encoding;
+        self.resolver = Some(resolver);
+        Ok(self)
+    }
+
+    pub(crate) fn new(
+        user_id: &str,
+        udp_enabled: bool,
+        encryption: Option<ClientEncryption>,
+        vision: bool,
+    ) -> std::io::Result<Self> {
+        if vision && encryption.is_none() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "VLESS-level Vision requires native encryption",
+            ));
+        }
+        Ok(Self {
+            user_id: parse_vmess_user_id(user_id).to_vec().into_boxed_slice(),
+            udp_enabled,
+            encryption,
+            vision,
+            packet_encoding: None,
+            resolver: None,
+        })
+    }
+}
+
+#[async_trait]
+impl TcpClientHandler for VlessTcpClientHandler {
+    async fn setup_client_tcp_stream(
+        &self,
+        mut client_stream: Box<dyn AsyncStream>,
+        remote_location: ResolvedLocation,
+    ) -> std::io::Result<TcpClientSetupResult> {
+        if let Some(encryption) = &self.encryption {
+            let stream = encryption.handshake(client_stream).await?;
+            if self.vision {
+                return setup_vision_vless_client_stream(
+                    stream,
+                    &self.user_id,
+                    remote_location.location(),
+                    VisionWriteErrorPolicy::AcknowledgeAccepted,
+                )
+                .await;
+            }
+            client_stream = Box::new(stream);
+        }
+        write_vless_header(
+            &mut client_stream,
+            &self.user_id,
+            &[],
+            remote_location.location(),
+        )
+        .await?;
+        client_stream.flush().await?;
+        let client_stream = Box::new(VlessResponseStream::new(client_stream));
+
+        Ok(TcpClientSetupResult {
+            client_stream,
+            early_data: None,
+        })
+    }
+
+    fn supports_udp_over_tcp(&self) -> bool {
+        self.udp_enabled // VLESS supports XUDP for UDP-over-TCP when enabled
+    }
+
+    async fn setup_client_udp_bidirectional(
+        &self,
+        mut client_stream: Box<dyn AsyncStream>,
+        target: ResolvedLocation,
+    ) -> std::io::Result<Box<dyn AsyncMessageStream>> {
+        if let Some(encryption) = &self.encryption {
+            let stream = encryption.handshake(client_stream).await?;
+            if self.vision {
+                return setup_vision_vless_udp_bidirectional(
+                    stream,
+                    &self.user_id,
+                    target.into_location(),
+                    VisionWriteErrorPolicy::AcknowledgeAccepted,
+                )
+                .await;
+            }
+            client_stream = Box::new(stream);
+        }
+        use crate::packet_encoding::{
+            PacketAddrStream, PacketEncoding, packet_addr_destination, packet_addr_target,
+        };
+        match self.packet_encoding.unwrap_or_default() {
+            PacketEncoding::Xudp => {
+                let mut header = vec![0];
+                header.extend_from_slice(&self.user_id);
+                header.extend_from_slice(&[0, COMMAND_MUX]);
+                client_stream.write_all(&header).await?;
+                client_stream.flush().await?;
+                let response = VlessResponseStream::new(client_stream);
+                Ok(Box::new(crate::xudp::client_stream::XudpClientStream::new(
+                    Box::new(response),
+                    target.into_location(),
+                )))
+            }
+            PacketEncoding::Native => {
+                write_vless_udp_header(&mut client_stream, &self.user_id, target.location())
+                    .await?;
+                client_stream.flush().await?;
+                let response = Box::new(VlessResponseStream::new(client_stream));
+                Ok(Box::new(VlessMessageStream::new(response)))
+            }
+            PacketEncoding::PacketAddr => {
+                let endpoint = packet_addr_target(target, self.resolver.as_ref()).await?;
+                write_vless_udp_header(
+                    &mut client_stream,
+                    &self.user_id,
+                    &packet_addr_destination(),
+                )
+                .await?;
+                client_stream.flush().await?;
+                let response = Box::new(VlessResponseStream::new(client_stream));
+                Ok(Box::new(PacketAddrStream::new(
+                    Box::new(VlessMessageStream::new(response)),
+                    endpoint,
+                )))
+            }
+        }
+    }
+}
+
+pub(crate) async fn setup_vision_vless_udp_bidirectional<S>(
+    mut stream: S,
+    user_id: &[u8],
+    target: NetLocation,
+    policy: VisionWriteErrorPolicy,
+) -> std::io::Result<Box<dyn AsyncMessageStream>>
+where
+    S: VisionTransport + 'static,
+{
+    stream.require_record_framing()?;
+    let addon = vision_flow_addon_data();
+    let mut header = vec![0];
+    header.extend_from_slice(user_id);
+    header.push(addon.len() as u8);
+    header.extend_from_slice(addon);
+    // MUX uses the implicit v1.mux.cool:666 destination, omitted from the wire header.
+    header.push(COMMAND_MUX);
+    stream.write_all(&header).await?;
+    stream.flush().await?;
+    let uuid = user_id.try_into().map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "VLESS UUID must be 16 bytes",
+        )
+    })?;
+    let vision = VisionStream::new_client(stream, uuid)?
+        .with_write_error_policy(policy)
+        .with_xudp();
+    Ok(Box::new(crate::xudp::client_stream::XudpClientStream::new(
+        Box::new(vision),
+        target,
+    )))
+}
+
+pub(crate) async fn setup_custom_tls_vision_vless_client_stream<S>(
+    tls_stream: S,
+    user_id: &[u8],
+    remote_location: &NetLocation,
+) -> std::io::Result<TcpClientSetupResult>
+where
+    S: VisionTransport + 'static,
+{
+    setup_vision_vless_client_stream(
+        tls_stream,
+        user_id,
+        remote_location,
+        VisionWriteErrorPolicy::Legacy,
+    )
+    .await
+}
+
+async fn setup_vision_vless_client_stream<S: VisionTransport + 'static>(
+    mut tls_stream: S,
+    user_id: &[u8],
+    remote_location: &NetLocation,
+    policy: VisionWriteErrorPolicy,
+) -> std::io::Result<TcpClientSetupResult> {
+    tls_stream.require_record_framing()?;
+    write_vless_header(
+        &mut tls_stream,
+        user_id,
+        vision_flow_addon_data(),
+        remote_location,
+    )
+    .await?;
+    tls_stream.flush().await?;
+
+    let mut user_uuid = [0u8; 16];
+    user_uuid.copy_from_slice(user_id);
+    let vision_stream =
+        VisionStream::new_client(tls_stream, user_uuid)?.with_write_error_policy(policy);
+
+    Ok(TcpClientSetupResult {
+        client_stream: Box::new(vision_stream),
+        early_data: None,
+    })
+}
+
+/// Write VLESS UDP header for single-target bidirectional UDP (COMMAND_UDP = 2).
+/// Same format as TCP header but with command=2.
+async fn write_vless_udp_header<S: AsyncWriteExt + Unpin>(
+    stream: &mut S,
+    user_id: &[u8],
+    remote_location: &NetLocation,
+) -> std::io::Result<()> {
+    // VLESS UDP header format (same as TCP but command=2):
+    // version (1 byte) + user_id (16 bytes) + addon_length (1 byte) + command (1 byte) + port (2 bytes) + address_type (1 byte) + address
+
+    // Calculate base header size: version + user_id + addon_length + command + port + address_type
+    let base_header_size = 1 + 16 + 1 + 1 + 2 + 1;
+    let mut header_bytes = allocate_vec(base_header_size);
+
+    // version 0
+    header_bytes[0] = 0;
+    // Copy user_id
+    header_bytes[1..17].copy_from_slice(user_id);
+    // addon length = 0
+    header_bytes[17] = 0;
+    // command = UDP (2)
+    header_bytes[18] = COMMAND_UDP;
+
+    // port (2 bytes, big-endian)
+    let remote_port = remote_location.port();
+    header_bytes[19] = (remote_port >> 8) as u8;
+    header_bytes[20] = (remote_port & 0xff) as u8;
+
+    // address_type
+    let address_type_offset = 21;
+
+    match remote_location.address() {
+        Address::Ipv4(v4addr) => {
+            header_bytes[address_type_offset] = 1;
+            header_bytes.extend_from_slice(&v4addr.octets());
+        }
+        Address::Ipv6(v6addr) => {
+            header_bytes[address_type_offset] = 3;
+            header_bytes.extend_from_slice(&v6addr.octets());
+        }
+        Address::Hostname(hostname) => {
+            if hostname.len() > 255 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Hostname is too long: {hostname}"),
+                ));
+            }
+
+            header_bytes[address_type_offset] = 2;
+            header_bytes.push(hostname.len() as u8);
+            header_bytes.extend_from_slice(hostname.as_bytes());
+        }
+    }
+
+    write_all(stream, &header_bytes).await?;
+
+    Ok(())
+}
+
+async fn write_vless_header<S: AsyncWriteExt + Unpin>(
+    stream: &mut S,
+    user_id: &[u8],
+    addon_data: &[u8],
+    remote_location: &NetLocation,
+) -> std::io::Result<()> {
+    // VLESS header format:
+    // version (1 byte) + user_id (16 bytes) + addon_length (1 byte) + addon_data + command (1 byte) + port (2 bytes) + address_type (1 byte) + address
+
+    // Calculate base header size: version + user_id + addon_length + addon_data + command + port + address_type
+    let base_header_size = 1 + 16 + 1 + addon_data.len() + 1 + 2 + 1;
+    let mut header_bytes = allocate_vec(base_header_size);
+
+    // version 0, we need to write since it's uninitialized
+    header_bytes[0] = 0;
+    // Copy user_id
+    header_bytes[1..17].copy_from_slice(user_id);
+
+    // addon length
+    header_bytes[17] = addon_data.len() as u8;
+
+    // Copy addon data if present
+    if !addon_data.is_empty() {
+        header_bytes[18..18 + addon_data.len()].copy_from_slice(addon_data);
+    }
+
+    let addon_end = 18 + addon_data.len();
+
+    // command (1 = tcp)
+    header_bytes[addon_end] = COMMAND_TCP;
+
+    // port (2 bytes, big-endian)
+    let remote_port = remote_location.port();
+    header_bytes[addon_end + 1] = (remote_port >> 8) as u8;
+    header_bytes[addon_end + 2] = (remote_port & 0xff) as u8;
+
+    // address_type
+    let address_type_offset = addon_end + 3;
+
+    match remote_location.address() {
+        Address::Ipv4(v4addr) => {
+            header_bytes[address_type_offset] = 1;
+            header_bytes.extend_from_slice(&v4addr.octets());
+        }
+        Address::Ipv6(v6addr) => {
+            header_bytes[address_type_offset] = 3;
+            header_bytes.extend_from_slice(&v6addr.octets());
+        }
+        Address::Hostname(hostname) => {
+            if hostname.len() > 255 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Hostname is too long: {hostname}"),
+                ));
+            }
+
+            header_bytes[address_type_offset] = 2;
+            header_bytes.push(hostname.len() as u8);
+            header_bytes.extend_from_slice(hostname.as_bytes());
+        }
+    }
+
+    write_all(stream, &header_bytes).await?;
+
+    Ok(())
+}

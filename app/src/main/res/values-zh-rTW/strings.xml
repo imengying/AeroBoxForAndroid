@@ -368,7 +368,6 @@
     <string name="node_edit_reality_public_key">Reality 公鑰</string>
     <string name="node_edit_reality_short_id">Reality Short ID</string>
     <string name="network_probe_not_tested">未檢測</string>
-    <string name="network_probe_disabled">已關閉</string>
     <string name="network_probe_failed">本次未連通，點按重試</string>
     <string name="settings_fake_dns_title">網域相容模式 (FakeIP)</string>
     <string name="settings_fake_dns_summary">由代理核心選擇網站位址，僅在代理模式生效</string>

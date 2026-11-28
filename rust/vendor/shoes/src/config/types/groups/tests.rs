@@ -1,0 +1,744 @@
+use super::*;
+use crate::address::{NetLocation, NetLocationMask};
+use crate::config::types::client::ClientProxyConfig;
+use crate::config::types::rules::ClientChain;
+use crate::config::types::rules::{ClientChainHop, RuleActionConfig};
+use crate::config::types::transport::Transport;
+use crate::option_util::NoneOrSome;
+use std::net::{IpAddr, Ipv4Addr};
+
+fn create_test_client_config() -> ClientConfig {
+    ClientConfig {
+        domain_resolver: None,
+        dial_options: Default::default(),
+        name: None,
+        control: None,
+        bind_interface: crate::option_util::NoneOrOne::One("eth0".to_string()),
+        address: NetLocation::from_ip_addr(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 1080),
+        protocol: ClientProxyConfig::Socks {
+            username: Some("client_user".to_string()),
+            password: Some("client_pass".to_string()),
+        },
+        transport: Transport::Tcp,
+        tcp_settings: None,
+        quic_settings: None,
+    }
+}
+
+fn create_test_rule_config() -> RuleConfig {
+    RuleConfig {
+        criteria: super::super::rules::RuleCriteria {
+            description: None,
+            expression: crate::rules::Expression::Legacy(OneOrSome::Some(vec![
+                NetLocationMask::from("192.168.0.0/16:80").unwrap(),
+                NetLocationMask::from("10.0.0.0/8:443").unwrap(),
+            ])),
+            ..Default::default()
+        },
+        action: RuleActionConfig::Allow {
+            override_address: Some(NetLocation::from_ip_addr(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                8080,
+            )),
+            client_chains: NoneOrSome::One(ClientChain {
+                hops: OneOrSome::One(ClientChainHop::Single(ConfigSelection::GroupName(
+                    "test-proxy-group".to_string(),
+                ))),
+            }),
+        },
+    }
+}
+
+#[test]
+fn test_client_config_group() {
+    let original = vec![Config::ClientConfigGroup(ClientConfigGroup {
+        group_type: Default::default(),
+        default: None,
+        client_group: "test-client-group".to_string(),
+        client_chains: OneOrSome::Some(vec![
+            ConfigSelection::Config(create_test_client_config()).into(),
+            ConfigSelection::Config(ClientConfig {
+                domain_resolver: None,
+                dial_options: Default::default(),
+                name: None,
+                control: None,
+                bind_interface: crate::option_util::NoneOrOne::None,
+                address: NetLocation::from_ip_addr(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 53),
+                protocol: ClientProxyConfig::Http {
+                    settings: Default::default(),
+                    username: None,
+                    password: None,
+                    resolve_hostname: false,
+                    http_version: Default::default(),
+                },
+                transport: Transport::Tcp,
+                tcp_settings: None,
+                quic_settings: None,
+            })
+            .into(),
+        ]),
+    })];
+
+    let yaml_str = serde_yaml::to_string(&original).expect("Failed to serialize");
+    let deserialized: Vec<Config> = serde_yaml::from_str(&yaml_str).expect("Failed to deserialize");
+
+    assert_eq!(deserialized.len(), 1);
+    let Config::ClientConfigGroup(group) = &deserialized[0] else {
+        panic!("Expected client config group");
+    };
+    assert_eq!(group.client_group, "test-client-group");
+    match &group.client_chains {
+        OneOrSome::Some(vec) => assert_eq!(vec.len(), 2),
+        OneOrSome::One(_) => panic!("Expected Some(vec), got One"),
+    }
+}
+
+#[test]
+fn test_client_config_group_with_group_refs() {
+    let yaml = r#"
+client_group: all-proxies
+client_chains:
+  - chain: [us-proxies]
+  - chain: [eu-proxies]
+"#;
+    let group: ClientConfigGroup = serde_yaml::from_str(yaml).unwrap();
+    assert_eq!(group.client_group, "all-proxies");
+    let proxies: Vec<_> = group.client_chains.into_vec();
+    assert_eq!(proxies.len(), 2);
+    assert!(
+        matches!(&proxies[0], super::ClientGroupMember::Client(ConfigSelection::GroupName(n)) if n == "us-proxies")
+    );
+    assert!(
+        matches!(&proxies[1], super::ClientGroupMember::Client(ConfigSelection::GroupName(n)) if n == "eu-proxies")
+    );
+}
+
+#[test]
+fn test_client_config_group_mixed() {
+    let yaml = r#"
+client_group: mixed-group
+client_chains:
+  - chain: [other-group]
+  - chain:
+      - address: "127.0.0.1:1080"
+        protocol:
+          type: direct
+"#;
+    let group: ClientConfigGroup = serde_yaml::from_str(yaml).unwrap();
+    let proxies: Vec<_> = group.client_chains.into_vec();
+    assert_eq!(proxies.len(), 2);
+    assert!(matches!(
+        &proxies[0],
+        super::ClientGroupMember::Client(ConfigSelection::GroupName(_))
+    ));
+    assert!(matches!(
+        &proxies[1],
+        super::ClientGroupMember::Client(ConfigSelection::Config(_))
+    ));
+}
+
+#[test]
+fn policy_and_source_groups_are_explicit_and_roundtrip() {
+    for yaml in [
+        "rule_group: policies\nrules: [{masks: example.com}]",
+        "rule_group: policies\nrule: {mask: example.com, action: block}",
+        "rule_group: policies\nrules: [{conditions: {masks: example.com}, action: block}]",
+    ] {
+        let group: RuleConfigGroup = serde_yaml::from_str(yaml).unwrap();
+        assert!(group.rules.iter().next().is_some());
+        let encoded = serde_yaml::to_string(&group).unwrap();
+        let group: RuleConfigGroup = serde_yaml::from_str(&encoded).unwrap();
+        assert!(group.rules.iter().next().is_some());
+    }
+    for yaml in [
+        "rule_source_group: files\nrules: [a.srs, {path: b, format: srs}]",
+        "rule_source_group: files\nrule: a.srs",
+        "rule_source_group: files\nrule: [{domain: [example.com]}, {path: b, format: srs}]",
+        "rule_source_group: files\nrules: {all: [{domain_suffix: [example.com]}, {destination_port: [443]}]}",
+        "rule_source_group: files\nrules: [a.srs, {masks: example.com}]",
+        "rule_source_group: files\nrules: [{rule_source_group: other}]",
+    ] {
+        let group: RuleSourceGroup = serde_yaml::from_str(yaml).unwrap();
+        assert!(!group.rules.is_empty());
+        let encoded = serde_yaml::to_string(&group).unwrap();
+        let group: RuleSourceGroup = serde_yaml::from_str(&encoded).unwrap();
+        assert!(!group.rules.is_empty());
+    }
+    for (rules, error) in [
+        ("[]", "cannot be empty"),
+        (
+            "[a.srs, {conditions: example.com}]",
+            "unknown rule predicate",
+        ),
+        (
+            "[{domain: [example.com], action: block}]",
+            "exactly one predicate",
+        ),
+        ("[{path: a.srs, action: block}]", "unknown field `action`"),
+        ("[{path: a.srs, fromat: srs}]", "unknown field `fromat`"),
+        ("[{rule_group: other}]", "use {rule_source_group: name}"),
+    ] {
+        let result = serde_yaml::from_str::<RuleSourceGroup>(&format!(
+            "rule_source_group: x\nrules: {rules}"
+        ));
+        assert!(result.unwrap_err().to_string().contains(error), "{rules}");
+    }
+    let error = serde_yaml::from_str::<Config>("rule_set: old\npath: a.srs").unwrap_err();
+    assert!(error.to_string().contains("replaced by rule_source_group"));
+}
+
+#[test]
+fn source_group_mask_leaf_round_trips_without_becoming_a_file() {
+    use crate::rules::{Compiler, Outcome};
+
+    let group: RuleSourceGroup =
+        serde_yaml::from_str("rule_source_group: addresses\nrules: {masks: example.com}").unwrap();
+    let encoded = serde_json::to_value(&group).unwrap();
+    assert_eq!(
+        encoded["rules"][0],
+        serde_json::json!({"masks": "example.com"})
+    );
+    let group: RuleSourceGroup = serde_json::from_value(encoded).unwrap();
+    let predicate = Compiler::default()
+        .compile(group.rules.into_iter().next().unwrap())
+        .unwrap();
+    assert_eq!(
+        predicate.evaluate(Some("sub.example.com"), None, 443),
+        Outcome::Match
+    );
+    assert_eq!(
+        predicate.evaluate(Some("other.example"), None, 443),
+        Outcome::Miss
+    );
+}
+
+#[test]
+fn policy_group_errors_preserve_element_details_and_migration_guidance() {
+    for (rules, expected) in [
+        (
+            "[{masks: example.com, acton: block}]",
+            "unknown field `acton`",
+        ),
+        (
+            "{masks: example.com, acton: block}",
+            "unknown field `acton`",
+        ),
+        ("[true]", "a policy rule requires a mapping"),
+        ("[]", "cannot be empty"),
+        (
+            "[a.srs]",
+            "action-free file sources moved to rule_source_group",
+        ),
+        (
+            "a.srs",
+            "action-free file sources moved to rule_source_group",
+        ),
+    ] {
+        let error =
+            serde_yaml::from_str::<Config>(&format!("rule_group: policies\nrules: {rules}"))
+                .unwrap_err()
+                .to_string();
+        assert!(error.contains(expected), "{rules}: {error}");
+    }
+    let group: RuleConfigGroup =
+        serde_yaml::from_str("rule_group: policies\nrules: [{path: a.srs}]").unwrap();
+    assert!(matches!(
+        group.rules.iter().next().unwrap().action,
+        RuleActionConfig::Allow { .. }
+    ));
+}
+
+#[test]
+fn chain_aliases_share_route_group_and_dns_sequence_semantics() {
+    use crate::config::DnsServerSpec;
+    use serde_json::{Value, json};
+
+    fn hops(chains: impl IntoIterator<Item = ClientChain>) -> Vec<Vec<Value>> {
+        chains
+            .into_iter()
+            .map(|chain| {
+                chain
+                    .hops
+                    .iter()
+                    .map(|hop| serde_json::to_value(hop).unwrap())
+                    .collect()
+            })
+            .collect()
+    }
+
+    let inline =
+        json!({"name":"exit", "address":"proxy.invalid:1080", "protocol":{"type":"socks"}});
+    for field in ["client_chain", "client_chains"] {
+        for (value, lengths) in [
+            (json!("a"), vec![1]),
+            (inline.clone(), vec![1]),
+            (json!(["a", "b"]), vec![2]),
+            (json!(["a", inline.clone()]), vec![2]),
+            (json!({"chain":["a", "b"]}), vec![2]),
+            (json!({"chain":[{"pool":["a", "b"]}, "c"]}), vec![2]),
+            (json!([{"chain":["a"]}, {"chain":["b", "c"]}]), vec![1, 2]),
+            (json!([["a"], ["b", "c"]]), vec![1, 2]),
+            (json!(["a", {"chain":["b", "c"]}]), vec![1, 2]),
+        ] {
+            let rule_value = json!({"masks":"0.0.0.0/0", field:value});
+            let group_value = json!({"client_group":"out", field:value});
+            let dns_value = json!({"url":"tcp://192.0.2.1", field:value});
+            for yaml in [false, true] {
+                let parse_rule = || {
+                    if yaml {
+                        serde_yaml::from_str::<RuleConfig>(
+                            &serde_yaml::to_string(&rule_value).unwrap(),
+                        )
+                        .unwrap()
+                    } else {
+                        serde_json::from_value(rule_value.clone()).unwrap()
+                    }
+                };
+                let group: ClientConfigGroup = if yaml {
+                    serde_yaml::from_str(&serde_yaml::to_string(&group_value).unwrap()).unwrap()
+                } else {
+                    serde_json::from_value(group_value.clone()).unwrap()
+                };
+                let dns: DnsServerSpec = if yaml {
+                    serde_yaml::from_str(&serde_yaml::to_string(&dns_value).unwrap()).unwrap()
+                } else {
+                    serde_json::from_value(dns_value.clone()).unwrap()
+                };
+                let RuleActionConfig::Allow { client_chains, .. } = parse_rule().action else {
+                    panic!()
+                };
+                let expected = hops(client_chains.into_vec());
+                assert_eq!(
+                    expected.iter().map(Vec::len).collect::<Vec<_>>(),
+                    lengths,
+                    "{field}: {value}"
+                );
+                assert_eq!(
+                    hops(
+                        group
+                            .client_chains
+                            .iter()
+                            .cloned()
+                            .map(ClientGroupMember::into_chain)
+                    ),
+                    expected
+                );
+                assert_eq!(hops(dns.client_chains().iter().cloned()), expected);
+                let decoded: ClientConfigGroup =
+                    serde_json::from_value(serde_json::to_value(group).unwrap()).unwrap();
+                assert_eq!(
+                    hops(
+                        decoded
+                            .client_chains
+                            .into_vec()
+                            .into_iter()
+                            .map(ClientGroupMember::into_chain)
+                    ),
+                    expected
+                );
+                let decoded: DnsServerSpec =
+                    serde_yaml::from_str(&serde_yaml::to_string(&dns).unwrap()).unwrap();
+                assert_eq!(hops(decoded.client_chains().iter().cloned()), expected);
+            }
+        }
+    }
+}
+
+#[test]
+fn group_chain_fields_reject_duplicates_conflicts_and_empty_values() {
+    use serde_json::json;
+    for first in [
+        "client_chain",
+        "client_chains",
+        "client_proxy",
+        "client_proxies",
+    ] {
+        for second in [
+            "client_chain",
+            "client_chains",
+            "client_proxy",
+            "client_proxies",
+        ] {
+            let yaml = format!("client_group: out\n{first}: a\n{second}: b");
+            assert!(
+                serde_yaml::from_str::<ClientConfigGroup>(&yaml).is_err(),
+                "{yaml}"
+            );
+        }
+        for value in [json!(null), json!([]), json!({})] {
+            assert!(
+                serde_json::from_value::<ClientConfigGroup>(
+                    json!({"client_group":"out", first:value})
+                )
+                .is_err()
+            );
+        }
+    }
+}
+
+#[test]
+fn owned_group_members_preserve_programmatic_chain_shapes() {
+    let selection = ConfigSelection::Config(create_test_client_config());
+    let single = ClientChainHop::Single(selection.clone());
+    let pool = ClientChainHop::Pool(OneOrSome::Some(vec![selection.clone(), selection.clone()]));
+    for hops in [
+        OneOrSome::One(single.clone()),
+        OneOrSome::Some(vec![single.clone()]),
+        OneOrSome::One(pool.clone()),
+        OneOrSome::Some(vec![pool, single]),
+    ] {
+        for name in [None, Some("named".to_owned())] {
+            let chain = ClientChain { hops: hops.clone() };
+            let expected = serde_json::to_value(&chain).unwrap();
+            let actual = ClientGroupMember::Chain { name, chain }.into_chain();
+            assert_eq!(serde_json::to_value(actual).unwrap(), expected);
+        }
+    }
+    for selection in [selection, ConfigSelection::GroupName("group".into())] {
+        let expected = serde_json::to_value(&selection).unwrap();
+        let chain = ClientGroupMember::Client(selection).into_chain();
+        let OneOrSome::One(ClientChainHop::Single(client)) = chain.hops else {
+            panic!("client members must remain single hops")
+        };
+        assert_eq!(serde_json::to_value(client).unwrap(), expected);
+    }
+}
+
+#[test]
+fn test_rule_config_group() {
+    let original = vec![Config::RuleConfigGroup(RuleConfigGroup {
+        rule_group: "test-rule-group".to_string(),
+        rules: OneOrSome::Some(vec![
+            create_test_rule_config(),
+            RuleConfig {
+                criteria: Default::default(),
+                action: RuleActionConfig::Block,
+            },
+        ]),
+    })];
+
+    let yaml_str = serde_yaml::to_string(&original).expect("Failed to serialize");
+    let deserialized: Vec<Config> = serde_yaml::from_str(&yaml_str).expect("Failed to deserialize");
+
+    assert_eq!(deserialized.len(), 1);
+    let Config::RuleConfigGroup(group) = &deserialized[0] else {
+        panic!("Expected rule config group");
+    };
+    assert_eq!(group.rule_group, "test-rule-group");
+    assert!(matches!(&group.rules, OneOrSome::Some(values) if values.len() == 2));
+}
+
+#[test]
+fn test_config_error_messages() {
+    // Test invalid config with no recognized fields
+    let invalid_yaml = r#"
+        - foo: bar
+          baz: qux
+        "#;
+
+    let result: Result<Vec<Config>, _> = serde_yaml::from_str(invalid_yaml);
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    println!("Error for invalid config: {error_msg}");
+    assert!(error_msg.contains("Unable to determine config type"));
+    assert!(error_msg.contains("Found fields: "));
+    assert!(error_msg.contains("foo"));
+    assert!(error_msg.contains("baz"));
+}
+
+#[test]
+fn test_named_pem() {
+    // Test with path
+    let pem_with_path = NamedPem {
+        pem: "my-server-pem".to_string(),
+        source: PemSource::Path("/etc/certs/server.pem".to_string()),
+    };
+
+    let yaml = serde_yaml::to_string(&pem_with_path).unwrap();
+    println!("NamedPem with path YAML:\n{yaml}");
+    assert!(yaml.contains("pem: my-server-pem"));
+    assert!(yaml.contains("path: /etc/certs/server.pem"));
+
+    let deserialized: NamedPem = serde_yaml::from_str(&yaml).unwrap();
+    assert_eq!(deserialized.pem, "my-server-pem");
+    match deserialized.source {
+        PemSource::Path(p) => assert_eq!(p, "/etc/certs/server.pem"),
+        _ => panic!("Expected Path source"),
+    }
+
+    // Test with data (combined cert and key)
+    let pem_with_data = NamedPem {
+            pem: "inline-pem".to_string(),
+            source: PemSource::Data(
+                "-----BEGIN CERTIFICATE-----\nMIIBkTCB+wIJAKHHI...\n-----END CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----\nMIIEvQ...\n-----END PRIVATE KEY-----".to_string(),
+            ),
+        };
+
+    let yaml = serde_yaml::to_string(&pem_with_data).unwrap();
+    println!("NamedPem with data YAML:\n{yaml}");
+    assert!(yaml.contains("pem: inline-pem"));
+    assert!(yaml.contains("data: "));
+    assert!(yaml.contains("-----BEGIN CERTIFICATE-----"));
+    assert!(yaml.contains("-----BEGIN PRIVATE KEY-----"));
+
+    let deserialized: NamedPem = serde_yaml::from_str(&yaml).unwrap();
+    assert_eq!(deserialized.pem, "inline-pem");
+    match deserialized.source {
+        PemSource::Data(d) => {
+            assert!(d.contains("-----BEGIN CERTIFICATE-----"));
+            assert!(d.contains("-----BEGIN PRIVATE KEY-----"));
+        }
+        _ => panic!("Expected Data source"),
+    }
+}
+
+#[test]
+fn test_named_pem_invalid_yaml() {
+    // Missing pem field
+    let yaml = r#"
+        path: /etc/certs/server.pem
+        "#;
+    let result: Result<NamedPem, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("missing field `pem`")
+    );
+
+    // Missing source (no path or data)
+    let yaml = r#"
+        pem: my-pem
+        "#;
+    let result: Result<NamedPem, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("must have either 'path' or 'data'")
+    );
+
+    // Both path and data
+    let yaml = r#"
+        pem: my-pem
+        path: /etc/certs/server.pem
+        data: "-----BEGIN CERTIFICATE-----"
+        "#;
+    let result: Result<NamedPem, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot have both 'path' and 'data'")
+    );
+}
+
+#[test]
+fn test_config_with_named_pems() {
+    // Test NamedPem as Config with path
+    let pem_config = Config::NamedPem(NamedPem {
+        pem: "web-server-pem".to_string(),
+        source: PemSource::Path("/etc/certs/web.pem".to_string()),
+    });
+
+    let yaml = serde_yaml::to_string(&pem_config).unwrap();
+    println!("Config::NamedPem YAML:\n{yaml}");
+
+    let deserialized: Config = serde_yaml::from_str(&yaml).unwrap();
+    match deserialized {
+        Config::NamedPem(pem) => {
+            assert_eq!(pem.pem, "web-server-pem");
+            match pem.source {
+                PemSource::Path(p) => assert_eq!(p, "/etc/certs/web.pem"),
+                _ => panic!("Expected Path source"),
+            }
+        }
+        _ => panic!("Expected NamedPem config"),
+    }
+
+    // Test NamedPem as Config with data
+    let pem_config_data = Config::NamedPem(NamedPem {
+            pem: "web-server-pem-data".to_string(),
+            source: PemSource::Data("-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----".to_string()),
+        });
+
+    let yaml = serde_yaml::to_string(&pem_config_data).unwrap();
+    println!("Config::NamedPem with data YAML:\n{yaml}");
+
+    let deserialized: Config = serde_yaml::from_str(&yaml).unwrap();
+    match deserialized {
+        Config::NamedPem(pem) => {
+            assert_eq!(pem.pem, "web-server-pem-data");
+            match pem.source {
+                PemSource::Data(d) => {
+                    assert!(d.contains("-----BEGIN CERTIFICATE-----"));
+                    assert!(d.contains("-----BEGIN PRIVATE KEY-----"));
+                }
+                _ => panic!("Expected Data source"),
+            }
+        }
+        _ => panic!("Expected NamedPem config"),
+    }
+}
+
+#[test]
+fn test_server_config_with_addresses_alias() {
+    let yaml = r#"
+- addresses:
+    - "127.0.0.1:22223"
+    - "172.17.0.1:22223-22225"
+  protocol:
+    type: http
+"#;
+
+    let configs: Vec<Config> = serde_yaml::from_str(yaml).unwrap();
+    let Config::Server(server) = &configs[0] else {
+        panic!("expected server config");
+    };
+    assert_eq!(
+        server.bind_location.to_string(),
+        "127.0.0.1:22223, 172.17.0.1:22223-22225"
+    );
+
+    let serialized = serde_yaml::to_value(&configs[0]).unwrap();
+    let mapping = serialized.as_mapping().unwrap();
+    assert!(mapping.contains_key(serde_yaml::Value::String("address".to_string())));
+    assert!(!mapping.contains_key(serde_yaml::Value::String("addresses".to_string())));
+}
+
+#[test]
+fn test_rejects_unknown_field_in_client_config_group() {
+    let yaml = r#"
+- client_group: my-proxies
+  client_chains:
+    - address: "127.0.0.1:9090"
+      protocol:
+        type: socks
+  extra_field: "should fail"
+"#;
+    let result: Result<Vec<Config>, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("unknown field `extra_field`"),
+        "Error should mention unknown field: {err}"
+    );
+}
+
+#[test]
+fn test_rejects_unknown_field_in_rule_config_group() {
+    let yaml = r#"
+- rule_group: my-rules
+  rules:
+    - mask: 0.0.0.0/0
+      action: allow
+  bogus_field: 42
+"#;
+    let result: Result<Vec<Config>, _> = serde_yaml::from_str(yaml);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("unknown field `bogus_field`"),
+        "Error should mention unknown field: {err}"
+    );
+}
+
+#[test]
+fn test_example_files_load_and_validate() {
+    use crate::thread_util;
+    use std::path::{Path, PathBuf};
+
+    // Initialize thread count for the test environment if not already set
+    // set_num_threads will panic if NUM_THREADS is already set by another test
+    let _ = std::panic::catch_unwind(|| {
+        thread_util::set_num_threads(4);
+    });
+
+    // Get the examples directory relative to the project root
+    let examples_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+
+    // Read all YAML files in the examples directory
+    let mut example_files: Vec<PathBuf> = std::fs::read_dir(&examples_dir)
+        .expect("Failed to read examples directory")
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            if path.extension()?.to_str()? == "yaml" {
+                Some(path)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Sort files for consistent test output
+    example_files.sort();
+
+    assert!(!example_files.is_empty(), "No example YAML files found");
+    println!("Found {} example files to test", example_files.len());
+
+    let mut failures = Vec::new();
+
+    // Test each example file
+    for example_file in &example_files {
+        let file_name = example_file.file_name().unwrap().to_str().unwrap();
+        println!("\nTesting example file: {file_name}");
+
+        // Read the file
+        let content = match std::fs::read_to_string(example_file) {
+            Ok(c) => c,
+            Err(e) => {
+                failures.push(format!("- {file_name}: Failed to read file: {e}"));
+                continue;
+            }
+        };
+
+        // Parse the YAML
+        let mut configs: Vec<Config> = match serde_yaml::from_str(&content) {
+            Ok(c) => c,
+            Err(e) => {
+                failures.push(format!("- {file_name}: Failed to parse YAML: {e}"));
+                continue;
+            }
+        };
+
+        let mut compiler = crate::rules::Compiler::default();
+        let compiled = crate::rule_set::anchor(&mut configs, example_file)
+            .and_then(|()| crate::rule_set::load(&mut configs, &mut compiler))
+            .and_then(|()| crate::config::rule_visit::compile(&mut configs, &mut compiler));
+        if let Err(error) = compiled {
+            failures.push(format!("- {file_name}: invalid rules: {error}"));
+            continue;
+        }
+        if file_name == "mixed.yaml" {
+            let certificate =
+                rcgen::generate_simple_self_signed(vec!["proxy.local".into()]).unwrap();
+            for config in &mut configs {
+                if let Config::Server(server) = config
+                    && let crate::config::ServerProxyConfig::Tls { tls_targets, .. } =
+                        &mut server.protocol
+                {
+                    for target in tls_targets.values_mut() {
+                        target.cert = certificate.cert.pem();
+                        target.key = certificate.signing_key.serialize_pem();
+                    }
+                }
+            }
+            crate::config::create_server_configs(configs.clone())
+                .expect("mixed example must pass full validation");
+        }
+        // Other examples contain deployment-specific certificates and keys.
+        println!("  ✓ Parsed successfully ({} configs)", configs.len());
+    }
+
+    if !failures.is_empty() {
+        panic!(
+            "Example config validation failed for {} files:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
+    }
+}

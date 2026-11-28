@@ -1,0 +1,510 @@
+//! Multi-output logging infrastructure.
+//!
+//! Provides `MultiLogger` which dispatches pre-formatted log lines to multiple
+//! `LogWriter` destinations. Formats each record once into a thread-local buffer,
+//! then passes the resulting `&str` to all writers.
+
+use std::cell::Cell;
+use std::io::Write;
+use std::sync::Arc;
+
+mod file;
+pub use file::{FILE_LOG_FLUSH_TIMEOUT, FileLogStats, FileLogWriter};
+
+use log::{Level, LevelFilter, Log, Metadata, Record};
+
+static DEFAULT_LEVEL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub fn default_level() -> LevelFilter {
+    let value = DEFAULT_LEVEL.load(std::sync::atomic::Ordering::Relaxed);
+    [
+        LevelFilter::Off,
+        LevelFilter::Error,
+        LevelFilter::Warn,
+        LevelFilter::Info,
+        LevelFilter::Debug,
+        LevelFilter::Trace,
+    ][value]
+        .min(log::STATIC_MAX_LEVEL)
+}
+
+/// Receives pre-formatted log lines. Implementations handle one output destination.
+pub trait LogWriter: Send + Sync {
+    /// Writes a pre-formatted log line. `formatted` does NOT include a trailing newline.
+    fn write_log(&self, record: &Record, formatted: &str);
+    fn flush(&self);
+}
+
+impl<T: LogWriter> LogWriter for Arc<T> {
+    fn write_log(&self, record: &Record, formatted: &str) {
+        (**self).write_log(record, formatted);
+    }
+
+    fn flush(&self) {
+        (**self).flush();
+    }
+}
+
+/// Writes to stderr with ASCII sanitization to prevent terminal escape sequences.
+pub struct StderrWriter;
+
+impl LogWriter for StderrWriter {
+    fn write_log(&self, _record: &Record, formatted: &str) {
+        let sanitized: String = formatted
+            .chars()
+            .map(|c| {
+                if c.is_ascii_graphic() || c == ' ' {
+                    c
+                } else {
+                    '?'
+                }
+            })
+            .collect();
+        let _ = writeln!(std::io::stderr(), "{sanitized}");
+    }
+
+    fn flush(&self) {
+        let _ = std::io::stderr().flush();
+    }
+}
+
+thread_local! {
+    static FMT_BUF: Cell<String> = Cell::new(String::with_capacity(256));
+}
+
+/// A filter directive: optional target prefix + level.
+/// When `name` is None, matches all targets (acts as the default level).
+pub struct Directive {
+    pub name: Option<String>,
+    pub level: LevelFilter,
+}
+
+/// Dispatches formatted log lines to multiple `LogWriter` destinations.
+/// Filters records using env_logger-compatible directive matching.
+pub struct MultiLogger {
+    writers: Vec<Box<dyn LogWriter>>,
+    /// Sorted by name length ascending; walked in reverse for longest-prefix match.
+    directives: Vec<Directive>,
+}
+
+impl MultiLogger {
+    fn matches(&self, level: Level, target: &str) -> bool {
+        for directive in self.directives.iter().rev() {
+            match &directive.name {
+                Some(name) if !target.starts_with(name.as_str()) => continue,
+                _ => return level <= directive.level,
+            }
+        }
+        false
+    }
+}
+
+impl Log for MultiLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        self.matches(metadata.level(), metadata.target())
+    }
+
+    fn log(&self, record: &Record) {
+        if !self.matches(record.level(), record.target()) {
+            return;
+        }
+
+        FMT_BUF.with(|cell| {
+            let mut buf = cell.take();
+            buf.clear();
+
+            use std::fmt::Write as FmtWrite;
+            let timestamp = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S%.3f");
+            let _ = write!(
+                buf,
+                "[{} {} {}] {}",
+                timestamp,
+                record.level(),
+                record.target(),
+                record.args()
+            );
+
+            for writer in &self.writers {
+                writer.write_log(record, &buf);
+            }
+
+            // Preserve existing sink formatting without retaining a huge record
+            // on every async worker after an unusually large diagnostic.
+            if buf.capacity() > 16 * 1024 {
+                buf = String::with_capacity(256);
+            }
+            cell.set(buf);
+        });
+    }
+
+    fn flush(&self) {
+        for writer in &self.writers {
+            writer.flush();
+        }
+    }
+}
+
+/// Installs a `MultiLogger` as the global logger.
+/// Directives are sorted by name length; `log::set_max_level` is set to the
+/// maximum level across all directives so records reach our `log()` method.
+pub fn init_multi_logger(
+    writers: Vec<Box<dyn LogWriter>>,
+    mut directives: Vec<Directive>,
+) -> Result<(), log::SetLoggerError> {
+    let default_level = directives
+        .iter()
+        .rev()
+        .find(|directive| directive.name.is_none())
+        .map_or(LevelFilter::Off, |directive| directive.level);
+    directives.sort_by_key(|d| d.name.as_ref().map_or(0, |n| n.len()));
+    let max_level = directives
+        .iter()
+        .map(|d| d.level)
+        .max()
+        .unwrap_or(LevelFilter::Off);
+    let logger = MultiLogger {
+        writers,
+        directives,
+    };
+    log::set_boxed_logger(Box::new(logger))?;
+    DEFAULT_LEVEL.store(default_level as usize, std::sync::atomic::Ordering::Relaxed);
+    log::set_max_level(max_level);
+    Ok(())
+}
+
+/// Parses a level string (case-insensitive). Returns `None` for unrecognized values.
+pub fn parse_log_level(s: &str) -> Option<LevelFilter> {
+    match s.to_lowercase().as_str() {
+        "error" => Some(LevelFilter::Error),
+        "warn" => Some(LevelFilter::Warn),
+        "info" => Some(LevelFilter::Info),
+        "debug" => Some(LevelFilter::Debug),
+        "trace" => Some(LevelFilter::Trace),
+        "off" => Some(LevelFilter::Off),
+        _ => None,
+    }
+}
+
+/// Parses a RUST_LOG-style directive string.
+/// Examples: "info", "shoes=info", "warn,shoes=debug,quinn=error"
+fn parse_directives(spec: &str) -> Vec<Directive> {
+    let mut directives = Vec::new();
+    for part in spec.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        if let Some((name, level_str)) = part.split_once('=') {
+            if let Some(level) = parse_log_level(level_str) {
+                directives.push(Directive {
+                    name: Some(name.to_owned()),
+                    level,
+                });
+            }
+        } else if let Some(level) = parse_log_level(part) {
+            directives.push(Directive { name: None, level });
+        }
+    }
+    if directives.is_empty() {
+        directives.push(Directive {
+            name: None,
+            level: LevelFilter::Error,
+        });
+    }
+    directives
+}
+
+/// Determines filter directives from (in priority order):
+/// 1. `.shoes-trace` / `.shoes-debug` marker files next to the binary
+/// 2. `RUST_LOG` environment variable (supports `target=level` syntax)
+/// 3. Default: error only (matches env_logger)
+pub fn resolve_directives() -> Vec<Directive> {
+    if let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+    {
+        if dir.join(".shoes-trace").exists() {
+            eprintln!("Found marker file .shoes-trace, setting log level to TRACE");
+            return vec![Directive {
+                name: None,
+                level: LevelFilter::Trace,
+            }];
+        }
+        if dir.join(".shoes-debug").exists() {
+            eprintln!("Found marker file .shoes-debug, setting log level to DEBUG");
+            return vec![Directive {
+                name: None,
+                level: LevelFilter::Debug,
+            }];
+        }
+    }
+
+    if let Ok(val) = std::env::var("RUST_LOG") {
+        return parse_directives(&val);
+    }
+
+    vec![Directive {
+        name: None,
+        level: LevelFilter::Error,
+    }]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use log::Level;
+
+    fn check_file_records(writer: &dyn LogWriter, path: &std::path::Path) {
+        let record = Record::builder().args(format_args!("unused")).build();
+        writer.write_log(
+            &record,
+            "peer\r\nforged\t\u{1b}[31m\u{0}\u{7}\u{7f}\u{85}\u{2028}\u{2029}\u{202e}\u{2066} caf\u{e9} \u{65e5}\u{672c}",
+        );
+        writer.write_log(&record, "next record");
+        writer.flush();
+        let contents = std::fs::read_to_string(path).unwrap();
+        assert_eq!(
+            contents,
+            "peer\\r\\nforged\\t\\u{1b}[31m\\u{0}\\u{7}\\u{7f}\\u{85}\\u{2028}\\u{2029}\\u{202e}\\u{2066} caf\u{e9} \u{65e5}\u{672c}\nnext record\n"
+        );
+        assert_eq!(contents.lines().count(), 2);
+        assert!(contents.chars().all(|c| !c.is_control() || c == '\n'));
+    }
+
+    #[test]
+    fn file_writer_escapes_controls_and_preserves_unicode() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("log");
+        let writer = FileLogWriter::new(path.to_str().unwrap()).unwrap();
+        check_file_records(&writer, &path);
+    }
+
+    #[test]
+    fn repeated_logger_init_returns_error_and_drains_rejected_writer() {
+        let _capture = test_capture::Capture::new();
+        let original_default = default_level();
+        let original_max = log::max_level();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("rejected.log");
+        let writer = FileLogWriter::new(path.to_str().unwrap()).unwrap();
+        writer.write_log(&Record::builder().build(), "before rejected init");
+        assert!(
+            init_multi_logger(
+                vec![Box::new(writer)],
+                vec![Directive {
+                    name: None,
+                    level: LevelFilter::Off
+                }],
+            )
+            .is_err()
+        );
+        assert_eq!(default_level(), original_default);
+        assert_eq!(log::max_level(), original_max);
+        assert_eq!(
+            std::fs::read_to_string(path).unwrap(),
+            "before rejected init\n"
+        );
+    }
+
+    /// Builds a MultiLogger (no writers) from directives for testing matches().
+    fn logger_from(mut directives: Vec<Directive>) -> MultiLogger {
+        directives.sort_by_key(|d| d.name.as_ref().map_or(0, |n| n.len()));
+        MultiLogger {
+            writers: vec![],
+            directives,
+        }
+    }
+
+    #[test]
+    fn parse_log_level_valid() {
+        assert_eq!(parse_log_level("info"), Some(LevelFilter::Info));
+        assert_eq!(parse_log_level("ERROR"), Some(LevelFilter::Error));
+        assert_eq!(parse_log_level("Debug"), Some(LevelFilter::Debug));
+        assert_eq!(parse_log_level("off"), Some(LevelFilter::Off));
+    }
+
+    #[test]
+    fn parse_log_level_invalid() {
+        assert_eq!(parse_log_level(""), None);
+        assert_eq!(parse_log_level("verbose"), None);
+        assert_eq!(parse_log_level("inf"), None);
+    }
+
+    #[test]
+    fn parse_directives_blanket_level() {
+        let dirs = parse_directives("info");
+        assert_eq!(dirs.len(), 1);
+        assert!(dirs[0].name.is_none());
+        assert_eq!(dirs[0].level, LevelFilter::Info);
+    }
+
+    #[test]
+    fn parse_directives_single_target() {
+        let dirs = parse_directives("shoes=debug");
+        assert_eq!(dirs.len(), 1);
+        assert_eq!(dirs[0].name.as_deref(), Some("shoes"));
+        assert_eq!(dirs[0].level, LevelFilter::Debug);
+    }
+
+    #[test]
+    fn parse_directives_mixed() {
+        let dirs = parse_directives("warn,shoes=info,quinn=error");
+        assert_eq!(dirs.len(), 3);
+        // Should contain a blanket warn and two targeted directives
+        let blanket = dirs.iter().find(|d| d.name.is_none()).unwrap();
+        assert_eq!(blanket.level, LevelFilter::Warn);
+        let shoes = dirs
+            .iter()
+            .find(|d| d.name.as_deref() == Some("shoes"))
+            .unwrap();
+        assert_eq!(shoes.level, LevelFilter::Info);
+        let quinn = dirs
+            .iter()
+            .find(|d| d.name.as_deref() == Some("quinn"))
+            .unwrap();
+        assert_eq!(quinn.level, LevelFilter::Error);
+    }
+
+    #[test]
+    fn parse_directives_empty_falls_back_to_error() {
+        let dirs = parse_directives("");
+        assert_eq!(dirs.len(), 1);
+        assert!(dirs[0].name.is_none());
+        assert_eq!(dirs[0].level, LevelFilter::Error);
+    }
+
+    #[test]
+    fn parse_directives_invalid_level_skipped() {
+        let dirs = parse_directives("shoes=bogus,info");
+        // "shoes=bogus" is skipped, "info" is kept
+        assert_eq!(dirs.len(), 1);
+        assert!(dirs[0].name.is_none());
+        assert_eq!(dirs[0].level, LevelFilter::Info);
+    }
+
+    #[test]
+    fn matches_blanket_error_default() {
+        let logger = logger_from(vec![Directive {
+            name: None,
+            level: LevelFilter::Error,
+        }]);
+        assert!(logger.matches(Level::Error, "shoes::tcp"));
+        assert!(!logger.matches(Level::Warn, "shoes::tcp"));
+        assert!(!logger.matches(Level::Info, "shoes::tcp"));
+        assert!(logger.matches(Level::Error, "quinn::connection"));
+    }
+
+    #[test]
+    fn matches_blanket_info() {
+        let logger = logger_from(vec![Directive {
+            name: None,
+            level: LevelFilter::Info,
+        }]);
+        assert!(logger.matches(Level::Error, "shoes"));
+        assert!(logger.matches(Level::Warn, "quinn"));
+        assert!(logger.matches(Level::Info, "shoes::tcp"));
+        assert!(!logger.matches(Level::Debug, "shoes::tcp"));
+    }
+
+    #[test]
+    fn matches_targeted_only() {
+        // shoes=info with no blanket → only shoes passes, others filtered out
+        let logger = logger_from(vec![Directive {
+            name: Some("shoes".into()),
+            level: LevelFilter::Info,
+        }]);
+        assert!(logger.matches(Level::Info, "shoes::tcp"));
+        assert!(logger.matches(Level::Error, "shoes"));
+        assert!(!logger.matches(Level::Info, "quinn::connection"));
+        assert!(!logger.matches(Level::Error, "rustls"));
+    }
+
+    #[test]
+    fn matches_blanket_plus_override() {
+        // warn,shoes=debug → shoes gets debug, everything else gets warn
+        let logger = logger_from(parse_directives("warn,shoes=debug"));
+        assert!(logger.matches(Level::Debug, "shoes::tcp"));
+        assert!(logger.matches(Level::Info, "shoes"));
+        assert!(logger.matches(Level::Warn, "quinn"));
+        assert!(!logger.matches(Level::Info, "quinn"));
+        assert!(!logger.matches(Level::Debug, "rustls"));
+        assert!(logger.matches(Level::Error, "rustls"));
+    }
+
+    #[test]
+    fn matches_longest_prefix_wins() {
+        // shoes=warn,shoes::tcp=debug → shoes::tcp gets debug, shoes gets warn
+        let logger = logger_from(parse_directives("shoes=warn,shoes::tcp=debug"));
+        assert!(logger.matches(Level::Debug, "shoes::tcp"));
+        assert!(logger.matches(Level::Debug, "shoes::tcp::handler"));
+        assert!(!logger.matches(Level::Debug, "shoes::config"));
+        assert!(logger.matches(Level::Warn, "shoes::config"));
+        assert!(!logger.matches(Level::Info, "shoes::config"));
+    }
+
+    #[test]
+    fn matches_off_suppresses() {
+        let logger = logger_from(vec![Directive {
+            name: None,
+            level: LevelFilter::Off,
+        }]);
+        assert!(!logger.matches(Level::Error, "shoes"));
+        assert!(!logger.matches(Level::Error, "anything"));
+    }
+
+    #[test]
+    fn matches_no_directives() {
+        let logger = logger_from(vec![]);
+        assert!(!logger.matches(Level::Error, "shoes"));
+    }
+}
+#[cfg(test)]
+pub(crate) mod test_capture {
+    use std::cell::RefCell;
+    use std::sync::Once;
+
+    thread_local! {
+        static RECORDS: RefCell<Option<String>> = const { RefCell::new(None) };
+    }
+
+    struct Logger;
+
+    impl log::Log for Logger {
+        fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+            true
+        }
+        fn log(&self, record: &log::Record<'_>) {
+            use std::fmt::Write;
+            RECORDS.with(|records| {
+                if let Some(output) = records.borrow_mut().as_mut() {
+                    let _ = writeln!(output, "{}", record.args());
+                }
+            });
+        }
+        fn flush(&self) {}
+    }
+
+    pub struct Capture;
+
+    impl Capture {
+        pub fn new() -> Self {
+            static INIT: Once = Once::new();
+            INIT.call_once(|| {
+                log::set_logger(&Logger).unwrap();
+                log::set_max_level(log::LevelFilter::Trace);
+            });
+            RECORDS.with(|records| assert!(records.replace(Some(String::new())).is_none()));
+            Self
+        }
+
+        pub fn finish(self) -> String {
+            RECORDS.with(|records| records.take().unwrap())
+        }
+    }
+
+    impl Drop for Capture {
+        fn drop(&mut self) {
+            RECORDS.with(|records| records.take());
+        }
+    }
+}

@@ -35,13 +35,14 @@ class DiagnosticsTest {
         RuntimeLogBuffer.clear()
     }
 
-    @Test fun coreErrorsAreRetainedButInformationalOutputIsNot() = runBlocking {
+    @Test fun rustLogEnvelopeKeepsOnlyRedactedErrors() = runBlocking {
         RuntimeLogBuffer.clear()
-        RuntimeLogBuffer.appendCore("INFO service ready")
-        RuntimeLogBuffer.appendCore("WARN warning")
-        RuntimeLogBuffer.appendCore("ERROR tunnel failed")
-        RuntimeLogBuffer.appendCore("unprefixed service failure")
-        assertEquals(listOf("tunnel failed", "unprefixed service failure"), RuntimeLogBuffer.lines.value.map { it.message })
+        RuntimeLogBuffer.appendCore("INFO [2026-11-28T16:00:00.000 INFO shoes::tun] service ready")
+        RuntimeLogBuffer.appendCore("WARN [2026-11-28T16:00:00.000 WARN shoes::tun] transient warning")
+        RuntimeLogBuffer.appendCore("ERROR [2026-11-28T16:00:00.000 ERROR shoes::tun] tunnel failed password=private-secret")
+        val message = RuntimeLogBuffer.lines.value.single().message
+        assertTrue(message.contains("ERROR shoes::tun] tunnel failed"))
+        assertFalse(message.contains("private-secret"))
         RuntimeLogBuffer.clear()
     }
 }

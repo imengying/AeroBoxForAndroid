@@ -1,0 +1,178 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+env:
+  RUST_BACKTRACE: 1
+  toolchain_style: stable
+  toolchain_msrv: 1.74.1
+  toolchain_h3_quinn_msrv: 1.74.1
+  toolchain_doc: nightly-2025-04-02
+  toolchain_lint: stable
+  toolchain_fuzz: nightly-2025-04-02
+
+jobs:
+  ci-pass:
+    name: CI is green
+    runs-on: ubuntu-latest
+    needs:
+      - style
+      - lint
+      - msrv
+      - msrv_h3_quinn
+      - test
+      - doc
+      - fuzz
+      - examples
+      - compliance
+    steps:
+      - run: exit 0
+
+  style:
+    name: Check Style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust ${{ env.toolchain_style }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.toolchain_style }}
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust ${{ env.toolchain_lint }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.toolchain_lint }}
+          components: clippy
+      - run: cargo clippy
+
+  msrv:
+    name: Check MSRV
+    needs: [style]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust ${{ env.toolchain_msrv }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.toolchain_msrv }}
+      - name: Resolve dependencies for the MSRV
+        run: cargo +stable generate-lockfile
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+      - run: cargo check --locked -p h3
+
+  msrv_h3_quinn:
+    name: Check MSRV of `h3-quinn`
+    needs: [style]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust ${{ env.toolchain_h3_quinn_msrv }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.toolchain_h3_quinn_msrv }}
+      - name: Resolve dependencies for the MSRV
+        run: cargo +stable generate-lockfile
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+      - run: cargo check --locked -p h3-quinn
+
+  test:
+    name: Test ${{ matrix.toolchain }} ${{ matrix.os }} ${{ matrix.target }}
+    needs: [style]
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        toolchain: [stable, beta]
+        features: [i-implement-a-third-party-backend-and-opt-into-breaking-changes, tracing, 'tracing,i-implement-a-third-party-backend-and-opt-into-breaking-changes']
+        target: [x86_64-unknown-linux-gnu]
+        include:
+          # Add a 32-bit target test configuration
+          - os: ubuntu-latest
+            toolchain: stable
+            features: i-implement-a-third-party-backend-and-opt-into-breaking-changes
+            target: i686-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      # Add this step for 32-bit build support
+      - name: Install 32-bit development libraries
+        if: matrix.target == 'i686-unknown-linux-gnu'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib libc6-dev-i386
+      - name: Install Rust ${{ matrix.toolchain }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          target: ${{ matrix.target }}
+      - run: cargo test --features ${{ matrix.features }} --target ${{ matrix.target }}
+        env:  #[cfg(feature = "datagram")] unexpected `cfg` condition value: `datagram`
+          RUSTFLAGS: "-A unexpected_cfgs"
+      - name: h3Spec
+        run: ./ci/h3spec.sh
+        if: matrix.toolchain == 'stable'
+
+  doc:
+    name: Build docs
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust ${{ env.toolchain_doc }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.toolchain_doc }}
+      - run: cargo rustdoc -p h3 -- -D intra-doc-link-resolution-failure
+
+  fuzz:
+    name: Fuzz test
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust ${{ env.toolchain_fuzz }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ env.toolchain_fuzz }}
+      - name: Install cargo-fuzz
+        run: cargo +stable install cargo-fuzz --locked
+      - run: cargo fuzz run fuzz_varint -- -runs=1
+
+  compliance:
+    name: Compliance report
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Generate compliance report
+        uses: ./.github/actions/compliance
+        with:
+          report-script: ${{ github.workspace }}/ci/compliance/report.sh
+
+  examples:
+    name: Run Examples
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust stable
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Run server and client examples test
+        run: ./ci/example_test.sh

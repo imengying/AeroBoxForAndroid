@@ -162,7 +162,10 @@ object ConfigGenerator {
         config.put(
             "route",
             JSONObject()
-                .put("auto_detect_interface", false)
+                // Probes always receive physical-network callbacks, including
+                // when no VPN is active. Keep the node's dial policy usable in
+                // both this document's offline validation and actual probes.
+                .put("auto_detect_interface", true)
                 .put("final", PROXY_OUTBOUND_TAG)
         )
 
@@ -173,8 +176,6 @@ object ConfigGenerator {
 
     internal fun normalizeOutboundServer(server: String): String {
         return server
-            .replace("[ipv4]", "")
-            .replace("[ipv6]", "")
             .trim()
             .removePrefix("[")
             .removeSuffix("]")

@@ -1,0 +1,318 @@
+/// These scenarios use a single test network with the following records:
+///
+/// example.testing:
+///  www.example.testing IN A 192.0.2.1
+use std::{net::Ipv4Addr, thread, time::Duration};
+
+use dns_test::{
+    Error, FQDN, Implementation, Network, Resolver,
+    client::{Client, DigSettings},
+    name_server::NameServer,
+    record::{A, NS, Record, RecordType, SOA, SoaSettings},
+    zone_file::{Root, ZoneFile},
+};
+
+/// External nameserver with parent NS in response
+///
+/// This test reproduces a zone cut misidentification bug. Some authoritative servers
+/// (e.g. twtrdns.net for twitter.com/x.com) include parent NS records in responses to
+/// subdomain NS queries. When the recursor queries for "sub.example.testing. IN NS"
+/// and gets back "example.testing. IN NS ...", the zone cut check must only consider
+/// NS records whose owner name matches the queried zone.
+///
+/// The bug manifests through the bailiwick filter. Without the fix, the recursor
+/// creates a false zone cut at `sub.example.testing.`, tagging the nameserver pool
+/// with `zone = "sub.example.testing."`. When the final A query for
+/// `deep.sub.example.testing.` returns a CNAME to `target.example.testing.` with
+/// an inline A record, the bailiwick filter drops the A record because
+/// `target.example.testing.` is not a subzone of `sub.example.testing.`. CNAME
+/// following then fails because the target is not served as a standalone query.
+///
+/// With the fix, no false zone cut is created, so the pool zone stays
+/// `example.testing.`. Both the CNAME and A records pass the bailiwick filter
+/// and resolution succeeds.
+///
+/// The test uses a custom handler (parent_ns_in_authority) that mimics this behavior.
+#[test]
+fn parent_ns_in_authority_does_not_prevent_resolution() -> Result<(), Error> {
+    let target_fqdn = FQDN("deep.sub.example.testing.")?;
+    let target_ipv4 = Ipv4Addr::new(192, 0, 2, 1);
+
+    let network = Network::new()?;
+
+    let mut root_ns = NameServer::new(&Implementation::test_peer(), FQDN::ROOT, &network)?;
+
+    // Use the custom handler that returns parent NS records for subdomain NS
+    // queries, mimicking twtrdns.net behavior.
+    let example_ns = NameServer::new(
+        &Implementation::test_server("parent_ns_in_authority", Vec::new(), "udp"),
+        FQDN("example.testing.")?,
+        &network,
+    )?;
+
+    root_ns.referral(
+        FQDN("example.testing.")?,
+        FQDN("ns.external.testing.")?,
+        example_ns.ipv4_addr(),
+    );
+
+    let root_hint: Root = root_ns.root_hint();
+
+    let resolver =
+        Resolver::new(&network, root_hint).start_with_subject(&Implementation::hickory())?;
+
+    let client = Client::new(resolver.network())?;
+
+    let _root_ns = root_ns.start()?;
+    let _example_ns = example_ns.start()?;
+
+    thread::sleep(Duration::from_secs(2));
+
+    let dig_settings = *DigSettings::default().recurse();
+    let res = client.dig(
+        dig_settings,
+        resolver.ipv4_addr(),
+        RecordType::A,
+        &target_fqdn,
+    )?;
+
+    assert!(
+        res.status.is_noerror(),
+        "expected NOERROR, got {:?}",
+        res.status
+    );
+    let a_records: Vec<_> = res
+        .answer
+        .iter()
+        .filter_map(|r| {
+            if let Record::A(rec) = r {
+                Some(rec)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(
+        a_records.len(),
+        1,
+        "expected exactly one A record in answer"
+    );
+    assert_eq!(a_records[0].ipv4_addr, target_ipv4);
+
+    Ok(())
+}
+
+/// Recursive Delegation
+///
+/// This test simulates a potentially infinite recursive delegation for the zone example.testing.
+/// The TLD name server is configured with NS records:
+///
+///  example.testing IN NS example2.testing.
+///  example2.testing IN NS example.testing.
+///
+/// Querying for any host in example.testing should cause the recursor to return no answer and the
+/// recursor log should contain an error message about this cycle.
+#[test]
+fn recursive_delegation() -> Result<(), Error> {
+    let target_fqdn = FQDN("www.example.testing.")?;
+    let target_ipv4 = Ipv4Addr::new(192, 0, 2, 1);
+
+    let network = Network::new()?;
+
+    let mut root_ns = NameServer::new(&Implementation::test_peer(), FQDN::ROOT, &network)?;
+    let mut tld_ns = NameServer::new(&Implementation::test_peer(), FQDN::TEST_TLD, &network)?;
+
+    let mut example_ns = NameServer::new(
+        &Implementation::test_peer(),
+        FQDN("example.testing.")?,
+        &network,
+    )?;
+
+    example_ns.add(Record::a(target_fqdn.clone(), target_ipv4));
+
+    root_ns.referral(
+        FQDN::TEST_TLD,
+        FQDN("primary.tld-server.testing.")?,
+        tld_ns.ipv4_addr(),
+    );
+
+    tld_ns.add(Record::ns(
+        FQDN("example.testing.")?,
+        FQDN("example2.testing.")?,
+    ));
+    tld_ns.add(Record::ns(
+        FQDN("example2.testing.")?,
+        FQDN("example.testing.")?,
+    ));
+
+    let root_hint: Root = root_ns.root_hint();
+
+    let resolver =
+        Resolver::new(&network, root_hint).start_with_subject(&Implementation::hickory())?;
+
+    let client = Client::new(resolver.network())?;
+
+    let _root_ns = root_ns.start()?;
+    let _tld_ns = tld_ns.start()?;
+    let _example_ns = example_ns.start()?;
+
+    thread::sleep(Duration::from_secs(2));
+
+    let dig_settings = *DigSettings::default().recurse().authentic_data();
+    let res = client.dig(
+        dig_settings,
+        resolver.ipv4_addr(),
+        RecordType::A,
+        &target_fqdn,
+    );
+
+    if let Ok(res) = &res {
+        assert!(res.status.is_servfail());
+        assert_eq!(res.answer.len(), 0);
+    } else {
+        panic!("error");
+    }
+
+    assert!(
+        resolver
+            .logs()
+            .unwrap()
+            .contains("refusing to re-enter zone already on resolution stack")
+    );
+
+    Ok(())
+}
+
+/// Multi-Domain delegation
+///
+/// This test simulates a potentially infinite recursive delegation for the zone example.testing.
+/// The TLD name server is configured with NS records:
+///
+///  example.testing IN NS example2.testing.
+///  example2.testing IN NS example3.testing.
+///  example3.testing IN NS example4.testing.
+///  example4.testing IN NS example5.testing.
+///  example5.testing IN NS example6.testing.
+///  example6.testing IN NS example7.testing.
+///  example7.testing IN NS example8.testing.
+///  example8.testing IN NS example9.testing.
+///  example9.testing IN NS example10.testing.
+///  example10.testing IN NS example11.testing.
+///  example11.testing IN NS example12.testing.
+///  example12.testing IN NS example13.testing.
+///  example13.testing IN NS example14.testing.
+///  example14.testing IN NS example15.testing.
+///  example15.testing IN NS example16.testing.
+///  example16.testing IN NS example17.testing.
+///  example17.testing IN NS example18.testing.
+///  example18.testing IN NS example19.testing.
+///  example19.testing IN NS example20.testing.
+///  example20.testing IN NS example21.testing.
+///  example21.testing IN NS example22.testing.
+///  example22.testing IN NS example23.testing.
+///  example23.testing IN NS example23.testing.
+///  example23.testing IN A <NS IP>
+///
+/// Querying for any host in example.testing should cause the recursor to return no answer and the
+/// recursor log should contain a NoConnections error.
+#[test]
+fn multi_domain_delegation() -> Result<(), Error> {
+    let target_fqdn = FQDN("www.example.testing.")?;
+    let target_ipv4 = Ipv4Addr::new(192, 0, 2, 1);
+
+    let network = Network::new()?;
+
+    let mut root_ns = NameServer::new(&Implementation::test_peer(), FQDN::ROOT, &network)?;
+    let mut tld_ns = NameServer::new(&Implementation::test_peer(), FQDN::TEST_TLD, &network)?;
+
+    let mut example_ns = NameServer::new(
+        &Implementation::test_peer(),
+        FQDN("example.testing.")?,
+        &network,
+    )?;
+
+    example_ns.add(Record::a(target_fqdn.clone(), target_ipv4));
+
+    root_ns.referral(
+        FQDN::TEST_TLD,
+        FQDN("primary.tld-server.testing.")?,
+        tld_ns.ipv4_addr(),
+    );
+
+    tld_ns.add(Record::ns(
+        FQDN("example.testing.")?,
+        FQDN("ns.example2.testing.")?,
+    ));
+
+    for i in 1..=24 {
+        if i == 24 {
+            tld_ns.referral(
+                FQDN("example24.testing.")?,
+                FQDN("ns.example24.testing.")?,
+                example_ns.ipv4_addr(),
+            );
+        } else {
+            tld_ns.add(Record::ns(
+                FQDN(format!("example{i}.testing."))?,
+                FQDN(format!("example{}.testing.", i + 1))?,
+            ));
+        }
+
+        let mut zone_file = ZoneFile::new(SOA {
+            zone: FQDN(format!("example{i}.testing."))?,
+            ttl: 86400,
+            nameserver: FQDN(format!("ns.example{i}.testing."))?,
+            admin: FQDN(format!("admin.example{i}.testing."))?,
+            settings: SoaSettings::default(),
+        });
+        zone_file.add(Record::NS(NS {
+            zone: FQDN(format!("example{i}.testing."))?,
+            ttl: 86400,
+            nameserver: FQDN(format!("ns.example{i}.testing."))?,
+        }));
+        zone_file.add(Record::A(A {
+            fqdn: FQDN(format!("ns.example{i}.testing."))?,
+            ipv4_addr: example_ns.ipv4_addr(),
+            ttl: 86400,
+        }));
+
+        example_ns.add_zone(FQDN("domain.testing.")?, zone_file);
+    }
+
+    let root_hint: Root = root_ns.root_hint();
+
+    let resolver =
+        Resolver::new(&network, root_hint).start_with_subject(&Implementation::hickory())?;
+
+    let client = Client::new(resolver.network())?;
+
+    let _root_ns = root_ns.start()?;
+    let _tld_ns = tld_ns.start()?;
+    let _example_ns = example_ns.start()?;
+
+    thread::sleep(Duration::from_secs(2));
+
+    let dig_settings = *DigSettings::default().recurse();
+    let res = client.dig(
+        dig_settings,
+        resolver.ipv4_addr(),
+        RecordType::A,
+        &target_fqdn,
+    );
+
+    if let Ok(res) = &res {
+        assert!(res.status.is_servfail());
+        assert_eq!(res.answer.len(), 0);
+    } else {
+        panic!("error");
+    }
+
+    assert!(
+        resolver
+            .logs()
+            .unwrap()
+            .contains("recursion depth exceeded for")
+    );
+
+    Ok(())
+}

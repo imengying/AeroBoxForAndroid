@@ -1,0 +1,224 @@
+[
+  {
+    "case": "standard_go_tls13",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": false,
+      "alps": 0,
+      "compressed": false,
+      "client_settings": null,
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "standard_go_p384_hrr",
+    "completed": true,
+    "result": {
+      "group": 24,
+      "hello_retry": true,
+      "alps": 0,
+      "compressed": false,
+      "client_settings": null,
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "standard_go_cookie_hrr",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": true,
+      "alps": 0,
+      "compressed": false,
+      "client_settings": null,
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "chrome133_plain",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": false,
+      "alps": 0,
+      "compressed": false,
+      "client_settings": null,
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "chrome133_hybrid_brotli_alps",
+    "completed": true,
+    "result": {
+      "group": 4588,
+      "hello_retry": false,
+      "alps": 17613,
+      "compressed": true,
+      "client_settings": "",
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "chrome133_p256_hrr_brotli_alps",
+    "completed": true,
+    "result": {
+      "group": 23,
+      "hello_retry": true,
+      "alps": 17613,
+      "compressed": true,
+      "client_settings": "",
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "chrome133_p384_hrr_brotli_alps",
+    "completed": true,
+    "result": {
+      "group": 24,
+      "hello_retry": true,
+      "alps": 17613,
+      "compressed": true,
+      "client_settings": "",
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "chrome133_cookie_hrr_brotli_alps",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": true,
+      "alps": 17613,
+      "compressed": true,
+      "client_settings": "",
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "chrome133_brotli",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": false,
+      "alps": 0,
+      "compressed": true,
+      "client_settings": null,
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "chrome133_alps17613_empty",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": false,
+      "alps": 17613,
+      "compressed": false,
+      "client_settings": "",
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "chrome133_alps17613_brotli",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": false,
+      "alps": 17613,
+      "compressed": true,
+      "client_settings": "",
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "chrome133_configured_h2_settings_ignored",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": false,
+      "alps": 17613,
+      "compressed": true,
+      "client_settings": "",
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "utls_empty_alpn_lookup_workaround",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": false,
+      "alps": 17613,
+      "compressed": true,
+      "client_settings": "AAAABAAAAAAA",
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "custom_alps17513_brotli",
+    "completed": true,
+    "result": {
+      "group": 29,
+      "hello_retry": false,
+      "alps": 17513,
+      "compressed": true,
+      "client_settings": "",
+      "bytes": 65537,
+      "resumed": false,
+      "early_offered": false,
+      "early_accepted": false
+    }
+  },
+  {
+    "case": "bad_brotli_length",
+    "client_error": "tls: failed to decompress certificate message: decompressed len (850) does not match specified len (851)",
+    "rejected": true,
+    "server_failed": true
+  },
+  {
+    "case": "bad_finished",
+    "client_error": "tls: invalid server finished hash",
+    "rejected": true,
+    "server_failed": true
+  }
+]

@@ -1,0 +1,32 @@
+[package]
+name = "aerobox-tls-options-check"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+test = false
+doctest = false
+
+[dependencies]
+aerobox-crypto = { path = "../../crates/aerobox-crypto" }
+aerobox-fingerprint = { path = "../../crates/aerobox-fingerprint" }
+aerobox-primitives = { path = "../../crates/aerobox-primitives" }
+base64 = "=0.23.1"
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "tls12", "brotli", "zlib-custom"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+subtle = "=2.6.1"
+webpki-roots = "=1.0.12"
+x509-parser = { version = "=0.18.1", default-features = false }
+zeroize = "=1.9.2"
+
+[patch.crates-io]
+rustls = { path = "../../vendor/rustls/rustls" }
+
+[profile.dev]
+debug = 0
+incremental = false
+

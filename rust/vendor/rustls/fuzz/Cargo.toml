@@ -1,0 +1,51 @@
+[package]
+name = "rustls-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+env_logger = "0.11"
+libfuzzer-sys = "0.4"
+rustls = { path = "../rustls", default-features = false, features = ["std", "tls12", "custom-provider"] }
+rustls-fuzzing-provider = { path = "../rustls-fuzzing-provider" }
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "message"
+path = "fuzzers/message.rs"
+
+[[bin]]
+name = "deframer"
+path = "fuzzers/deframer.rs"
+
+[[bin]]
+name = "fragment"
+path = "fuzzers/fragment.rs"
+
+[[bin]]
+name = "persist"
+path = "fuzzers/persist.rs"
+
+[[bin]]
+name = "client"
+path = "fuzzers/client.rs"
+
+[[bin]]
+name = "server"
+path = "fuzzers/server.rs"
+
+[[bin]]
+name = "server_name"
+path = "fuzzers/server_name.rs"
+
+[[bin]]
+name = "unbuffered"
+path = "fuzzers/unbuffered.rs"

@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "h3",
+    "h3-quinn",
+    "h3-webtransport",
+    "h3-datagram",
+]
+# Upstream desktop examples are not part of Android's transport tests.
+exclude = ["examples"]
+resolver = "2"
+
+[patch.crates-io]
+rustls = { path = "../rustls/rustls" }
+quinn = { path = "../quinn" }
+quinn-proto = { path = "../quinn-proto" }
+rcgen = { path = "../rcgen" }
+
+[profile.dev]
+debug = 1
+incremental = false

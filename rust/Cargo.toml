@@ -1,0 +1,22 @@
+[workspace]
+members = ["crates/aerobox-config", "crates/aerobox-fingerprint"]
+exclude = ["crates/aerobox-android", "vendor/tendns", "vendor/blake3", "vendor/h3", "vendor/hickory-dns", "vendor/ml-dsa", "vendor/nix", "vendor/quinn", "vendor/quinn-proto", "vendor/quinn-udp", "vendor/rcgen", "vendor/rustls", "vendor/shoes", "vendor/smoltcp", "crates/aerobox-crypto", "crates/aerobox-primitives"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[profile.dev]
+debug = 1
+incremental = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

@@ -1,0 +1,17 @@
+// Test-only handshake-signature policy; no cryptographic or certificate bypass.
+package tls
+
+import "sync"
+
+var aeroboxSHA1FixtureOnce sync.Once
+
+// AeroBoxForceECDSASHA1Fixture must run before starting this single-purpose
+// TLS1.2 process. It restricts CertificateRequest (and the reference client's
+// ClientHello) to 0203. Server Certificate.SupportedSignatureAlgorithms applies
+// the same restriction to ServerKeyExchange. Both existing Go ECDSA signature
+// verification and normal x509 certificate-chain checks remain in force.
+func AeroBoxForceECDSASHA1Fixture() {
+	aeroboxSHA1FixtureOnce.Do(func() {
+		defaultSupportedSignatureAlgorithms = []SignatureScheme{ECDSAWithSHA1}
+	})
+}

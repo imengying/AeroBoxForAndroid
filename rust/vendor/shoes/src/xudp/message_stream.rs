@@ -1,0 +1,819 @@
+// XUDP message stream - protocol-agnostic UDP session multiplexing
+// Wraps any AsyncStream and provides XUDP frame encoding/decoding with session management
+// Used by both VLESS and VMess protocols
+
+use bytes::{Buf, BufMut, BytesMut};
+use futures::ready;
+use std::collections::{HashMap, VecDeque};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+
+use crate::address::NetLocation;
+use crate::async_stream::{
+    AsyncFlushMessage, AsyncPing, AsyncReadSessionMessage, AsyncSessionMessageStream,
+    AsyncShutdownMessage, AsyncStream, AsyncWriteSessionMessage, MessageSessionId,
+};
+
+use super::frame::{FrameMetadata, FrameOption, SessionStatus, TargetNetwork};
+use crate::resolver::{NativeResolver, ResolverCache};
+
+pub(crate) const MAX_XUDP_ROUTES: usize = 1024;
+
+pub struct XudpMessageStream {
+    /// Underlying byte stream (VLESS VisionStream, VMess stream, or any TLS stream) that reads/writes raw XUDP frame bytes
+    inner_stream: Box<dyn AsyncStream>,
+
+    /// Read buffer for incoming XUDP frames
+    read_buffer: BytesMut,
+
+    /// Write buffer for outgoing XUDP frames
+    write_buffer: BytesMut,
+
+    next_route_id: MessageSessionId,
+
+    /// Active protocol sessions and their independently routed destinations.
+    wire_sessions: HashMap<u16, WireSession>,
+
+    /// Translates router identities back to protocol session IDs and destinations.
+    routes: HashMap<MessageSessionId, RoutedSession>,
+
+    /// Route identities whose protocol session has ended.
+    closed_routes: VecDeque<MessageSessionId>,
+
+    /// Buffered incoming message that did not fit the caller's buffer.
+    incoming_message: Option<(Vec<u8>, NetLocation, u16)>,
+    resolver_cache: Option<ResolverCache>,
+
+    /// EOF flag
+    is_eof: bool,
+}
+
+struct WireSession {
+    default_destination: NetLocation,
+    routes: HashMap<NetLocation, MessageSessionId>,
+}
+
+struct RoutedSession {
+    wire_session_id: u16,
+    original_destination: NetLocation,
+}
+
+impl XudpMessageStream {
+    pub fn new(inner_stream: Box<dyn AsyncStream>) -> Self {
+        Self {
+            inner_stream,
+            read_buffer: BytesMut::with_capacity(65536),
+            write_buffer: BytesMut::with_capacity(65536),
+            next_route_id: 1,
+            wire_sessions: HashMap::new(),
+            routes: HashMap::new(),
+            closed_routes: VecDeque::new(),
+            incoming_message: None,
+            resolver_cache: None,
+            is_eof: false,
+        }
+    }
+
+    pub(crate) fn with_legacy_resolution(mut self, enabled: bool) -> Self {
+        if enabled {
+            self.resolver_cache = Some(ResolverCache::new(Arc::new(NativeResolver::new())));
+        }
+        self
+    }
+
+    fn poll_routing_destination(
+        &mut self,
+        cx: &mut Context<'_>,
+        destination: &NetLocation,
+    ) -> Poll<std::io::Result<NetLocation>> {
+        if let Some(resolver) = &mut self.resolver_cache {
+            let address = ready!(resolver.poll_resolve_location(cx, destination))?;
+            Poll::Ready(Ok(NetLocation::from_ip_addr(address.ip(), address.port())))
+        } else {
+            Poll::Ready(Ok(destination.clone()))
+        }
+    }
+
+    /// Feed initial unparsed data into the read buffer
+    /// Used when protocol header parsing (VLESS/VMess) consumed data that belongs to XUDP frames
+    pub fn feed_initial_read_data(&mut self, data: &[u8]) -> std::io::Result<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+
+        log::debug!(
+            "[XUDP] Feeding {} bytes of initial data to read buffer",
+            data.len()
+        );
+        self.read_buffer.extend_from_slice(data);
+        Ok(())
+    }
+
+    fn allocate_route_id(&mut self) -> std::io::Result<MessageSessionId> {
+        let id = self.next_route_id;
+        self.next_route_id = self.next_route_id.checked_add(1).ok_or_else(|| {
+            std::io::Error::other("XUDP internal session identifier space exhausted")
+        })?;
+        Ok(id)
+    }
+
+    fn close_wire_session(&mut self, wire_session_id: u16) {
+        let Some(session) = self.wire_sessions.remove(&wire_session_id) else {
+            return;
+        };
+        for route_id in session.routes.into_values() {
+            self.routes.remove(&route_id);
+            self.closed_routes.push_back(route_id);
+        }
+    }
+
+    fn start_wire_session(&mut self, wire_session_id: u16, destination: NetLocation) {
+        self.close_wire_session(wire_session_id);
+        self.wire_sessions.insert(
+            wire_session_id,
+            WireSession {
+                default_destination: destination,
+                routes: HashMap::new(),
+            },
+        );
+    }
+
+    fn get_or_create_route(
+        &mut self,
+        wire_session_id: u16,
+        original_destination: &NetLocation,
+    ) -> std::io::Result<Option<MessageSessionId>> {
+        let Some(session) = self.wire_sessions.get(&wire_session_id) else {
+            return Ok(None);
+        };
+        if let Some(route_id) = session.routes.get(original_destination) {
+            return Ok(Some(*route_id));
+        }
+        if self.routes.len() >= MAX_XUDP_ROUTES {
+            log::warn!(
+                "[XUDP SESSION READ] Dropping packet for new destination {} after reaching the {}-route limit",
+                original_destination,
+                MAX_XUDP_ROUTES
+            );
+            return Ok(None);
+        }
+
+        let route_id = self.allocate_route_id()?;
+        self.wire_sessions
+            .get_mut(&wire_session_id)
+            .expect("wire session disappeared during route allocation")
+            .routes
+            .insert(original_destination.clone(), route_id);
+        self.routes.insert(
+            route_id,
+            RoutedSession {
+                wire_session_id,
+                original_destination: original_destination.clone(),
+            },
+        );
+        Ok(Some(route_id))
+    }
+
+    /// Try to decode one complete XUDP frame from the read buffer.
+    ///
+    /// This function must NOT consume any bytes from the buffer unless
+    /// it successfully decodes a complete frame. Otherwise, partial frames would
+    /// be lost when the function is called again with more data.
+    ///
+    /// Returns:
+    ///   Ok(Some((data, destination, session_id))) - Successfully decoded a complete frame
+    ///   Ok(None) - Buffer doesn't contain a complete frame yet (need more data)
+    ///   Err(e) - Error during decoding
+    fn try_decode_one_frame(&mut self) -> std::io::Result<Option<(Vec<u8>, NetLocation, u16)>> {
+        loop {
+            log::debug!(
+                "[XUDP READ] Attempting to decode frame, buffer len: {}",
+                self.read_buffer.len()
+            );
+
+            let Some((metadata, data)) = super::frame::decode_frame(&mut self.read_buffer)? else {
+                return Ok(None);
+            };
+
+            log::debug!(
+                "[XUDP READ] Decoded frame: session_id={}, status={:?}, has_data={}, target={:?}, network={:?}",
+                metadata.session_id,
+                metadata.status,
+                metadata.option.has_data(),
+                metadata.target,
+                metadata.network
+            );
+
+            let data = data.to_vec();
+
+            if metadata.status == SessionStatus::End {
+                self.close_wire_session(metadata.session_id);
+                continue;
+            }
+
+            if metadata.status == SessionStatus::KeepAlive {
+                continue;
+            }
+
+            if let Some(TargetNetwork::Tcp) = metadata.network {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "XUDP with TCP destinations is not supported. Only UDP destinations are supported.",
+                ));
+            }
+
+            // Check for ERROR option bit - remote side is signaling an error
+            if metadata.option.has_error() {
+                log::error!(
+                    "[XUDP READ] Received frame with ERROR option set for session {}",
+                    metadata.session_id
+                );
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionReset,
+                    "XUDP session closed by remote with error",
+                ));
+            }
+
+            let destination = match metadata.status {
+                SessionStatus::New => {
+                    let target = metadata.target.ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "XUDP New frame is missing its destination",
+                        )
+                    })?;
+                    self.start_wire_session(metadata.session_id, target.clone());
+                    target
+                }
+                SessionStatus::Keep => {
+                    let Some(session) = self.wire_sessions.get(&metadata.session_id) else {
+                        log::warn!(
+                            "[XUDP READ] Ignoring data for unknown session {}",
+                            metadata.session_id
+                        );
+                        continue;
+                    };
+                    metadata
+                        .target
+                        .unwrap_or_else(|| session.default_destination.clone())
+                }
+                SessionStatus::End | SessionStatus::KeepAlive => unreachable!(),
+            };
+
+            if data.is_empty() {
+                continue;
+            }
+
+            log::debug!(
+                "[XUDP READ] Decoded complete frame with {} bytes for destination {}",
+                data.len(),
+                destination
+            );
+            return Ok(Some((data, destination, metadata.session_id)));
+        }
+    }
+}
+
+impl AsyncFlushMessage for XudpMessageStream {
+    fn poll_flush_message(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+
+        while !this.write_buffer.is_empty() {
+            let n = ready!(Pin::new(&mut this.inner_stream).poll_write(cx, &this.write_buffer))?;
+            this.write_buffer.advance(n);
+        }
+
+        Pin::new(&mut this.inner_stream).poll_flush(cx)
+    }
+}
+
+impl AsyncShutdownMessage for XudpMessageStream {
+    fn poll_shutdown_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        ready!(self.as_mut().poll_flush_message(cx))?;
+        Pin::new(&mut self.get_mut().inner_stream).poll_shutdown(cx)
+    }
+}
+
+impl AsyncPing for XudpMessageStream {
+    fn supports_ping(&self) -> bool {
+        self.inner_stream.supports_ping()
+    }
+
+    fn poll_write_ping(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<bool>> {
+        Pin::new(&mut self.get_mut().inner_stream).poll_write_ping(cx)
+    }
+}
+
+impl AsyncReadSessionMessage for XudpMessageStream {
+    fn poll_read_session_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<(MessageSessionId, NetLocation)>> {
+        let this = self.get_mut();
+
+        // Return buffered message if available
+        if let Some((data, original_destination, wire_session_id)) = this.incoming_message.take() {
+            if data.len() > buf.remaining() {
+                this.incoming_message = Some((data, original_destination, wire_session_id));
+                return Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "buffer too small for incoming message",
+                )));
+            }
+
+            if let Some(session_id) =
+                this.get_or_create_route(wire_session_id, &original_destination)?
+            {
+                let target = match this.poll_routing_destination(cx, &original_destination) {
+                    Poll::Ready(target) => target?,
+                    Poll::Pending => {
+                        this.incoming_message = Some((data, original_destination, wire_session_id));
+                        return Poll::Pending;
+                    }
+                };
+                buf.put_slice(&data);
+                return Poll::Ready(Ok((session_id, target)));
+            }
+        }
+
+        if this.is_eof {
+            return Poll::Ready(Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "EOF reached",
+            )));
+        }
+
+        loop {
+            // Try to decode a complete frame from the read buffer
+            match this.try_decode_one_frame()? {
+                Some((data, destination, wire_session_id)) => {
+                    let Some(session_id) =
+                        this.get_or_create_route(wire_session_id, &destination)?
+                    else {
+                        log::warn!(
+                            "[XUDP SESSION READ] Dropping data without an admitted route for session {}",
+                            wire_session_id
+                        );
+                        continue;
+                    };
+
+                    let target = match this.poll_routing_destination(cx, &destination) {
+                        Poll::Ready(target) => target?,
+                        Poll::Pending => {
+                            this.incoming_message = Some((data, destination, wire_session_id));
+                            return Poll::Pending;
+                        }
+                    };
+
+                    // Successfully decoded a frame
+                    if data.len() > buf.remaining() {
+                        // Keep the logical destination for the next read
+                        this.incoming_message = Some((data, destination, wire_session_id));
+                        return Poll::Ready(Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "buffer too small for incoming message",
+                        )));
+                    }
+
+                    buf.put_slice(&data);
+                    log::debug!(
+                        "[XUDP SESSION READ] Returning {} bytes for session {} to {}",
+                        data.len(),
+                        session_id,
+                        destination
+                    );
+                    return Poll::Ready(Ok((session_id, target)));
+                }
+                None => {
+                    // Buffer doesn't have a complete frame, need to read more data
+                }
+            }
+
+            // Read more data from inner stream
+            let original_filled = this.read_buffer.len();
+            this.read_buffer.resize(original_filled + 8192, 0);
+            let mut temp_buf = ReadBuf::new(&mut this.read_buffer[original_filled..]);
+
+            log::debug!(
+                "[XUDP SESSION READ] Reading from inner stream, current buffer has {} bytes",
+                original_filled
+            );
+            let poll_result = Pin::new(&mut this.inner_stream).poll_read(cx, &mut temp_buf);
+
+            let n = temp_buf.filled().len();
+            this.read_buffer.truncate(original_filled + n);
+
+            match ready!(poll_result) {
+                Ok(()) => {
+                    log::debug!(
+                        "[XUDP SESSION READ] Got {} bytes from inner stream (total buffer: {})",
+                        n,
+                        this.read_buffer.len()
+                    );
+
+                    if n == 0 {
+                        this.is_eof = true;
+                        return Poll::Ready(Err(std::io::Error::new(
+                            std::io::ErrorKind::UnexpectedEof,
+                            "EOF reached",
+                        )));
+                    }
+
+                    // Got new data, continue loop to try decoding again
+                    continue;
+                }
+                Err(e) => {
+                    log::error!("[XUDP SESSION READ] Error reading from inner stream: {}", e);
+                    return Poll::Ready(Err(e));
+                }
+            }
+        }
+    }
+
+    fn take_closed_session(&mut self) -> Option<MessageSessionId> {
+        self.closed_routes.pop_front()
+    }
+}
+
+impl AsyncWriteSessionMessage for XudpMessageStream {
+    fn poll_write_session_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        session_id: MessageSessionId,
+        buf: &[u8],
+        target: &NetLocation,
+    ) -> Poll<std::io::Result<()>> {
+        // This is the reverse direction: UDP response from internet → XUDP client
+        // Use original destination (may be hostname) in response frame, NOT resolved IP
+
+        log::debug!(
+            "[XUDP SESSION WRITE] Writing {} bytes for session {} from source {}",
+            buf.len(),
+            session_id,
+            target
+        );
+
+        // Flush any pending write buffer first
+        if !self.write_buffer.is_empty() {
+            ready!(self.as_mut().poll_flush_message(cx))?;
+        }
+
+        let Some(route) = self.routes.get(&session_id) else {
+            log::debug!(
+                "[XUDP SESSION WRITE] Discarding response for closed route {}",
+                session_id
+            );
+            return Poll::Ready(Ok(()));
+        };
+        let wire_session_id = route.wire_session_id;
+        let target_location = route.original_destination.clone();
+
+        log::debug!(
+            "[XUDP SESSION WRITE] Using original destination {} for session {} (response came from {})",
+            target_location,
+            wire_session_id,
+            target
+        );
+
+        let metadata = FrameMetadata {
+            session_id: wire_session_id,
+            status: SessionStatus::Keep,
+            option: FrameOption::new().with_data(),
+            target: Some(target_location.clone()),
+            network: Some(TargetNetwork::Udp),
+        };
+
+        log::debug!(
+            "[XUDP SESSION WRITE] Encoding {:?} frame: session_id={}, target={}, data_len={}",
+            SessionStatus::Keep,
+            wire_session_id,
+            target_location,
+            buf.len()
+        );
+
+        // Encode metadata
+        metadata.encode(&mut self.write_buffer)?;
+
+        // Write data length
+        self.write_buffer.put_u16(buf.len() as u16);
+
+        // Write data
+        self.write_buffer.extend_from_slice(buf);
+
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl AsyncSessionMessageStream for XudpMessageStream {
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        self.inner_stream.peer_addr()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::address::Address;
+    use futures::task::noop_waker;
+    use std::collections::HashSet;
+    use std::io;
+    use std::sync::{Arc, Mutex};
+
+    struct PendingOnceWriter {
+        output: Arc<Mutex<Vec<u8>>>,
+        pending: bool,
+    }
+
+    impl AsyncRead for PendingOnceWriter {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            Poll::Pending
+        }
+    }
+
+    impl AsyncWrite for PendingOnceWriter {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<io::Result<usize>> {
+            if self.pending {
+                self.pending = false;
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+            self.output.lock().unwrap().extend_from_slice(buf);
+            Poll::Ready(Ok(buf.len()))
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    impl AsyncPing for PendingOnceWriter {
+        fn supports_ping(&self) -> bool {
+            false
+        }
+
+        fn poll_write_ping(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<bool>> {
+            Poll::Ready(Ok(false))
+        }
+    }
+
+    impl AsyncStream for PendingOnceWriter {}
+
+    #[test]
+    fn disabled_fake_dns_keeps_ip_routing_and_logical_reply_identity() {
+        #[derive(Debug)]
+        struct FixedResolver;
+        impl crate::resolver::Resolver for FixedResolver {
+            fn resolve_location(&self, _: &NetLocation) -> crate::resolver::ResolveFuture {
+                Box::pin(async { Ok(vec!["203.0.113.9:443".parse().unwrap()]) })
+            }
+        }
+        let original = NetLocation::from_str("original.example:443", None).unwrap();
+        let inner = PendingOnceWriter {
+            output: Arc::new(Mutex::new(Vec::new())),
+            pending: false,
+        };
+        let mut stream = XudpMessageStream::new(Box::new(inner)).with_legacy_resolution(true);
+        stream.resolver_cache = Some(ResolverCache::new(Arc::new(FixedResolver)));
+        stream.start_wire_session(3, original.clone());
+        stream.incoming_message = Some((vec![1], original.clone(), 3));
+        let mut data = [0; 8];
+        let mut buf = ReadBuf::new(&mut data);
+        let mut cx = Context::from_waker(futures::task::noop_waker_ref());
+        let Poll::Ready(Ok((id, target))) =
+            Pin::new(&mut stream).poll_read_session_message(&mut cx, &mut buf)
+        else {
+            panic!()
+        };
+        assert_eq!(
+            target,
+            NetLocation::from_str("203.0.113.9:443", None).unwrap()
+        );
+        assert_eq!(stream.routes[&id].original_destination, original);
+    }
+
+    #[test]
+    fn hostname_destination_reaches_router_without_native_resolution() {
+        let destination = NetLocation::from_str("unresolvable.invalid:53", None).unwrap();
+        let mut encoded = BytesMut::new();
+        FrameMetadata {
+            session_id: 8,
+            status: SessionStatus::New,
+            option: FrameOption::new().with_data(),
+            target: Some(destination.clone()),
+            network: Some(TargetNetwork::Udp),
+        }
+        .encode(&mut encoded)
+        .unwrap();
+        encoded.put_u16(1);
+        encoded.extend_from_slice(b"x");
+        let mut stream = XudpMessageStream::new(Box::new(PendingOnceWriter {
+            output: Arc::new(Mutex::new(Vec::new())),
+            pending: false,
+        }));
+        stream.feed_initial_read_data(&encoded).unwrap();
+        let mut storage = [0; 8];
+        let mut buffer = ReadBuf::new(&mut storage);
+        let mut cx = Context::from_waker(futures::task::noop_waker_ref());
+        let Poll::Ready(Ok((_, target))) =
+            Pin::new(&mut stream).poll_read_session_message(&mut cx, &mut buffer)
+        else {
+            panic!("hostname must reach preparation synchronously");
+        };
+        assert_eq!(target, destination);
+        assert_eq!(buffer.filled(), b"x");
+    }
+
+    #[test]
+    fn buffered_response_is_accepted_once_when_output_blocks() {
+        let output = Arc::new(Mutex::new(Vec::new()));
+        let inner = PendingOnceWriter {
+            output: Arc::clone(&output),
+            pending: true,
+        };
+        let mut stream = XudpMessageStream::new(Box::new(inner));
+        let destination = NetLocation::new(Address::Ipv4("127.0.0.1".parse().unwrap()), 53);
+        stream.start_wire_session(10, destination.clone());
+        let route_id = stream
+            .get_or_create_route(10, &destination)
+            .unwrap()
+            .unwrap();
+        let source = NetLocation::from_str("127.0.0.1:53", None).unwrap();
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        assert!(matches!(
+            Pin::new(&mut stream).poll_write_session_message(&mut cx, route_id, b"x", &source),
+            Poll::Ready(Ok(()))
+        ));
+        assert!(matches!(
+            Pin::new(&mut stream).poll_flush_message(&mut cx),
+            Poll::Pending
+        ));
+        assert!(matches!(
+            Pin::new(&mut stream).poll_flush_message(&mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert_eq!(
+            *output.lock().unwrap(),
+            [0, 12, 0, 10, 2, 1, 2, 0, 53, 1, 127, 0, 0, 1, 0, 1, b'x']
+        );
+    }
+
+    #[test]
+    fn whole_frame_parser_enforces_metadata_before_payload() {
+        let mut stream = XudpMessageStream::new(Box::new(PendingOnceWriter {
+            output: Arc::new(Mutex::new(Vec::new())),
+            pending: false,
+        }));
+        for length in [0u16, 3, 513, u16::MAX] {
+            stream.read_buffer = BytesMut::from(length.to_be_bytes().as_slice());
+            assert_eq!(
+                stream.try_decode_one_frame().unwrap_err().kind(),
+                std::io::ErrorKind::InvalidData
+            );
+        }
+        let valid = [0, 12, 0, 1, 1, 1, 2, 0, 53, 1, 127, 0, 0, 1, 0, 1, b'x'];
+        for split in 0..valid.len() {
+            stream.read_buffer = BytesMut::from(&valid[..split]);
+            let original = stream.read_buffer.clone();
+            assert!(stream.try_decode_one_frame().unwrap().is_none());
+            assert_eq!(stream.read_buffer, original);
+        }
+        for malformed in [
+            &[0, 5, 0, 1, 1, 0, 2][..],
+            &[0, 9, 0, 1, 1, 0, 2, 0, 53, 2, 255][..],
+        ] {
+            stream.read_buffer = BytesMut::from(malformed);
+            stream.read_buffer.extend_from_slice(&valid);
+            assert!(stream.try_decode_one_frame().is_err());
+            assert_eq!(&stream.read_buffer[..], &valid);
+            assert_eq!(stream.try_decode_one_frame().unwrap().unwrap().0, b"x");
+        }
+    }
+
+    #[test]
+    fn closed_routes_cannot_emit_or_reuse_internal_ids() {
+        let output = Arc::new(Mutex::new(Vec::new()));
+        let inner = PendingOnceWriter {
+            output: Arc::clone(&output),
+            pending: false,
+        };
+        let mut stream = XudpMessageStream::new(Box::new(inner));
+        let destination = NetLocation::new(Address::Ipv4("127.0.0.1".parse().unwrap()), 53);
+        stream.start_wire_session(0, destination.clone());
+        let old_route = stream
+            .get_or_create_route(0, &destination)
+            .unwrap()
+            .unwrap();
+        stream.close_wire_session(0);
+        assert_eq!(stream.take_closed_session(), Some(old_route));
+        assert_eq!(stream.take_closed_session(), None);
+
+        let source = NetLocation::from_str("127.0.0.1:53", None).unwrap();
+        let waker = noop_waker();
+        let mut cx = Context::from_waker(&waker);
+        assert!(matches!(
+            Pin::new(&mut stream).poll_write_session_message(&mut cx, old_route, b"late", &source),
+            Poll::Ready(Ok(()))
+        ));
+        assert!(output.lock().unwrap().is_empty());
+
+        stream.start_wire_session(0, destination.clone());
+        let new_route = stream
+            .get_or_create_route(0, &destination)
+            .unwrap()
+            .unwrap();
+        assert_ne!(new_route, old_route);
+    }
+
+    #[test]
+    fn route_limit_preserves_existing_routes_and_releases_closed_routes() {
+        let output = Arc::new(Mutex::new(Vec::new()));
+        let inner = PendingOnceWriter {
+            output,
+            pending: false,
+        };
+        let mut stream = XudpMessageStream::new(Box::new(inner));
+        let address = Address::Ipv4("127.0.0.1".parse().unwrap());
+        let first_destination = NetLocation::new(address.clone(), 1);
+        stream.start_wire_session(10, first_destination.clone());
+        let preserved_destination = NetLocation::new(address.clone(), u16::MAX);
+        stream.start_wire_session(20, preserved_destination.clone());
+
+        let first_route = stream
+            .get_or_create_route(10, &first_destination)
+            .unwrap()
+            .unwrap();
+        let preserved_route = stream
+            .get_or_create_route(20, &preserved_destination)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            stream.get_or_create_route(10, &first_destination).unwrap(),
+            Some(first_route)
+        );
+
+        for port in 2..MAX_XUDP_ROUTES as u16 {
+            let destination = NetLocation::new(address.clone(), port);
+            assert!(
+                stream
+                    .get_or_create_route(10, &destination)
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        assert_eq!(stream.routes.len(), MAX_XUDP_ROUTES);
+        assert_eq!(
+            stream.get_or_create_route(10, &first_destination).unwrap(),
+            Some(first_route)
+        );
+        assert_eq!(
+            stream
+                .get_or_create_route(20, &preserved_destination)
+                .unwrap(),
+            Some(preserved_route)
+        );
+
+        let rejected_destination = NetLocation::new(address.clone(), u16::MAX - 1);
+        let error = stream
+            .get_or_create_route(20, &rejected_destination)
+            .unwrap();
+        assert_eq!(error, None);
+        assert_eq!(stream.routes.len(), MAX_XUDP_ROUTES);
+
+        stream.close_wire_session(10);
+        assert_eq!(stream.routes.len(), 1);
+        assert!(stream.routes.contains_key(&preserved_route));
+        let closed_routes: HashSet<_> =
+            std::iter::from_fn(|| stream.take_closed_session()).collect();
+        assert_eq!(closed_routes.len(), MAX_XUDP_ROUTES - 1);
+        assert!(closed_routes.contains(&first_route));
+        assert!(!closed_routes.contains(&preserved_route));
+        assert_eq!(stream.take_closed_session(), None);
+
+        assert!(
+            stream
+                .get_or_create_route(20, &rejected_destination)
+                .unwrap()
+                .is_some()
+        );
+    }
+}

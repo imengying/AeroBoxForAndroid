@@ -1,0 +1,27 @@
+[package]
+name = "test-support"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+bytes.workspace = true
+futures-util = { workspace = true, default-features = false, features = ["std", "io"] }
+hickory-proto.workspace = true
+hickory-net.workspace = true
+hickory-resolver = { workspace = true, features = ["tokio"] }
+metrics.workspace = true
+metrics-util = { workspace = true, features = ["debugging"] }
+tokio = { workspace = true, features = ["net"] }
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "std"] }
+
+[lints]
+workspace = true

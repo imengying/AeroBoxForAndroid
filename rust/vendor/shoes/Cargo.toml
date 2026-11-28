@@ -1,0 +1,214 @@
+[package]
+name = "shoes"
+version = "0.3.8"
+publish = false # Cargo strips fork patches from crates.io packages.
+edition = "2024"
+rust-version = "1.99.1"
+autotests = false
+autobenches = false
+license = "MIT"
+description = "A multi-protocol proxy server."
+homepage = "https://github.com/cfal/shoes/"
+repository = "https://github.com/cfal/shoes/"
+readme = "README.md"
+keywords = ["proxy", "proxy-server", "shadowsocks", "v2ray", "vmess"]
+categories = ["command-line-utilities", "network-programming"]
+
+[workspace]
+members = ["tests/support"]
+resolver = "3"
+
+[patch.crates-io]
+h2 = { path = "../h2" }
+tendns = { path = "../tendns" }
+rustls = { path = "../rustls/rustls" }
+blake3 = { path = "../blake3" }
+h3 = { path = "../h3/h3" }
+h3-quinn = { path = "../h3/h3-quinn" }
+hickory-net = { path = "../hickory-dns/crates/net" }
+hickory-proto = { path = "../hickory-dns/crates/proto" }
+hickory-resolver = { path = "../hickory-dns/crates/resolver" }
+nix = { path = "../nix" }
+smoltcp = { path = "../smoltcp" }
+quinn = { path = "../quinn" }
+quinn-proto = { path = "../quinn-proto" }
+rcgen = { path = "../rcgen" }
+
+[lib]
+name = "shoes"
+# AeroBox's Android crate owns the JNI library and packaging.
+crate-type = ["rlib"]
+
+[[bin]]
+name = "shoes"
+path = "src/main.rs"
+
+[features]
+default = []
+embedded-platform = []  # Enable embedded platform callbacks on Unix hosts
+integration-tests = []
+optional-peer-tests = ["integration-tests"]
+
+[[test]]
+name = "quinn_pacing"
+path = "tests/quinn_pacing.rs"
+
+[[test]]
+name = "rule_allocation"
+path = "tests/rule_allocation.rs"
+
+[[test]]
+name = "retention_allocation"
+path = "tests/retention_allocation.rs"
+
+[[test]]
+name = "matcher_invariants"
+path = "tests/matcher_invariants.rs"
+
+[[test]]
+name = "rule_properties"
+path = "tests/rule_properties.rs"
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+required-features = ["integration-tests"]
+
+[[test]]
+name = "optional_peer"
+path = "tests/optional_peer.rs"
+required-features = ["optional-peer-tests"]
+
+[[test]]
+name = "ws_early_data"
+path = "tests/ws_early_data.rs"
+required-features = ["integration-tests"]
+
+[[test]]
+name = "reality_interop"
+path = "tests/reality_interop.rs"
+required-features = ["optional-peer-tests"]
+
+[[test]]
+name = "vless_encryption_interop"
+path = "tests/vless_encryption_interop.rs"
+required-features = ["optional-peer-tests"]
+
+[dependencies]
+aerobox-fingerprint = { path = "../../crates/aerobox-fingerprint" }
+aho-corasick = "1"
+anyhow = "1"
+async-trait = "*"
+aerobox-primitives = { path = "../../crates/aerobox-primitives" }
+aerobox-crypto = { path = "../../crates/aerobox-crypto" }
+base64 = "*"
+blake2 = "0.11"
+blake3 = { version = "*", features = ["pure"] }
+bytes = "*"
+chrono = "*"
+dashmap = "*"
+digest = "*"
+etherparse = "*"
+futures = "*"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+ruzstd = "0.9.1"
+prost = "0.14.4"
+yamux = "=0.14.1"
+yaml-rust2 = { version = "0.13", default-features = false }
+h2 = "*"
+h3 = { version = "*", features = ["i-implement-a-third-party-backend-and-opt-into-breaking-changes"] }
+h3-quinn = "*"
+hickory-resolver = { version = "*", default-features = false, features = ["tokio", "tls-rustcrypto", "https-rustcrypto", "h3-rustcrypto"] }
+http = "*"
+httpdate = "1"
+http-body-util = "*"
+httparse = "*"
+hyper = { version = "*", features = ["client", "server", "http1", "http2"] }
+hyper-util = { version = "*", features = ["tokio", "server"] }
+hyper-tungstenite = "0.30.0"
+memory-stats = "1.2.0"
+indexmap = "*"
+ipnetwork = { version = "0.21", features = ["serde"] }
+libc = "*"
+log = { version = "*", features = ["std", "release_max_level_info"] }
+lru = "*"
+md-5 = "*"
+memchr = "*"
+mime_guess = "*"
+ml-kem = { version = "0.3.4", features = ["zeroize"] }
+notify = "*"
+# 0.13's futex_time64 probe triggers SIGSYS on 32-bit Android API 26-29.
+parking_lot = "0.12.5"
+percent-encoding = "*"
+quinn = { version = "*", default-features = false, features = ["log", "runtime-tokio", "rustls-rustcrypto"] }
+quinn-proto = { version = "0.11", default-features = false }
+rand = "0.10"
+rand_core = "0.10"
+rcgen = { version = "*", default-features = false, features = ["rustcrypto", "pem"] }
+rustc-hash = "*"
+regex = { version = "1", default-features = false, features = ["std", "perf"] }
+regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "meta", "perf"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "tls12", "brotli-custom", "zlib-custom"] }
+serde = { version = "*", features = ["derive", "std"] }
+serde_json = { version = "*", features = ["preserve_order"] }
+serde_yaml = "*"
+shake = "*"
+smoltcp = { version = "*", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-icmp", "auto-icmp-echo-reply", "socket-udp", "socket-tcp", "socket-tcp-cubic", "phy-tuntap_interface", "assembler-max-segment-count-32", "segmentation-offload"] }
+socket2 = { version = "*", features = ["all"] }
+sntpc = { version = "=0.11.0", default-features = false }
+subtle = "*"
+tendns = { version = "0.2", default-features = false }
+tokio = { version = "*", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "net",
+    "process",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+    "time",
+] }
+tokio-util = { version = "*", features = ["time", "io", "rt", "compat"] }
+tracing = { version = "0.1", default-features = false, features = ["release_max_level_info"] }
+tun = { version = "*", features = ["async"] }
+url = "*"
+uuid = "1"
+webpki-roots = { version = "*" }
+x509-parser = { version = "*", default-features = false, features = [] }
+zeroize = "*"
+chacha20poly1305 = { version = "=0.10.1", default-features = false }
+
+[dev-dependencies]
+tokio = { version = "*", features = ["test-util"] }
+rcgen = { version = "*", default-features = false, features = ["rustcrypto", "pem", "x509-parser"] }
+shoes-test-support = { path = "tests/support" }
+tempfile = "*"
+tokio-rustls = { version = "*", default-features = false, features = ["tls12"] }
+
+[target.'cfg(not(target_has_atomic = "64"))'.dependencies]
+portable-atomic = { version = "1", features = ["fallback"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rtnetlink = "0.24"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+hickory-resolver = { version = "*", default-features = false, features = ["system-config"] }
+
+# jemalloc for better memory performance (not supported on Windows MSVC, iOS, or Android)
+[target.'cfg(not(any(target_env = "msvc", target_os = "ios", target_os = "android")))'.dependencies]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+strip = true
+
+[profile.dev]
+debug = 1
+incremental = false
+
+# The full kernel test binary is large. Keep its debug metadata bounded on
+# the 8 GiB build host; dependencies retain their normal dev debug settings.
+[profile.test.package.shoes]
+debug = 0
+codegen-units = 256

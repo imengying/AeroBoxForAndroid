@@ -1,0 +1,14 @@
+{
+  "module": "github.com/metacubex/utls",
+  "version": "v1.8.7",
+  "commit": "f7d52c22f3a8d2f510ad1470f75cb6c3fe26aa37",
+  "license_sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067",
+  "upstream_files": {
+    "cipher_suites.go": "615e81c42d76df677c785f2552ebc07e8bf5fe83c07c35cd77c04e86c8aa8d3d",
+    "u_common.go": "1793c11d305d4dccc0900c5134beaf6b7aa88707af8beff52deb9f6370abc528",
+    "handshake_server.go": "21a257373df2bbed81022607f931d4b32b4843664dcadbb32ce7eb523ad11a04",
+    "common.go": "41a3e2615a510e4cbe7386f1c5865eadedfb2a24996afdd6ca977e9442938bb0",
+    "key_agreement.go": "db368fa743f1842bda6b5f3e2ec7ce0dab4270aabaf3215af4b30dd397670783"
+  },
+  "shim_sha256": "ae0e44c5efca20f0ea940eae83a0d566c713352b4fab17e45fbd1259c4d621da"
+}

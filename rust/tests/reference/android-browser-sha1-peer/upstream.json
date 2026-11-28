@@ -1,0 +1,19 @@
+{
+  "module": "github.com/metacubex/utls",
+  "version": "v1.8.7",
+  "commit": "f7d52c22f3a8d2f510ad1470f75cb6c3fe26aa37",
+  "license_sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067",
+  "upstream_files": {
+    "cipher_suites.go": "615e81c42d76df677c785f2552ebc07e8bf5fe83c07c35cd77c04e86c8aa8d3d",
+    "u_common.go": "1793c11d305d4dccc0900c5134beaf6b7aa88707af8beff52deb9f6370abc528",
+    "handshake_server.go": "21a257373df2bbed81022607f931d4b32b4843664dcadbb32ce7eb523ad11a04",
+    "common.go": "41a3e2615a510e4cbe7386f1c5865eadedfb2a24996afdd6ca977e9442938bb0",
+    "key_agreement.go": "db368fa743f1842bda6b5f3e2ec7ce0dab4270aabaf3215af4b30dd397670783",
+    "auth.go": "0dbca3323587cccd982cfed72c7f7ddd6582fecba634aa62beb5eefae1204e3d",
+    "defaults.go": "b9126565976f5da5ff3712babc5d502a40979971af1841279c21f590d13ff1f1",
+    "handshake_messages.go": "f6e0eb13900282b9e8aab5c940a881984c96bcb70dc30588adf79f9d18865cae",
+    "prf.go": "edfad31ba55bb82b4cceb102efb9edea269ae6dd6c2e312066d9a4aca503959c",
+    "conn.go": "e8027769d42706f263ef78d76ebd6e8a592299407a1f86b88b9ba5217bfe7dba"
+  },
+  "shim_sha256": "d2951cd1628cb61fe79f6565b5e4e147617de3dba87c9323c3067bd5261438bf"
+}

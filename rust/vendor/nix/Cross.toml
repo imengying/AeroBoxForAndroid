@@ -1,0 +1,10 @@
+[build.env]
+passthrough = [
+	"RUSTFLAGS",
+	"RUSTDOCFLAGS",
+	"RUST_TEST_THREADS",
+	"RUST_BACKTRACE",
+]
+
+[target.loongarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/loongarch64-unknown-linux-gnu:edge"

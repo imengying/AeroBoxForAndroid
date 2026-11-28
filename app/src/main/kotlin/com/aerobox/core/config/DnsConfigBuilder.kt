@@ -10,7 +10,7 @@ import org.json.JSONObject
 import java.net.URI
 
 /**
- * Builds the "dns" section of a sing-box configuration.
+ * Builds the DNS section of the Android configuration document.
  *
  * Extracted from [ConfigGenerator] for readability — all methods are
  * package-private and called exclusively by the generator.
@@ -250,9 +250,6 @@ internal object DnsConfigBuilder {
 
     private fun normalizeDirectDnsAddress(directDns: String): String {
         val trimmed = directDns.trim()
-        // Preserve old backup values without guessing the proxy exit family.
-        if (trimmed == "[ipv4]") return "223.5.5.5"
-        if (trimmed == "[ipv6]") return "2400:3200::1"
         return trimmed.ifBlank { "https://dns.alidns.com/dns-query" }.also { parseDnsServer(it) }
     }
 
@@ -278,9 +275,6 @@ internal object DnsConfigBuilder {
 
     internal fun parseDnsServer(dns: String): DnsServerSpec {
         val value = dns.trim()
-        // Old backup placeholders are still supported as plain UDP addresses.
-        if (value == "[ipv4]") return DnsServerSpec("udp", "1.1.1.1", 53)
-        if (value == "[ipv6]") return DnsServerSpec("udp", "2606:4700:4700::1111", 53)
         val scheme = if (value.contains("://")) value.substringBefore("://").lowercase() else "udp"
         requireDns(scheme in supportedDnsTypes)
         val defaultPort = when (scheme) {

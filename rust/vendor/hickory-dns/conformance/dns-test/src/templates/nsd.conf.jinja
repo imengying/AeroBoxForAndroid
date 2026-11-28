@@ -1,0 +1,23 @@
+server:
+    pidfile: /tmp/nsd.pid
+    ip-address: 0.0.0.0@53
+{% if dot %}
+    ip-address: 0.0.0.0@853
+    tls-service-key: {{ dot.private_key }}
+    tls-service-pem: {{ dot.cert_chain }}
+    tls-port: 853
+{% endif %}
+
+remote-control:
+  control-enable: yes
+  control-interface: /run/unbound.ctl
+
+zone:
+  name: {{ fqdn }}
+  zonefile: /etc/zones/main.zone
+
+{% for zone in additional_zones -%}
+zone:
+  name: {{ zone }}
+  zonefile: /etc/zones/{{ zone }}zone
+{% endfor -%}

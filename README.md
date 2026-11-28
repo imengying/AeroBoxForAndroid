@@ -1,9 +1,9 @@
 # AeroBox for Android
 [![API](https://img.shields.io/badge/API-31%2B-brightgreen.svg?style=flat)](https://android-arsenal.com/api?level=31) [![ci](https://github.com/imengying/AeroBoxForAndroid/actions/workflows/ci.yml/badge.svg)](https://github.com/imengying/AeroBoxForAndroid/actions/workflows/ci.yml) [![Releases](https://img.shields.io/github/v/release/imengying/AeroBoxForAndroid)](https://github.com/imengying/AeroBoxForAndroid/releases) [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](./LICENSE)
 
-AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
+AeroBox for Android combines a Rust 2024 proxy core with a native Kotlin Android app.
 
-一款基于 sing-box / libbox 的 Android 原生通用代理软件。
+一款采用 Rust 2024 内核和 Kotlin 原生界面的 Android 通用代理软件。当前 `rust` 分支以原 sing-box 版本已有功能为整合范围，进度见 [Rust 开发说明](docs/rust.md)。
 
 ## 下载 / Downloads
 
@@ -11,7 +11,7 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 
 ## 功能 / Features
 
-- 基于 sing-box / libbox 的 Android VPN 模式代理
+- 基于 Rust 内核的 Android VPN 模式代理
 - 订阅管理、手动更新、自动更新
 - 节点编辑、搜索、批量删除、复制到本地分组、JSON 导出
 - 订阅、节点、设置和自定义规则的手动备份与合并恢复
@@ -57,10 +57,27 @@ AeroBox for Android is a sing-box / libbox based proxy toolchain for Android.
 - Android 12+ (`minSdk 31`)
 - 推荐使用 GitHub Actions 构建发布版本
 
+## 本地开发 / Development
+
+使用 JDK 25、Rust（版本见 `rust/rust-toolchain.toml`）、Android SDK 37.2 / Build Tools 37.0.0 和 NDK 30.0.16248370。
+Gradle 9.8.2 由仓库中的 Wrapper 固定，并校验下载包 SHA-256。
+Rust 源码与 Kotlin 桥接同仓库维护，Gradle 自动构建 JNI 库。
+
+先安装 Rust Android targets，并按 `.github/scripts/prepare-geo-assets.sh` 准备规则资源，再运行：
+
+```sh
+python3 rust/scripts/run-bounded-build.py -- ./gradlew :app:testDebugUnitTest :app:lintRelease
+python3 rust/scripts/run-bounded-build.py -- ./gradlew -PAEROBOX_ABIS=arm64-v8a :app:assembleDebug
+```
+
+统一构建入口限制进程组内存为 5 GiB，串行执行 Rust 和 Kotlin 构建。
+详细约定与验证范围见 [docs/rust.md](docs/rust.md)。
+
 ## Credits
 
-- Core: [SagerNet/sing-box](https://github.com/SagerNet/sing-box)
-- Android runtime bridge: `libbox` / `gomobile`
+- Core: Rust runtime and vendored libraries in [rust/](rust/)
+- Original Android core and external configuration formats: [SagerNet/sing-box](https://github.com/SagerNet/sing-box)
+- Android runtime bridge: Kotlin / JNI
 - UI & Android stack: AndroidX, Jetpack Compose, Room, WorkManager
 
 ## License

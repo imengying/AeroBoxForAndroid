@@ -1,0 +1,686 @@
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::net::{TcpStream, UdpSocket};
+
+#[cfg(target_family = "unix")]
+use tokio::net::UnixStream;
+
+use crate::address::NetLocation;
+
+pub trait AsyncPing {
+    fn supports_ping(&self) -> bool;
+
+    // Write a ping message to the stream, if supported.
+    // This should end up calling the highest level stream abstraction that supports
+    // pings, and should only result in a single message.
+    fn poll_write_ping(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<bool>>;
+}
+
+pub trait AsyncReadMessage {
+    fn read_message_eof_on_empty(&self) -> bool {
+        true
+    }
+    fn poll_read_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>>;
+}
+
+pub trait AsyncWriteMessage {
+    fn poll_write_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<()>>;
+}
+
+pub trait AsyncFlushMessage {
+    fn poll_flush_message(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>>;
+}
+
+pub trait AsyncShutdownMessage {
+    fn poll_shutdown_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>>;
+}
+
+/// Extension trait that provides an async `shutdown_message()` method for types
+/// implementing `AsyncShutdownMessage`. Similar to `AsyncWriteExt::shutdown()`.
+pub trait AsyncShutdownMessageExt: AsyncShutdownMessage {
+    /// Shuts down the message stream, signaling that no more messages will be sent.
+    fn shutdown_message(&mut self) -> ShutdownMessageFuture<'_, Self>
+    where
+        Self: Unpin,
+    {
+        ShutdownMessageFuture { stream: self }
+    }
+}
+
+/// Future returned by `AsyncShutdownMessageExt::shutdown_message()`.
+pub struct ShutdownMessageFuture<'a, T: ?Sized> {
+    stream: &'a mut T,
+}
+
+impl<T: AsyncShutdownMessage + Unpin + ?Sized> Future for ShutdownMessageFuture<'_, T> {
+    type Output = std::io::Result<()>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Pin::new(&mut *self.stream).poll_shutdown_message(cx)
+    }
+}
+
+// Blanket implementation for all types that implement AsyncShutdownMessage
+impl<T: AsyncShutdownMessage + ?Sized> AsyncShutdownMessageExt for T {}
+
+pub trait AsyncReadTargetedMessage {
+    fn targeted_eof_on_empty(&self) -> bool {
+        true
+    }
+    fn poll_read_targeted_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<NetLocation>>;
+}
+
+pub trait AsyncWriteSourcedMessage {
+    fn supports_hostname_source(&self) -> bool {
+        true
+    }
+
+    fn poll_write_sourced_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        source: &NetLocation,
+    ) -> Poll<std::io::Result<()>>;
+}
+
+/// Session-based message reading trait. Used by protocols like XUDP that have session IDs.
+/// Returns (session_id, data, source_addr) tuples.
+pub type MessageSessionId = u64;
+
+pub trait AsyncReadSessionMessage {
+    fn poll_read_session_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<(MessageSessionId, NetLocation)>>;
+
+    fn take_closed_session(&mut self) -> Option<MessageSessionId> {
+        None
+    }
+}
+
+/// Session-based message writing trait. Used by protocols like XUDP that have session IDs.
+/// Writes data for a specific session ID to a target address.
+pub trait AsyncWriteSessionMessage {
+    fn poll_write_session_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        session_id: MessageSessionId,
+        buf: &[u8],
+        target: &NetLocation,
+    ) -> Poll<std::io::Result<()>>;
+}
+
+impl AsyncReadMessage for UdpSocket {
+    fn read_message_eof_on_empty(&self) -> bool {
+        false
+    }
+    fn poll_read_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        self.poll_recv(cx, buf)
+    }
+}
+
+impl AsyncWriteMessage for UdpSocket {
+    fn poll_write_message(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<()>> {
+        // TODO: send back an error if the whole buf.len() wasn't sent?
+        self.poll_send(cx, buf).map(|result| result.map(|_| ()))
+    }
+}
+
+impl AsyncFlushMessage for UdpSocket {
+    fn poll_flush_message(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl AsyncShutdownMessage for UdpSocket {
+    fn poll_shutdown_message(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
+pub trait AsyncStream: AsyncRead + AsyncWrite + AsyncPing + Unpin + Send + Sync {
+    /// Duplicate a control-only handle for this exclusive TCP carrier. Multiplexed
+    /// streams and QUIC deliberately keep the default; this never permits raw I/O.
+    fn tcp_socket_control(&self) -> std::io::Result<Option<crate::tcp::socket_control::TcpSocketControl>> {
+        Ok(None)
+    }
+    fn local_addr(&self) -> Option<std::net::SocketAddr> {
+        None
+    }
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        None
+    }
+    /// Semantic outbound accounting that raw-socket fast paths must preserve.
+    fn flow(&self) -> Option<&std::sync::Arc<crate::control::flows::FlowEntry>> {
+        None
+    }
+    /// All remaining I/O is raw socket I/O, with no buffered bytes or wrapper side effects.
+    /// May become available after a protocol transition and its buffered I/O have drained.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn plain_tcp(&self) -> Option<&TcpStream> {
+        None
+    }
+
+    /// Limits relay chunks for writers that packetize each write separately.
+    fn preferred_write_size(&self) -> Option<std::num::NonZeroUsize> {
+        None
+    }
+}
+
+pub trait AsyncMessageStream:
+    AsyncReadMessage
+    + AsyncWriteMessage
+    + AsyncFlushMessage
+    + AsyncShutdownMessage
+    + AsyncPing
+    + Unpin
+    + Send
+{
+    fn flow(&self) -> Option<&std::sync::Arc<crate::control::flows::FlowEntry>> {
+        None
+    }
+}
+
+/// Server stream trait connected to proxy clients, where received messages have a target address,
+/// and we write forwarded messages along with the source address we received them from.
+pub trait AsyncTargetedMessageStream:
+    AsyncReadTargetedMessage
+    + AsyncWriteSourcedMessage
+    + AsyncFlushMessage
+    + AsyncShutdownMessage
+    + AsyncPing
+    + Unpin
+    + Send
+{
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        None
+    }
+}
+
+/// Session-based stream trait for protocols like XUDP that multiplex sessions over a single connection.
+/// Reads return (session_id, data, source_addr) and writes target (session_id, data, target_addr).
+pub trait AsyncSessionMessageStream:
+    AsyncReadSessionMessage
+    + AsyncWriteSessionMessage
+    + AsyncFlushMessage
+    + AsyncShutdownMessage
+    + AsyncPing
+    + Unpin
+    + Send
+{
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        None
+    }
+}
+
+impl AsyncPing for TcpStream {
+    fn supports_ping(&self) -> bool {
+        false
+    }
+
+    fn poll_write_ping(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<bool>> {
+        unimplemented!();
+    }
+}
+
+impl AsyncStream for TcpStream {
+    fn tcp_socket_control(&self) -> std::io::Result<Option<crate::tcp::socket_control::TcpSocketControl>> {
+        crate::tcp::socket_control::TcpSocketControl::from_tcp(self)
+    }
+    fn local_addr(&self) -> Option<std::net::SocketAddr> {
+        TcpStream::local_addr(self).ok()
+    }
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        TcpStream::peer_addr(self).ok()
+    }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn plain_tcp(&self) -> Option<&TcpStream> {
+        Some(self)
+    }
+}
+
+#[cfg(test)]
+impl AsyncPing for tokio::io::DuplexStream {
+    fn supports_ping(&self) -> bool {
+        false
+    }
+
+    fn poll_write_ping(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<bool>> {
+        Poll::Ready(Ok(false))
+    }
+}
+
+#[cfg(test)]
+impl AsyncStream for tokio::io::DuplexStream {}
+
+#[cfg(target_family = "unix")]
+impl AsyncPing for UnixStream {
+    fn supports_ping(&self) -> bool {
+        false
+    }
+
+    fn poll_write_ping(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<bool>> {
+        unimplemented!();
+    }
+}
+
+#[cfg(target_family = "unix")]
+impl AsyncStream for UnixStream {}
+
+impl AsyncPing for UdpSocket {
+    fn supports_ping(&self) -> bool {
+        false
+    }
+
+    fn poll_write_ping(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<bool>> {
+        unimplemented!();
+    }
+}
+
+impl AsyncMessageStream for UdpSocket {}
+
+// pattern copied from deref_async_read macro: https://docs.rs/tokio/latest/src/tokio/io/async_read.rs.html#60
+impl<T: ?Sized + AsyncPing + Unpin> AsyncPing for Box<T> {
+    fn supports_ping(&self) -> bool {
+        (**self).supports_ping()
+    }
+
+    fn poll_write_ping(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<bool>> {
+        Pin::new(&mut **self).poll_write_ping(cx)
+    }
+}
+
+impl<T: ?Sized + AsyncPing + Unpin> AsyncPing for &mut T {
+    fn supports_ping(&self) -> bool {
+        (**self).supports_ping()
+    }
+
+    fn poll_write_ping(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<bool>> {
+        Pin::new(&mut **self).poll_write_ping(cx)
+    }
+}
+
+impl<T: ?Sized + AsyncReadMessage + Unpin> AsyncReadMessage for Box<T> {
+    fn read_message_eof_on_empty(&self) -> bool {
+        (**self).read_message_eof_on_empty()
+    }
+    fn poll_read_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_read_message(cx, buf)
+    }
+}
+
+impl<T: ?Sized + AsyncReadMessage + Unpin> AsyncReadMessage for &mut T {
+    fn read_message_eof_on_empty(&self) -> bool {
+        (**self).read_message_eof_on_empty()
+    }
+    fn poll_read_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_read_message(cx, buf)
+    }
+}
+
+impl<T: ?Sized + AsyncWriteMessage + Unpin> AsyncWriteMessage for Box<T> {
+    fn poll_write_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_write_message(cx, buf)
+    }
+}
+
+impl<T: ?Sized + AsyncWriteMessage + Unpin> AsyncWriteMessage for &mut T {
+    fn poll_write_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_write_message(cx, buf)
+    }
+}
+
+impl<T: ?Sized + AsyncFlushMessage + Unpin> AsyncFlushMessage for Box<T> {
+    fn poll_flush_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_flush_message(cx)
+    }
+}
+
+impl<T: ?Sized + AsyncFlushMessage + Unpin> AsyncFlushMessage for &mut T {
+    fn poll_flush_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_flush_message(cx)
+    }
+}
+
+impl<T: ?Sized + AsyncShutdownMessage + Unpin> AsyncShutdownMessage for Box<T> {
+    fn poll_shutdown_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_shutdown_message(cx)
+    }
+}
+
+impl<T: ?Sized + AsyncShutdownMessage + Unpin> AsyncShutdownMessage for &mut T {
+    fn poll_shutdown_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_shutdown_message(cx)
+    }
+}
+
+impl<T: ?Sized + AsyncReadTargetedMessage + Unpin> AsyncReadTargetedMessage for Box<T> {
+    fn targeted_eof_on_empty(&self) -> bool {
+        (**self).targeted_eof_on_empty()
+    }
+    fn poll_read_targeted_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<NetLocation>> {
+        Pin::new(&mut **self).poll_read_targeted_message(cx, buf)
+    }
+}
+
+impl<T: ?Sized + AsyncReadTargetedMessage + Unpin> AsyncReadTargetedMessage for &mut T {
+    fn targeted_eof_on_empty(&self) -> bool {
+        (**self).targeted_eof_on_empty()
+    }
+    fn poll_read_targeted_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<NetLocation>> {
+        Pin::new(&mut **self).poll_read_targeted_message(cx, buf)
+    }
+}
+
+impl<T: ?Sized + AsyncWriteSourcedMessage + Unpin> AsyncWriteSourcedMessage for Box<T> {
+    fn supports_hostname_source(&self) -> bool {
+        (**self).supports_hostname_source()
+    }
+
+    fn poll_write_sourced_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        source: &NetLocation,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_write_sourced_message(cx, buf, source)
+    }
+}
+
+impl<T: ?Sized + AsyncWriteSourcedMessage + Unpin> AsyncWriteSourcedMessage for &mut T {
+    fn supports_hostname_source(&self) -> bool {
+        (**self).supports_hostname_source()
+    }
+
+    fn poll_write_sourced_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        source: &NetLocation,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_write_sourced_message(cx, buf, source)
+    }
+}
+
+impl<T: ?Sized + AsyncStream + Unpin> AsyncStream for Box<T> {
+    fn tcp_socket_control(&self) -> std::io::Result<Option<crate::tcp::socket_control::TcpSocketControl>> {
+        (**self).tcp_socket_control()
+    }
+    fn local_addr(&self) -> Option<std::net::SocketAddr> {
+        (**self).local_addr()
+    }
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        (**self).peer_addr()
+    }
+    fn flow(&self) -> Option<&std::sync::Arc<crate::control::flows::FlowEntry>> {
+        (**self).flow()
+    }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn plain_tcp(&self) -> Option<&TcpStream> {
+        (**self).plain_tcp()
+    }
+
+    fn preferred_write_size(&self) -> Option<std::num::NonZeroUsize> {
+        (**self).preferred_write_size()
+    }
+}
+impl<T: ?Sized + AsyncStream + Unpin> AsyncStream for &mut T {
+    fn tcp_socket_control(&self) -> std::io::Result<Option<crate::tcp::socket_control::TcpSocketControl>> {
+        (**self).tcp_socket_control()
+    }
+    fn local_addr(&self) -> Option<std::net::SocketAddr> {
+        (**self).local_addr()
+    }
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        (**self).peer_addr()
+    }
+    fn flow(&self) -> Option<&std::sync::Arc<crate::control::flows::FlowEntry>> {
+        (**self).flow()
+    }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn plain_tcp(&self) -> Option<&TcpStream> {
+        (**self).plain_tcp()
+    }
+
+    fn preferred_write_size(&self) -> Option<std::num::NonZeroUsize> {
+        (**self).preferred_write_size()
+    }
+}
+
+impl<T: ?Sized + AsyncMessageStream + Unpin> AsyncMessageStream for Box<T> {
+    fn flow(&self) -> Option<&std::sync::Arc<crate::control::flows::FlowEntry>> {
+        (**self).flow()
+    }
+}
+impl<T: ?Sized + AsyncMessageStream + Unpin> AsyncMessageStream for &mut T {
+    fn flow(&self) -> Option<&std::sync::Arc<crate::control::flows::FlowEntry>> {
+        (**self).flow()
+    }
+}
+
+impl<T: ?Sized + AsyncTargetedMessageStream + Unpin> AsyncTargetedMessageStream for Box<T> {
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        (**self).peer_addr()
+    }
+}
+impl<T: ?Sized + AsyncTargetedMessageStream + Unpin> AsyncTargetedMessageStream for &mut T {
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        (**self).peer_addr()
+    }
+}
+
+impl<T: ?Sized + AsyncReadSessionMessage + Unpin> AsyncReadSessionMessage for Box<T> {
+    fn poll_read_session_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<(MessageSessionId, NetLocation)>> {
+        Pin::new(&mut **self).poll_read_session_message(cx, buf)
+    }
+
+    fn take_closed_session(&mut self) -> Option<MessageSessionId> {
+        (**self).take_closed_session()
+    }
+}
+
+impl<T: ?Sized + AsyncReadSessionMessage + Unpin> AsyncReadSessionMessage for &mut T {
+    fn poll_read_session_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<(MessageSessionId, NetLocation)>> {
+        Pin::new(&mut **self).poll_read_session_message(cx, buf)
+    }
+
+    fn take_closed_session(&mut self) -> Option<MessageSessionId> {
+        (**self).take_closed_session()
+    }
+}
+
+impl<T: ?Sized + AsyncWriteSessionMessage + Unpin> AsyncWriteSessionMessage for Box<T> {
+    fn poll_write_session_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        session_id: MessageSessionId,
+        buf: &[u8],
+        target: &NetLocation,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_write_session_message(cx, session_id, buf, target)
+    }
+}
+
+impl<T: ?Sized + AsyncWriteSessionMessage + Unpin> AsyncWriteSessionMessage for &mut T {
+    fn poll_write_session_message(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        session_id: MessageSessionId,
+        buf: &[u8],
+        target: &NetLocation,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut **self).poll_write_session_message(cx, session_id, buf, target)
+    }
+}
+
+impl<T: ?Sized + AsyncSessionMessageStream + Unpin> AsyncSessionMessageStream for Box<T> {
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        (**self).peer_addr()
+    }
+}
+impl<T: ?Sized + AsyncSessionMessageStream + Unpin> AsyncSessionMessageStream for &mut T {
+    fn peer_addr(&self) -> Option<std::net::SocketAddr> {
+        (**self).peer_addr()
+    }
+}
+
+#[cfg(test)]
+pub mod test_streams {
+    use super::*;
+    use tokio::io::DuplexStream;
+
+    /// Sends written bytes only when flushed, like transports that buffer writes.
+    pub struct FlushGatedStream {
+        stream: DuplexStream,
+        pending: Vec<u8>,
+    }
+
+    impl FlushGatedStream {
+        pub fn new(stream: DuplexStream) -> Self {
+            Self {
+                stream,
+                pending: Vec::new(),
+            }
+        }
+    }
+
+    impl AsyncRead for FlushGatedStream {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.stream).poll_read(cx, buf)
+        }
+    }
+
+    impl AsyncWrite for FlushGatedStream {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            self.pending.extend_from_slice(buf);
+            Poll::Ready(Ok(buf.len()))
+        }
+
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            let this = &mut *self;
+            while !this.pending.is_empty() {
+                let written =
+                    std::task::ready!(Pin::new(&mut this.stream).poll_write(cx, &this.pending))?;
+                if written == 0 {
+                    return Poll::Ready(Err(std::io::ErrorKind::WriteZero.into()));
+                }
+                this.pending.drain(..written);
+            }
+            Pin::new(&mut this.stream).poll_flush(cx)
+        }
+
+        fn poll_shutdown(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            std::task::ready!(self.as_mut().poll_flush(cx))?;
+            Pin::new(&mut self.stream).poll_shutdown(cx)
+        }
+    }
+
+    impl AsyncPing for FlushGatedStream {
+        fn supports_ping(&self) -> bool {
+            false
+        }
+
+        fn poll_write_ping(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<std::io::Result<bool>> {
+            Poll::Ready(Ok(false))
+        }
+    }
+
+    impl AsyncStream for FlushGatedStream {}
+}

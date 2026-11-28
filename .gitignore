@@ -11,5 +11,10 @@
 app/build
 .codex
 .claude
-/.rust-core/
 /build-logs/
+
+# Rust build artifacts; source and lockfiles live in this repository.
+**/target/
+**/__pycache__/
+
+/app/src/main/assets/rules/

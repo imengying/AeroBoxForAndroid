@@ -1,0 +1,161 @@
+name: daily-tests
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  schedule:
+    # We run these tests on a daily basis (at a time slightly offset from the
+    # top of the hour), as their runtime is either too long for the usual per-PR
+    # CI, or because they rely on external 3rd party services that can be flaky.
+    - cron: '15 18 * * *'
+
+jobs:
+  connect-tests:
+    name: Connect Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # test a bunch of toolchains on ubuntu
+        rust:
+          - stable
+          - beta
+          - nightly
+        os: [ubuntu-latest]
+        # but only stable on macos/windows (slower platforms)
+        include:
+          - os: macos-latest
+            rust: stable
+          - os: windows-latest
+            rust: stable
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install ${{ matrix.rust }} toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Install NASM for aws-lc-rs on Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Install ninja-build tool for aws-lc-fips-sys on Windows
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      - name: Build example programs
+        run: cargo build --locked -p rustls-examples
+
+      - name: Run connect tests
+        run: cargo test --locked -p rustls-connect-tests --manifest-path=connect-tests/Cargo.toml
+        env:
+          RUST_BACKTRACE: 1
+
+  example-tests:
+    name: Example Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # test a bunch of toolchains on ubuntu
+        rust:
+          - stable
+          - beta
+          - nightly
+        os: [ubuntu-latest]
+        # but only stable on macos/windows (slower platforms)
+        include:
+          - os: macos-latest
+            rust: stable
+          - os: windows-latest
+            rust: stable
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install ${{ matrix.rust }} toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Install NASM for aws-lc-rs on Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Install ninja-build tool for aws-lc-fips-sys on Windows
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v6
+
+      - name: Check simple client
+        run: cargo run --locked -p rustls-examples --bin simpleclient
+
+      - name: Check limited client
+        run: cargo run --locked -p rustls-examples --bin limitedclient
+
+      - name: Check simple 0rtt client
+        run: cargo run --locked -p rustls-examples --bin simple_0rtt_client
+
+      - name: Check unbuffered client
+        run: cargo run --locked -p rustls-examples --bin unbuffered-client
+
+      - name: Check unbuffered tokio client
+        run: cargo run --locked -p rustls-examples --bin unbuffered-async-client
+
+      # Test the server_acceptor binary builds - we invoke with --help since it
+      # will run a server process that doesn't exit when invoked with no args
+      - name: Check server acceptor
+        run: cargo run --locked -p rustls-examples --bin server_acceptor -- --help
+
+      - name: Check ech-client (research.cloudflare.com)
+        run: >
+          cargo run --locked -p rustls-examples --bin ech-client -- cloudflare-ech.com research.cloudflare.com --path /cdn-cgi/trace |
+            grep 'sni=encrypted'
+
+      - name: Check ech-client (defo.ie)
+        run: >
+          cargo run --locked -p rustls-examples --bin ech-client -- --host min-ng.test.defo.ie --path "echstat.php?format=json" public.test.defo.ie min-ng.test.defo.ie |
+            grep '"SSL_ECH_STATUS": "success"'
+
+      - name: Check provider-example client
+        run: cargo run --locked -p rustls-provider-example --example client
+
+      - name: Check rustls-post-quantum client
+        run: cargo run --locked -p rustls-post-quantum --example client | grep 'kex=X25519MLKEM768'
+
+      - name: Smoke test for secp256r1mlkem768 interop
+        run: cargo run --locked -p rustls-examples --bin tlsclient-mio -- --http --key-exchange secp256r1mlkem768 --verbose openquantumsafe.org
+
+  feature-powerset:
+    name: Feature Powerset
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo hack
+        uses: taiki-e/install-action@cargo-hack
+
+      - name: Check feature powerset
+        run: >
+            cargo hack check
+            --package rustls
+            --feature-powerset
+            --no-dev-deps
+            --group-features aws_lc_rs,aws-lc-rs
+            --group-features fips,aws_lc_rs
+            --mutually-exclusive-features fips,ring
+            --mutually-exclusive-features custom_provider,aws_lc_rs
+            --mutually-exclusive-features custom_provider,ring
+        env:
+          RUSTFLAGS: --deny warnings

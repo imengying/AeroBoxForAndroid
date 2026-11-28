@@ -1,0 +1,3723 @@
+[
+  {
+    "build_error": "",
+    "case": "default",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 0,
+    "min_after": 769,
+    "min_before": 0,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100bb010000b7030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000056000000160014000011616e64726f696431312e6578616d706c6500170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 187,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "min12_max12",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 771,
+    "min_after": 769,
+    "min_before": 771,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100bb010000b7030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000056000000160014000011616e64726f696431312e6578616d706c6500170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 187,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "min13_max13",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 772,
+    "min_after": 769,
+    "min_before": 772,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100bb010000b7030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000056000000160014000011616e64726f696431312e6578616d706c6500170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 187,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "min11_max11",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 770,
+    "min_after": 769,
+    "min_before": 770,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100bb010000b7030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000056000000160014000011616e64726f696431312e6578616d706c6500170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 187,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "cipher_only_c02f",
+    "config_alpn_after": null,
+    "config_ciphers_after": [
+      49199
+    ],
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 0,
+    "min_after": 769,
+    "min_before": 0,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100bb010000b7030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000056000000160014000011616e64726f696431312e6578616d706c6500170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 187,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "group_only_p521",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 0,
+    "min_after": 769,
+    "min_before": 0,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100bb010000b7030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000056000000160014000011616e64726f696431312e6578616d706c6500170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 187,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "alpn_h2_h1",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 0,
+    "min_after": 769,
+    "min_before": 0,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100bb010000b7030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000056000000160014000011616e64726f696431312e6578616d706c6500170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 187,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "alpn_custom",
+    "config_alpn_after": [
+      "audit-custom"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 0,
+    "min_after": 769,
+    "min_before": 0,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100bb010000b7030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000056000000160014000011616e64726f696431312e6578616d706c6500170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 187,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "no_sni_verify_name",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 0,
+    "min_after": 769,
+    "min_before": 0,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100a10100009d030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f00350100003c00170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 161,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "ip_sni",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 0,
+    "min_after": 769,
+    "min_before": 0,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100a10100009d030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f00350100003c00170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 161,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "session_cache_enabled",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 771,
+    "max_before": 0,
+    "min_after": 769,
+    "min_before": 0,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100bb010000b7030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000056000000160014000011616e64726f696431312e6578616d706c6500170000ff01000100000a00080006001d00170018000b00020100000500050100000000000d00140012040308040401050308050501080606010201",
+      "record_length": 187,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "ech_default",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 0,
+    "max_before": 0,
+    "min_after": 0,
+    "min_before": 0,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "000e00000b7075626c69632e74657374",
+          "id": 0,
+          "length": 16
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "hex": "01",
+          "id": 65037,
+          "length": 1
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        },
+        {
+          "id": 43,
+          "length": 3,
+          "versions": [
+            "0304"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100c0010000bc030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f00350100005b00000010000e00000b7075626c69632e74657374000b000201000017000000120000fe0d000101000500050100000000000a00080006001d00170018000d00140012040308040401050308050501080606010201002b0003020304",
+      "record_length": 192,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "ech_min13_max13",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": false,
+    "max_after": 772,
+    "max_before": 772,
+    "min_after": 772,
+    "min_before": 772,
+    "profile": "Android-11",
+    "wire": {
+      "ciphers": [
+        "c02b",
+        "c02c",
+        "cca9",
+        "c02f",
+        "c030",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": false,
+      "extensions": [
+        {
+          "hex": "000e00000b7075626c69632e74657374",
+          "id": 0,
+          "length": 16
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "hex": "01",
+          "id": 65037,
+          "length": 1
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 10,
+          "length": 8,
+          "values": [
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "id": 13,
+          "length": 20,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601",
+            "0201"
+          ]
+        },
+        {
+          "id": 43,
+          "length": 3,
+          "versions": [
+            "0304"
+          ]
+        }
+      ],
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "random_and_session_id_zeroed_hex": "16030100c0010000bc030300000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000018c02bc02ccca9c02fc030cca8c013c014009c009d002f00350100005b00000010000e00000b7075626c69632e74657374000b000201000017000000120000fe0d000101000500050100000000000a00080006001d00170018000d00140012040308040401050308050501080606010201002b0003020304",
+      "record_length": 192,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "tls: no supported versions satisfy MinVersion and MaxVersion",
+    "case": "ech_min12_max12",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": null,
+    "max_after": 771,
+    "max_before": 771,
+    "min_after": 771,
+    "min_before": 771,
+    "profile": "Android-11"
+  },
+  {
+    "build_error": "",
+    "case": "default",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      35466,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 0,
+    "min_after": 771,
+    "min_before": 0,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 208,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 250,
+          "type": 0
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1786,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "min12_max12",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      23130,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 771,
+    "min_after": 771,
+    "min_before": 771,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 176,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 218,
+          "type": 0
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1754,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "min13_max13",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      51914,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 772,
+    "min_after": 771,
+    "min_before": 772,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 240,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 282,
+          "type": 0
+        },
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1818,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "min11_max11",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      14906,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 770,
+    "min_after": 771,
+    "min_before": 770,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 144,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 186,
+          "type": 0
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1722,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "cipher_only_c02f",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": [
+      49199
+    ],
+    "config_curves_after": [
+      31354,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 0,
+    "min_after": 771,
+    "min_before": 0,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 176,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 218,
+          "type": 0
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1754,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "group_only_p521",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      43690,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 0,
+    "min_after": 771,
+    "min_before": 0,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 176,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 218,
+          "type": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1754,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "alpn_h2_h1",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      56026,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 0,
+    "min_after": 771,
+    "min_before": 0,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 208,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 250,
+          "type": 0
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1786,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "alpn_custom",
+    "config_alpn_after": [
+      "audit-custom"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      2570,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 0,
+    "min_after": 771,
+    "min_before": 0,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 240,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 282,
+          "type": 0
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "id": 16,
+          "length": 15,
+          "protocols": [
+            "audit-custom"
+          ]
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1819,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "no_sni_verify_name",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      35466,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 0,
+    "min_after": 771,
+    "min_before": 0,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 208,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 250,
+          "type": 0
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1760,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "ip_sni",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      39578,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 0,
+    "min_after": 771,
+    "min_before": 0,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 240,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 282,
+          "type": 0
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1792,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "session_cache_enabled",
+    "config_alpn_after": [
+      "h2",
+      "http/1.1"
+    ],
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      47802,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 0,
+    "min_after": 771,
+    "min_before": 0,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "hex": "0014000011616e64726f696431312e6578616d706c65",
+          "id": 0,
+          "length": 22
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 144,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 186,
+          "type": 0
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1722,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "ech_default",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      23130,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 0,
+    "max_before": 0,
+    "min_after": 0,
+    "min_before": 0,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "hex": "000e00000b7075626c69632e74657374",
+          "id": 0,
+          "length": 16
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 129,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 171,
+          "type": 0
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1701,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "",
+    "case": "ech_min13_max13",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": [
+      47802,
+      4588,
+      29,
+      23,
+      24
+    ],
+    "handshake_error": "EOF",
+    "has_ecdhe_keyshare": true,
+    "max_after": 772,
+    "max_before": 772,
+    "min_after": 772,
+    "min_before": 772,
+    "profile": "Chrome-133",
+    "wire": {
+      "ciphers": [
+        "GREASE",
+        "1301",
+        "1302",
+        "1303",
+        "c02b",
+        "c02f",
+        "c02c",
+        "c030",
+        "cca9",
+        "cca8",
+        "c013",
+        "c014",
+        "009c",
+        "009d",
+        "002f",
+        "0035"
+      ],
+      "compression": "00",
+      "extension_order_is_shuffled": true,
+      "extensions": [
+        {
+          "hex": "",
+          "id": "GREASE_EXTENSION_0",
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 23,
+          "length": 0
+        },
+        {
+          "hex": "",
+          "id": 35,
+          "length": 0
+        },
+        {
+          "hex": "0101",
+          "id": 45,
+          "length": 2
+        },
+        {
+          "hex": "",
+          "id": 18,
+          "length": 0
+        },
+        {
+          "aead": "0001",
+          "config_id": "VARIABLE",
+          "encapsulated_key_length": 32,
+          "encrypted_payload_length": 129,
+          "id": 65037,
+          "kdf": "0001",
+          "length": 171,
+          "type": 0
+        },
+        {
+          "hex": "000e00000b7075626c69632e74657374",
+          "id": 0,
+          "length": 16
+        },
+        {
+          "hex": "00",
+          "id": 65281,
+          "length": 1
+        },
+        {
+          "id": 17613,
+          "length": 5,
+          "protocols": [
+            "h2"
+          ]
+        },
+        {
+          "id": 13,
+          "length": 18,
+          "values": [
+            "0403",
+            "0804",
+            "0401",
+            "0503",
+            "0805",
+            "0501",
+            "0806",
+            "0601"
+          ]
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "id": 51,
+          "length": 1263,
+          "shares": [
+            {
+              "data": "00",
+              "group": "GREASE",
+              "length": 1
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "11ec",
+              "length": 1216
+            },
+            {
+              "data": "EPHEMERAL_PUBLIC_KEY",
+              "group": "001d",
+              "length": 32
+            }
+          ]
+        },
+        {
+          "hex": "0100",
+          "id": 11,
+          "length": 2
+        },
+        {
+          "id": 43,
+          "length": 7,
+          "versions": [
+            "GREASE",
+            "0304",
+            "0303"
+          ]
+        },
+        {
+          "hex": "0100000000",
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 10,
+          "length": 12,
+          "values": [
+            "GREASE",
+            "11ec",
+            "001d",
+            "0017",
+            "0018"
+          ]
+        },
+        {
+          "hex": "020002",
+          "id": 27,
+          "length": 3
+        },
+        {
+          "hex": "00",
+          "id": "GREASE_EXTENSION_1",
+          "length": 1
+        }
+      ],
+      "grease_group_equals_keyshare": true,
+      "handshake_type": 1,
+      "hello_version": "0303",
+      "hybrid_x25519_equals_standalone": false,
+      "record_length": 1701,
+      "record_type": 22,
+      "record_version": "0301",
+      "session_id_len": 32
+    }
+  },
+  {
+    "build_error": "tls: no supported versions satisfy MinVersion and MaxVersion",
+    "case": "ech_min12_max12",
+    "config_alpn_after": null,
+    "config_ciphers_after": null,
+    "config_curves_after": null,
+    "max_after": 771,
+    "max_before": 771,
+    "min_after": 771,
+    "min_before": 771,
+    "profile": "Chrome-133"
+  }
+]

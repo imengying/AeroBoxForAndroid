@@ -1,0 +1,1296 @@
+use std::collections::hash_map::Entry;
+use std::net::SocketAddr;
+use std::str;
+use std::sync::Arc;
+use std::time::Duration;
+
+use bytes::BytesMut;
+use log::{debug, error};
+use rand::distr::Alphanumeric;
+use rand::{Rng, RngExt};
+use rustc_hash::FxHashMap;
+use subtle::ConstantTimeEq;
+use tokio::io::AsyncWriteExt;
+use tokio::task::{JoinHandle, JoinSet};
+use tokio::time::timeout;
+use tokio_util::sync::CancellationToken;
+
+/// Authentication timeout - close connection if client doesn't authenticate within this time.
+/// Default is 3 seconds per sing-box reference implementation.
+const AUTH_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// HTTP/3 error code for normal closure.
+/// Per official hysteria reference: https://github.com/apernet/hysteria/blob/master/core/server/server.go#L20
+const CLOSE_ERR_CODE_OK: u32 = 0x100; // HTTP3 ErrCodeNoError
+
+use crate::address::{Address, NetLocation};
+use crate::async_stream::AsyncStream;
+use crate::client_proxy_selector::ClientProxySelector;
+use crate::copy_bidirectional::copy_bidirectional_with_sizes;
+use crate::quic_stream::QuicStream;
+use crate::resolver::Resolver;
+use crate::routing::udp_relay::UdpRelay;
+use crate::stream_reader::StreamReader;
+use crate::tcp::ingress::PreparedTcp;
+use crate::tcp::tcp_handler::TcpClientSetupResult;
+use crate::udp_fragments::UdpFragments;
+use crate::util::{timeout_stream_setup, write_all};
+
+async fn process_connection(
+    client_proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+    password: Arc<str>,
+    conn: quinn::Connecting,
+    udp_enabled: bool,
+) -> std::io::Result<()> {
+    let connection = conn.await?;
+
+    // Create a cancellation token for the entire connection lifecycle.
+    // When cancelled, all spawned tasks (UDP sessions) will terminate gracefully.
+    let cancel_token = CancellationToken::new();
+    let _cancel_on_drop = cancel_token.clone().drop_guard();
+
+    // we unfortunately need to keep the h3 connection around because it closes the underlying
+    // connection on drop, see
+    // https://github.com/hyperium/h3/blob/dbf2523d26e115f096b66cdd8a6f68127a17a156/h3/src/server/connection.rs#L427
+    //
+    // we keep this function waiting for the tcp and udp tasks both to finish before dropping,
+    // instead of passing the connection to one of the two loops, incase one finishes first.
+    let h3_quinn_connection = h3_quinn::Connection::new(connection.clone());
+
+    let mut h3_conn: h3::server::Connection<h3_quinn::Connection, bytes::Bytes> =
+        h3::server::Connection::new(h3_quinn_connection)
+            .await
+            .map_err(|e| std::io::Error::other(format!("H3 connection setup failed: {e}")))?;
+
+    // Per sing-box reference, authentication timeout is 3 seconds
+    match timeout(
+        AUTH_TIMEOUT,
+        auth_connection(&mut h3_conn, &password, udp_enabled),
+    )
+    .await
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            connection.close(CLOSE_ERR_CODE_OK.into(), b"auth failed");
+            return Err(e);
+        }
+        Err(_elapsed) => {
+            error!("Authentication timeout");
+            connection.close(CLOSE_ERR_CODE_OK.into(), b"auth timeout");
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "authentication timeout",
+            ));
+        }
+    }
+
+    let udp_connection = connection.clone();
+    let udp_client_proxy_selector = client_proxy_selector.clone();
+    let udp_resolver = resolver.clone();
+    let udp_cancel_token = cancel_token.clone();
+
+    let uni_connection = connection.clone();
+
+    // Use try_join! to run all loops concurrently within the same task, like Quinn's perf example.
+    // This reduces task count and avoids spawning separate tasks for the main loops.
+    let udp_loop = async {
+        if udp_enabled {
+            run_udp_local_to_remote_loop(
+                udp_connection,
+                udp_client_proxy_selector,
+                udp_resolver,
+                udp_cancel_token,
+            )
+            .await
+        } else {
+            Ok(())
+        }
+    };
+
+    let uni_loop = async {
+        // Depending on the client, unidirectional streams could still be sent, accept and drop.
+        loop {
+            match uni_connection.accept_uni().await {
+                Ok(mut recv_stream) => {
+                    let _ = recv_stream.stop(0u32.into());
+                }
+                Err(quinn::ConnectionError::ApplicationClosed(_)) => break,
+                Err(quinn::ConnectionError::ConnectionClosed(_)) => break,
+                Err(e) => {
+                    return Err(std::io::Error::other(format!(
+                        "unidirectional loop error: {e}"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    };
+
+    let tcp_connection = connection.clone();
+    let tcp_loop = run_tcp_loop(tcp_connection, client_proxy_selector, resolver);
+
+    let result = tokio::try_join!(udp_loop, uni_loop, tcp_loop);
+
+    cancel_token.cancel();
+
+    // Per sing-box reference (service.go:277-293), close connection on error
+    if let Err(ref e) = result {
+        error!("Connection failed: {e}");
+        connection.close(CLOSE_ERR_CODE_OK.into(), b"");
+    }
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+fn validate_auth_request<T>(req: http::Request<T>, password: &str) -> std::io::Result<()> {
+    if req.uri() != "https://hysteria/auth" {
+        return Err(std::io::Error::other(format!(
+            "unexpected uri: {}",
+            req.uri()
+        )));
+    }
+    if req.method() != "POST" {
+        return Err(std::io::Error::other(format!(
+            "unexpected method: {}",
+            req.method()
+        )));
+    }
+
+    let headers = req.headers();
+    let auth_value = match headers.get("hysteria-auth") {
+        Some(h) => h,
+        None => {
+            return Err(std::io::Error::other("missing auth header"));
+        }
+    };
+    let auth_str = auth_value
+        .to_str()
+        .map_err(|e| std::io::Error::other(format!("invalid auth header value: {e}")))?;
+    if !bool::from(auth_str.as_bytes().ct_eq(password.as_bytes())) {
+        return Err(std::io::Error::other("incorrect auth password"));
+    }
+
+    Ok(())
+}
+
+fn generate_ascii_string() -> String {
+    let mut rng = rand::rng();
+    let length = rng.random_range(1..80);
+    rng.sample_iter(Alphanumeric)
+        .take(length)
+        .map(char::from)
+        .collect()
+}
+
+async fn auth_connection(
+    h3_conn: &mut h3::server::Connection<h3_quinn::Connection, bytes::Bytes>,
+    password: &str,
+    udp_enabled: bool,
+) -> std::io::Result<()> {
+    loop {
+        match h3_conn
+            .accept()
+            .await
+            .map_err(|e| std::io::Error::other(format!("H3 accept failed: {e}")))?
+        {
+            Some(resolver) => {
+                let (req, mut stream) = resolver.resolve_request().await.map_err(|err| {
+                    std::io::Error::other(format!("Failed to resolve request: {err}"))
+                })?;
+                match validate_auth_request(req, password) {
+                    Ok(()) => {
+                        let resp = http::Response::builder()
+                            .status(http::status::StatusCode::from_u16(233).unwrap())
+                            .header("Hysteria-UDP", if udp_enabled { "true" } else { "false" })
+                            .header("Hysteria-CC-RX", "auto")
+                            .header("Hysteria-Padding", generate_ascii_string())
+                            .body(())
+                            .unwrap();
+
+                        stream.send_response(resp).await.map_err(|e| {
+                            std::io::Error::other(format!("failed to send auth response: {e}"))
+                        })?;
+
+                        stream.finish().await.map_err(|e| {
+                            std::io::Error::other(format!("failed to finish auth stream: {e}"))
+                        })?;
+
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        error!("Received non-hysteria2 auth http3 request: {e}");
+                        let resp = http::Response::builder()
+                            .status(http::status::StatusCode::NOT_FOUND)
+                            .body(())
+                            .unwrap();
+                        stream.send_response(resp).await.map_err(|e| {
+                            std::io::Error::other(format!("failed to send reject response: {e}"))
+                        })?;
+                        stream.finish().await.map_err(|e| {
+                            std::io::Error::other(format!("failed to finish reject stream: {e}"))
+                        })?;
+                    }
+                }
+            }
+            // indicating no more streams to be received
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "no streams",
+                ));
+            }
+        }
+    }
+}
+
+struct UdpSession {
+    send_socket: Arc<UdpRelay>,
+    cancel_token: CancellationToken,
+    task: tokio::task::AbortHandle,
+}
+
+impl Drop for UdpSession {
+    fn drop(&mut self) {
+        self.cancel_token.cancel();
+        self.task.abort();
+    }
+}
+
+impl UdpSession {
+    fn start(
+        session_id: u32,
+        connection: quinn::Connection,
+        client_socket: Arc<UdpRelay>,
+        parent_cancel_token: &CancellationToken,
+    ) -> Self {
+        // Create a child token so this session is cancelled when the parent (connection) is cancelled
+        let session_cancel_token = parent_cancel_token.child_token();
+
+        let send_socket = client_socket.clone();
+        let cancel_token = session_cancel_token.clone();
+        let task = crate::network_tasks::spawn(async move {
+            if let Err(e) = run_udp_remote_to_local_loop(
+                session_id,
+                connection,
+                client_socket,
+                session_cancel_token,
+            )
+            .await
+            {
+                error!("UDP remote-to-local write loop ended with error: {e}");
+            }
+        })
+        .abort_handle();
+
+        Self {
+            send_socket,
+            cancel_token,
+            task,
+        }
+    }
+}
+
+async fn run_udp_remote_to_local_loop(
+    session_id: u32,
+    connection: quinn::Connection,
+    socket: Arc<UdpRelay>,
+    cancel_token: CancellationToken,
+) -> std::io::Result<()> {
+    let max_datagram_size = connection
+        .max_datagram_size()
+        .ok_or_else(|| std::io::Error::other("datagram not supported by remote endpoint"))?;
+
+    let mut next_packet_id: u16 = 0;
+    let mut loop_count: u8 = 0;
+
+    loop {
+        let (payload, src_addr) = tokio::select! {
+            _ = cancel_token.cancelled() => return Ok(()),
+            result = socket.recv() => result?,
+        };
+        let payload_len = payload.len();
+
+        // Yield periodically to allow quinn's internal tasks to run (keepalives, ACKs, etc.)
+        // This prevents starvation during heavy UDP traffic.
+        loop_count = loop_count.wrapping_add(1);
+        if loop_count == 0 {
+            tokio::task::yield_now().await;
+        }
+
+        let packet_id = next_packet_id;
+        next_packet_id = next_packet_id.wrapping_add(1);
+
+        let address_bytes = wire_address(&src_addr).into_bytes();
+        let address_len_bytes = encode_varint(address_bytes.len() as u64)?;
+
+        // session_id(4) + packet_id(2) + fragment id(1) + fragment count(1) + address length varint + address bytes
+        let header_overhead = 4 + 2 + 1 + 1 + address_len_bytes.len() + address_bytes.len();
+
+        if max_datagram_size <= header_overhead {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "QUIC datagram cannot fit UDP header",
+            ));
+        }
+
+        if header_overhead + payload_len <= max_datagram_size {
+            let mut datagram = BytesMut::with_capacity(header_overhead + payload_len);
+            datagram.extend_from_slice(&session_id.to_be_bytes());
+            datagram.extend_from_slice(&packet_id.to_be_bytes());
+            // fragment id = 0, fragment count = 0
+            datagram.extend_from_slice(&[0, 1]);
+            datagram.extend_from_slice(&address_len_bytes);
+            datagram.extend_from_slice(&address_bytes);
+            datagram.extend_from_slice(&payload);
+
+            connection
+                .send_datagram(datagram.freeze())
+                .map_err(|e| std::io::Error::other(format!("Failed to send datagram: {e}")))?;
+        } else {
+            let available_payload = max_datagram_size - header_overhead;
+            let fragment_count =
+                u8::try_from(payload_len.div_ceil(available_payload)).map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, "too many UDP fragments")
+                })?;
+            for fragment_id in 0..fragment_count {
+                let start = (fragment_id as usize) * available_payload;
+                let end = std::cmp::min(start + available_payload, payload_len);
+                let mut datagram = BytesMut::with_capacity(header_overhead + (end - start));
+                datagram.extend_from_slice(&session_id.to_be_bytes());
+                datagram.extend_from_slice(&packet_id.to_be_bytes());
+                datagram.extend_from_slice(&[fragment_id, fragment_count]);
+                datagram.extend_from_slice(&address_len_bytes);
+                datagram.extend_from_slice(&address_bytes);
+                datagram.extend_from_slice(&payload[start..end]);
+
+                connection.send_datagram(datagram.freeze()).map_err(|e| {
+                    std::io::Error::other(format!(
+                        "Failed to send datagram fragment {fragment_id}: {e}"
+                    ))
+                })?;
+            }
+        }
+    }
+}
+
+struct UdpPacket<'a> {
+    session_id: u32,
+    packet_id: u16,
+    fragment_id: u8,
+    fragment_count: u8,
+    location: NetLocation,
+    payload: &'a [u8],
+}
+
+fn parse_udp_packet(data: &[u8]) -> std::io::Result<UdpPacket<'_>> {
+    let invalid = || {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "invalid Hysteria UDP datagram",
+        )
+    };
+    if data.len() < 9 || data[7] == 0 || data[6] >= data[7] {
+        return Err(invalid());
+    }
+    let length = 1usize << (data[8] >> 6);
+    let encoded = data.get(8..8 + length).ok_or_else(invalid)?;
+    let address_len = encoded[1..]
+        .iter()
+        .fold((encoded[0] & 63) as u64, |value, byte| {
+            (value << 8) | *byte as u64
+        });
+    if address_len == 0 || address_len > 2048 {
+        return Err(invalid());
+    }
+    let end = 8 + length + address_len as usize;
+    let address = data.get(8 + length..end).ok_or_else(invalid)?;
+    let location =
+        NetLocation::from_authority(str::from_utf8(address).map_err(|_| invalid())?, None)?;
+    Ok(UdpPacket {
+        session_id: u32::from_be_bytes(data[..4].try_into().unwrap()),
+        packet_id: u16::from_be_bytes(data[4..6].try_into().unwrap()),
+        fragment_id: data[6],
+        fragment_count: data[7],
+        location,
+        payload: &data[end..],
+    })
+}
+
+async fn run_udp_local_to_remote_loop(
+    connection: quinn::Connection,
+    client_proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+    cancel_token: CancellationToken,
+) -> std::io::Result<()> {
+    let mut sessions: FxHashMap<u32, UdpSession> = FxHashMap::default();
+    let mut fragments = UdpFragments::new();
+    let mut cleanup = tokio::time::interval(Duration::from_secs(1));
+    const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
+
+    loop {
+        let data = tokio::select! {
+            _ = cancel_token.cancelled() => return Ok(()),
+            _ = cleanup.tick() => {
+                fragments.expire();
+                sessions.retain(|_, session| session.send_socket.idle_for() < IDLE_TIMEOUT);
+                continue;
+            }
+            data = connection.read_datagram() => data.map_err(|err| std::io::Error::other(format!("failed to read datagram: {err}")))?,
+        };
+        let packet = match parse_udp_packet(&data) {
+            Ok(packet) => packet,
+            Err(e) => {
+                debug!("Ignoring invalid Hysteria UDP datagram: {e}");
+                continue;
+            }
+        };
+        let session_id = packet.session_id;
+        let (remote_location, complete_payload) = match fragments.push(
+            (session_id, packet.packet_id),
+            packet.fragment_count,
+            packet.fragment_id,
+            Some(packet.location),
+            packet.payload,
+        ) {
+            Ok(Some(packet)) => packet,
+            Ok(None) => continue,
+            Err(e) => {
+                debug!("Ignoring invalid Hysteria fragments: {e}");
+                continue;
+            }
+        };
+        if crate::resources::limits()
+            .max_udp_destinations
+            .is_some_and(|limit| sessions.len() >= limit)
+            && !sessions.contains_key(&session_id)
+        {
+            continue;
+        }
+
+        let mut session_entry = sessions.entry(session_id);
+        let session = match session_entry {
+            Entry::Vacant(entry) => {
+                let Ok(client_socket) = UdpRelay::new(
+                    client_proxy_selector.clone(),
+                    resolver.clone(),
+                    Some(connection.remote_address()),
+                ) else {
+                    continue;
+                };
+
+                let session = UdpSession::start(
+                    session_id,
+                    connection.clone(),
+                    Arc::new(client_socket),
+                    &cancel_token,
+                );
+                entry.insert(session)
+            }
+            Entry::Occupied(ref mut entry) => entry.get_mut(),
+        };
+
+        if let Err(e) = session
+            .send_socket
+            .send_to(complete_payload, remote_location)
+        {
+            error!("Failed to forward UDP payload for session {session_id}: {e}");
+            sessions.remove(&session_id);
+        }
+    }
+}
+
+async fn run_tcp_loop(
+    connection: quinn::Connection,
+    client_proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+) -> std::io::Result<()> {
+    let mut tasks = JoinSet::new();
+    loop {
+        let accepted = tokio::select! {
+            result = connection.accept_bi() => result,
+            _ = tasks.join_next(), if !tasks.is_empty() => continue,
+        };
+        let (send_stream, recv_stream) = match accepted {
+            Ok(s) => s,
+            Err(quinn::ConnectionError::ApplicationClosed(_)) => {
+                break;
+            }
+            Err(quinn::ConnectionError::ConnectionClosed(_)) => {
+                break;
+            }
+            Err(e) => {
+                return Err(std::io::Error::other(format!(
+                    "failed to accept bidirectional stream: {e}"
+                )));
+            }
+        };
+
+        if crate::resources::limits()
+            .max_streams_per_connection
+            .is_some_and(|limit| tasks.len() >= limit)
+        {
+            continue;
+        }
+        let Some(permit) = crate::resources::try_stream() else {
+            continue;
+        };
+        let client_proxy_selector = client_proxy_selector.clone();
+        let resolver = resolver.clone();
+        let peer = connection.remote_address();
+        crate::network_tasks::spawn_in(&mut tasks, async move {
+            let _permit = permit;
+            if let Err(e) = process_tcp_stream(
+                client_proxy_selector,
+                resolver,
+                send_stream,
+                recv_stream,
+                peer,
+            )
+            .await
+            {
+                error!("Failed to process streams: {e}");
+            }
+        });
+    }
+    Ok(())
+}
+
+/// TCP request frame type constant from Hysteria2 protocol.
+/// See: https://github.com/apernet/hysteria/blob/master/core/internal/protocol/proxy.go#L15
+const FRAME_TYPE_TCP_REQUEST: u64 = 0x401;
+
+async fn handle_tcp_header(
+    recv: &mut (impl tokio::io::AsyncRead + Unpin),
+) -> std::io::Result<(NetLocation, StreamReader)> {
+    let mut stream_reader = StreamReader::new_with_buffer_size(8192);
+
+    // Read the TCP request frame type as a QUIC varint per protocol spec.
+    // The value 0x401 can be encoded in multiple valid ways (e.g., [0x44, 0x01] as 2-byte form).
+    let tcp_request_id = read_varint(recv, &mut stream_reader).await?;
+    if tcp_request_id != FRAME_TYPE_TCP_REQUEST {
+        return Err(std::io::Error::other(format!(
+            "invalid tcp request id: expected {:#x}, got {:#x}",
+            FRAME_TYPE_TCP_REQUEST, tcp_request_id
+        )));
+    }
+
+    // max lengths from https://github.com/apernet/hysteria/blob/5520bcc405ee11a47c164c75bae5c40fc2b1d99d/core/internal/protocol/proxy.go#L19
+    let address_len = read_varint(recv, &mut stream_reader).await?;
+    if address_len > 2048 {
+        return Err(std::io::Error::other("invalid address length"));
+    }
+    let address_bytes = stream_reader.read_slice(recv, address_len as usize).await?;
+    let address = std::str::from_utf8(address_bytes)
+        .map_err(|e| std::io::Error::other(format!("invalid address encoding: {e}")))?;
+    let remote_location = NetLocation::from_authority(address, None)?;
+
+    let padding_len = read_varint(recv, &mut stream_reader).await?;
+    if padding_len > 4096 {
+        return Err(std::io::Error::other("invalid padding length"));
+    }
+    stream_reader.read_slice(recv, padding_len as usize).await?;
+
+    Ok((remote_location, stream_reader))
+}
+
+fn wire_address(location: &NetLocation) -> String {
+    match location.address() {
+        Address::Ipv6(ip) => format!("[{ip}]:{}", location.port()),
+        _ => location.to_string(),
+    }
+}
+
+fn tcp_response(success: bool, message: &str) -> Vec<u8> {
+    assert!(message.len() <= 2048);
+    let mut response = vec![u8::from(!success)];
+    response.extend_from_slice(&encode_varint(message.len() as u64).unwrap());
+    response.extend_from_slice(message.as_bytes());
+    let padding_len = rand::rng().random_range(0..=63);
+    response.push(padding_len);
+    let start = response.len();
+    response.resize(start + padding_len as usize, 0);
+    rand::rng().fill_bytes(&mut response[start..]);
+    response
+}
+
+#[cfg(test)]
+async fn complete_tcp_setup(
+    server: &mut Box<dyn AsyncStream>,
+    setup: impl std::future::Future<Output = std::io::Result<Option<TcpClientSetupResult>>>,
+) -> std::io::Result<Option<Box<dyn AsyncStream>>> {
+    finish_tcp_setup(server, timeout_stream_setup(setup).await, false).await
+}
+
+async fn finish_tcp_setup(
+    server: &mut Box<dyn AsyncStream>,
+    result: std::io::Result<Option<TcpClientSetupResult>>,
+    success_sent: bool,
+) -> std::io::Result<Option<Box<dyn AsyncStream>>> {
+    match result {
+        Ok(Some(TcpClientSetupResult {
+            client_stream,
+            early_data,
+        })) => {
+            let flow = client_stream.flow().cloned();
+            crate::control::tracked_stream::during_flow(
+                flow.as_deref(),
+                timeout_stream_setup(async {
+                    if !success_sent {
+                        write_all(server, &tcp_response(true, "")).await?;
+                    }
+                    if let Some(data) = early_data {
+                        write_all(server, &data).await?;
+                    }
+                    server.flush().await
+                }),
+            )
+            .await?;
+            Ok(Some(client_stream))
+        }
+        result => {
+            let message = match &result {
+                Ok(None) => "connection blocked",
+                Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                    "connection blocked"
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+                    "connection timed out"
+                }
+                _ => "connection failed",
+            };
+            if !success_sent {
+                let _ = timeout(crate::util::SHUTDOWN_TIMEOUT, async {
+                    write_all(server, &tcp_response(false, message)).await?;
+                    server.flush().await
+                })
+                .await;
+            }
+            crate::util::shutdown_stream(server).await;
+            result.map(|_| None)
+        }
+    }
+}
+
+async fn process_tcp_stream(
+    client_proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+    mut send: quinn::SendStream,
+    mut recv: quinn::RecvStream,
+    peer: std::net::SocketAddr,
+) -> std::io::Result<()> {
+    let (remote_location, stream_reader) =
+        match timeout_stream_setup(handle_tcp_header(&mut recv)).await {
+            Ok(res) => res,
+            Err(e) => {
+                crate::util::shutdown_stream(&mut send).await;
+                return Err(e);
+            }
+        };
+
+    relay_tcp_stream(
+        Box::new(QuicStream::from(send, recv).with_peer(peer)),
+        remote_location,
+        stream_reader.into_unparsed_data(),
+        client_proxy_selector,
+        resolver,
+    )
+    .await
+}
+
+async fn relay_tcp_stream(
+    mut server_stream: Box<dyn AsyncStream>,
+    remote_location: NetLocation,
+    initial_data: Vec<u8>,
+    client_proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+) -> std::io::Result<()> {
+    let mut success_sent = false;
+    let mut prefix = Vec::new();
+    let setup = async {
+        let route = timeout_stream_setup(async {
+            let prepared = PreparedTcp::new(
+                &client_proxy_selector,
+                remote_location.clone(),
+                initial_data,
+            )?
+            .with_source(server_stream.peer_addr());
+            if prepared.needs_sniff_read() {
+                // A partial success write must never be followed by a failure frame.
+                success_sent = true;
+                write_all(&mut server_stream, &tcp_response(true, "")).await?;
+                server_stream.flush().await?;
+            }
+            prepared
+                .route(&mut server_stream, &client_proxy_selector, &resolver)
+                .await
+        })
+        .await?;
+        let routed = timeout_stream_setup(route.connect(&resolver)).await?;
+        prefix = routed.prefix;
+        Ok(routed.setup)
+    }
+    .await;
+    drop(client_proxy_selector);
+    drop(resolver);
+    let Some(mut client_stream) = finish_tcp_setup(&mut server_stream, setup, success_sent)
+        .await
+        .map_err(|error| {
+            std::io::Error::new(
+                error.kind(),
+                format!("TCP setup for {remote_location} failed: {error}"),
+            )
+        })?
+    else {
+        return Ok(());
+    };
+
+    if !prefix.is_empty() {
+        timeout_stream_setup(async {
+            write_all(&mut client_stream, &prefix).await?;
+            client_stream.flush().await
+        })
+        .await?;
+    }
+    drop(prefix);
+
+    // Use 32KB buffers to match hysteria2/sing-box reference implementations
+    let copy_result = copy_bidirectional_with_sizes(
+        &mut server_stream,
+        &mut client_stream,
+        // no need to flush even through we wrote this response since it's quic
+        false,
+        false,
+        32768,
+        32768,
+    )
+    .await;
+
+    crate::util::shutdown_stream_pair(&mut server_stream, &mut client_stream).await;
+
+    copy_result?;
+    Ok(())
+}
+
+#[inline]
+fn encode_varint(value: u64) -> std::io::Result<Box<[u8]>> {
+    if value <= 0b00111111 {
+        Ok(Box::new([value as u8]))
+    } else if value < (1 << 14) {
+        let mut bytes = (value as u16).to_be_bytes();
+        bytes[0] |= 0b01000000;
+        Ok(Box::new(bytes))
+    } else if value < (1 << 30) {
+        let mut bytes = (value as u32).to_be_bytes();
+        bytes[0] |= 0b10000000;
+        Ok(Box::new(bytes))
+    } else if value < (1 << 62) {
+        let mut bytes = value.to_be_bytes();
+        bytes[0] |= 0b11000000;
+        Ok(Box::new(bytes))
+    } else {
+        Err(std::io::Error::other("value too large to encode as varint"))
+    }
+}
+
+async fn read_varint(
+    recv: &mut (impl tokio::io::AsyncRead + Unpin),
+    stream_reader: &mut StreamReader,
+) -> std::io::Result<u64> {
+    let first_byte = stream_reader.read_u8(recv).await?;
+
+    let length = first_byte >> 6;
+    let mut value: u64 = (first_byte & 0b00111111) as u64;
+
+    let num_bytes = match length {
+        0 => 1,
+        1 => 2,
+        2 => 4,
+        3 => 8,
+        _ => {
+            // impossible since we only have 2 bits
+            panic!("invalid num bytes value");
+        }
+    };
+
+    if num_bytes > 1 {
+        let remaining_bytes = stream_reader.read_slice(recv, num_bytes - 1).await?;
+        for byte in remaining_bytes {
+            value <<= 8; // Shift left by 8 bits for each subsequent byte
+            value |= *byte as u64; // Add the next byte
+        }
+    }
+
+    Ok(value)
+}
+
+pub async fn start_hysteria2_server(
+    bind_address: SocketAddr,
+    quic_server_config: Arc<dyn quinn::crypto::ServerConfig>,
+    hysteria2_password: Arc<str>,
+    client_proxy_selector: Arc<ClientProxySelector>,
+    resolver: Arc<dyn Resolver>,
+    num_endpoints: usize,
+    udp_enabled: bool,
+) -> std::io::Result<Vec<JoinHandle<()>>> {
+    let mut join_handles = vec![];
+    let mut server_config = quinn::ServerConfig::with_crypto(quic_server_config);
+
+    let memory_bytes = crate::resources::configure_quic(&mut server_config, 4096, 1024);
+    Arc::get_mut(&mut server_config.transport)
+        .unwrap()
+        // HTTP/3 control and QPACK streams are independent of application stream limits.
+        .max_concurrent_uni_streams(1024u32.into())
+        .max_idle_timeout(Some(Duration::from_secs(30).try_into().unwrap()))
+        .keep_alive_interval(Some(Duration::from_secs(10)))
+        // MTU settings per official TUIC reference
+        .initial_mtu(1200)
+        .min_mtu(1200)
+        // Enable MTU discovery for larger packets on capable networks
+        .mtu_discovery_config(Some(quinn::MtuDiscoveryConfig::default()))
+        // Enable GSO (Generic Segmentation Offload) for better throughput
+        .enable_segmentation_offload(true)
+        // Lower initial RTT estimate for faster initial window growth
+        .initial_rtt(Duration::from_millis(100));
+
+    for endpoint in crate::listener_tasks::QuicListener::bind_all(
+        bind_address,
+        server_config,
+        num_endpoints,
+        memory_bytes,
+    )? {
+        let resolver = resolver.clone();
+        let client_proxy_selector = client_proxy_selector.clone();
+        let hysteria2_password = hysteria2_password.clone();
+        let join_handle = crate::network_tasks::spawn(async move {
+            let mut tasks = crate::listener_tasks::ListenerTasks::immediate();
+            loop {
+                let conn = tokio::select! {
+                    conn = endpoint.accept() => conn,
+                    _ = tasks.join_next(), if !tasks.is_empty() => continue,
+                };
+                let Some(conn) = conn else { break };
+                let Some(permit) =
+                    crate::resources::try_connection(Some(conn.remote_address().ip()))
+                else {
+                    conn.refuse();
+                    continue;
+                };
+                let conn = match conn.accept() {
+                    Ok(conn) => conn,
+                    Err(e) => {
+                        debug!("QUIC accept failed: {e}");
+                        continue;
+                    }
+                };
+                let cloned_selector = client_proxy_selector.clone();
+                let cloned_resolver = resolver.clone();
+                let hysteria2_password = hysteria2_password.clone();
+                tasks.spawn(async move {
+                    let _permit = permit;
+                    if let Err(e) = process_connection(
+                        cloned_selector,
+                        cloned_resolver,
+                        hysteria2_password,
+                        conn,
+                        udp_enabled,
+                    )
+                    .await
+                    {
+                        error!("Connection ended with error: {e}");
+                    }
+                });
+            }
+        });
+        join_handles.push(join_handle);
+    }
+
+    Ok(join_handles)
+}
+
+#[cfg(test)]
+mod datagram_tests {
+    use super::*;
+
+    #[test]
+    fn truncated_varints_and_fragment_indices_never_panic() {
+        for first in [0x00, 0x40, 0x80, 0xc0] {
+            let mut packet = vec![0; 9];
+            packet[7] = 1;
+            packet[8] = first;
+            assert!(parse_udp_packet(&packet).is_err());
+        }
+        let address = b"127.0.0.1:53";
+        let mut packet = vec![0, 0, 0, 1, 0, 1, 0, 1, address.len() as u8];
+        packet.extend_from_slice(address);
+        packet.extend_from_slice(b"payload");
+        assert_eq!(parse_udp_packet(&packet).unwrap().payload, b"payload");
+        for len in 0..packet.len() {
+            let _ = parse_udp_packet(&packet[..len]);
+        }
+        for count in [0, 1, 2, 255] {
+            for id in 0..=255 {
+                packet[6] = id;
+                packet[7] = count;
+                assert_eq!(parse_udp_packet(&packet).is_ok(), count != 0 && id < count);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tcp_tests {
+    use super::*;
+    use tokio::io::AsyncReadExt;
+
+    #[tokio::test]
+    async fn fake_dns_adapter_contract() {
+        use crate::tcp::ingress::tests::FakeTcpCase;
+        timeout(Duration::from_secs(10), async {
+            for case in [
+                FakeTcpCase::Dns,
+                FakeTcpCase::Tls,
+                FakeTcpCase::Http,
+                FakeTcpCase::Plain,
+                FakeTcpCase::Unknown,
+            ] {
+                let mut tasks = tokio::task::JoinSet::new();
+                let (selector, resolver, target, payload) = case.fixture(&mut tasks).await;
+                let split = payload.len().min(5);
+                let prefix = payload[..split].to_vec();
+                let (server, mut peer) = tokio::io::duplex(8192);
+                tasks.spawn(async move {
+                    let result =
+                        relay_tcp_stream(Box::new(server), target, prefix, selector, resolver)
+                            .await;
+                    assert_eq!(result.is_err(), case == FakeTcpCase::Unknown);
+                });
+                assert_eq!(
+                    peer.read_u8().await.unwrap(),
+                    u8::from(case == FakeTcpCase::Unknown)
+                );
+                let message = peer.read_u8().await.unwrap() as usize;
+                peer.read_exact(&mut vec![0; message]).await.unwrap();
+                let padding = peer.read_u8().await.unwrap() as usize;
+                peer.read_exact(&mut vec![0; padding]).await.unwrap();
+                if case != FakeTcpCase::Unknown {
+                    peer.write_all(&payload[split..]).await.unwrap();
+                    peer.shutdown().await.unwrap();
+                }
+                let mut reply = Vec::new();
+                peer.read_to_end(&mut reply).await.unwrap();
+                if case == FakeTcpCase::Unknown {
+                    assert!(reply.is_empty());
+                } else {
+                    case.assert_reply(&reply);
+                }
+                while let Some(result) = tasks.join_next().await {
+                    result.unwrap();
+                }
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn sniff_reply_gates_payload_and_is_not_repeated() {
+        timeout(Duration::from_secs(5), async {
+            let mut tasks = tokio::task::JoinSet::new();
+            let hello = crate::sniff::tests::hello(&rustls::version::TLS13, true);
+            let (selector, resolver) =
+                crate::tcp::ingress::tests::socks_target(hello.clone(), &mut tasks).await;
+            let target = NetLocation::from_str(crate::tcp::ingress::tests::TARGET, None).unwrap();
+            let (server, mut peer) = tokio::io::duplex(8192);
+            let prefix = hello[..5].to_vec();
+            tasks.spawn(async move {
+                relay_tcp_stream(Box::new(server), target, prefix, selector, resolver)
+                    .await
+                    .unwrap();
+            });
+            assert_eq!(peer.read_u8().await.unwrap(), 0);
+            assert_eq!(peer.read_u8().await.unwrap(), 0);
+            let padding = peer.read_u8().await.unwrap() as usize;
+            peer.read_exact(&mut vec![0; padding]).await.unwrap();
+            peer.write_all(&hello[5..]).await.unwrap();
+            peer.shutdown().await.unwrap();
+            let mut response = Vec::new();
+            peer.read_to_end(&mut response).await.unwrap();
+            assert_eq!(response, b"greetinglater");
+            while let Some(result) = tasks.join_next().await {
+                result.unwrap();
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn optimistic_success_is_not_followed_by_a_failure_status() {
+        for failure in [Ok(None), Err(std::io::ErrorKind::ConnectionRefused.into())] {
+            let (server, mut peer) = tokio::io::duplex(512);
+            let mut server: Box<dyn AsyncStream> = Box::new(server);
+            server.write_all(&tcp_response(true, "")).await.unwrap();
+            let _ = finish_tcp_setup(&mut server, failure, true).await;
+            let mut response = Vec::new();
+            peer.read_to_end(&mut response).await.unwrap();
+            assert_eq!(&response[..2], &[0, 0]);
+            assert_eq!(response.len(), 3 + response[2] as usize);
+        }
+    }
+
+    #[tokio::test]
+    async fn success_follows_dial_and_precedes_target_bytes() {
+        let (server, mut peer) = tokio::io::duplex(512);
+        let (target, _target_peer) = tokio::io::duplex(512);
+        let (ready, dial) = tokio::sync::oneshot::channel();
+        let task = tokio::spawn(async move {
+            let mut server: Box<dyn AsyncStream> = Box::new(server);
+            let _target = complete_tcp_setup(&mut server, async {
+                dial.await.unwrap();
+                Ok(Some(TcpClientSetupResult {
+                    client_stream: Box::new(target),
+                    early_data: Some(b"greeting".to_vec()),
+                }))
+            })
+            .await
+            .unwrap();
+            server.write_all(b"later").await.unwrap();
+        });
+        assert!(
+            timeout(Duration::from_millis(10), peer.read_u8())
+                .await
+                .is_err()
+        );
+        ready.send(()).unwrap();
+        let mut wire = Vec::new();
+        peer.read_to_end(&mut wire).await.unwrap();
+        task.await.unwrap();
+        assert_eq!(&wire[..2], &[0, 0]);
+        assert_eq!(&wire[3 + wire[2] as usize..], b"greetinglater");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_dials_report_failure_without_exposing_internal_errors() {
+        for (kind, blocked) in [
+            (std::io::ErrorKind::PermissionDenied, true),
+            (std::io::ErrorKind::PermissionDenied, false),
+            (std::io::ErrorKind::ConnectionRefused, false),
+            (std::io::ErrorKind::TimedOut, false),
+        ] {
+            let (server, mut peer) = tokio::io::duplex(512);
+            let mut server: Box<dyn AsyncStream> = Box::new(server);
+            let result = complete_tcp_setup(&mut server, async {
+                if blocked {
+                    Ok(None)
+                } else if kind == std::io::ErrorKind::TimedOut {
+                    std::future::pending().await
+                } else {
+                    Err(std::io::Error::new(kind, "private target details"))
+                }
+            })
+            .await;
+            if blocked {
+                assert!(result.unwrap().is_none());
+            } else {
+                assert_eq!(result.err().unwrap().kind(), kind);
+            }
+            let mut wire = Vec::new();
+            peer.read_to_end(&mut wire).await.unwrap();
+            assert_eq!(wire[0], 1);
+            let message_len = wire[1] as usize;
+            assert!(message_len > 0);
+            assert!(!String::from_utf8_lossy(&wire).contains("private target details"));
+            assert_eq!(wire.len(), 3 + message_len + wire[2 + message_len] as usize);
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stalled_success_response_has_a_deadline() {
+        let (server, _peer) = tokio::io::duplex(1);
+        let (target, _target_peer) = tokio::io::duplex(1);
+        let mut server: Box<dyn AsyncStream> = Box::new(server);
+        let result = complete_tcp_setup(&mut server, async {
+            Ok(Some(TcpClientSetupResult {
+                client_stream: Box::new(target),
+                early_data: None,
+            }))
+        })
+        .await;
+        assert_eq!(result.err().unwrap().kind(), std::io::ErrorKind::TimedOut);
+    }
+
+    #[tokio::test]
+    async fn ipv6_request_preserves_coalesced_payload() {
+        let location = NetLocation::new(Address::Ipv6(std::net::Ipv6Addr::LOCALHOST), 443);
+        let address = wire_address(&location);
+        assert_eq!(address, "[::1]:443");
+        let mut request = encode_varint(FRAME_TYPE_TCP_REQUEST).unwrap().to_vec();
+        request.extend_from_slice(&encode_varint(address.len() as u64).unwrap());
+        request.extend_from_slice(address.as_bytes());
+        request.extend_from_slice(&[0]);
+        request.extend_from_slice(b"request payload");
+        let (parsed, reader) = handle_tcp_header(&mut request.as_slice()).await.unwrap();
+        assert_eq!(parsed, location);
+        assert_eq!(reader.unparsed_data(), b"request payload");
+        let mut packet = vec![0, 0, 0, 1, 0, 0, 0, 1, address.len() as u8];
+        packet.extend_from_slice(address.as_bytes());
+        packet.extend_from_slice(b"udp");
+        assert_eq!(parse_udp_packet(&packet).unwrap().location, location);
+    }
+}
+
+#[cfg(test)]
+mod auth_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn hostname_first_association_routes_each_datagram_and_preserves_reply_sources() {
+        #[derive(Debug)]
+        struct LocalResolver;
+        impl Resolver for LocalResolver {
+            fn resolve_location(&self, location: &NetLocation) -> crate::resolver::ResolveFuture {
+                let port = location.port();
+                Box::pin(
+                    async move { Ok(vec![std::net::SocketAddr::from(([127, 0, 0, 1], port))]) },
+                )
+            }
+        }
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let first = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let second = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let resolver: Arc<dyn Resolver> = Arc::new(LocalResolver);
+            let rules = crate::config::test_support::from_yaml(&format!(
+                "- mask: blocked.test\n  action: block\n- mask: rewrite.test\n  action: allow\n  override_address: '{}'\n- mask: 0.0.0.0/0\n  action: allow\n",
+                second.local_addr().unwrap())).unwrap();
+            let selector = Arc::new(crate::tcp::tcp_client_handler_factory::create_test_selector(rules, resolver.clone()).unwrap());
+            let (server, client) = crate::quic_endpoint::test_endpoints();
+            let address = server.local_addr().unwrap();
+            let token = CancellationToken::new();
+            let cancel = token.clone();
+            let task = tokio::spawn(async move {
+                let connection = server.accept().await.unwrap().await.unwrap();
+                run_udp_local_to_remote_loop(connection, selector, resolver, cancel).await.unwrap();
+            });
+            let connection = client.connect(address, "localhost").unwrap().await.unwrap();
+            let targets = [
+                format!("first.test:{}", first.local_addr().unwrap().port()),
+                second.local_addr().unwrap().to_string(),
+                "rewrite.test:123".to_owned(),
+            ];
+            for id in [1u32, 2] {
+                for (index, target) in targets.iter().enumerate() {
+                    let mut packet = id.to_be_bytes().to_vec();
+                    packet.extend_from_slice(&[0, index as u8, 0, 1, target.len() as u8]);
+                    packet.extend_from_slice(target.as_bytes());
+                    packet.extend_from_slice(b"query");
+                    connection.send_datagram(packet.into()).unwrap();
+                    let socket = if index == 0 { &first } else { &second };
+                    let mut buf = [0; 64];
+                    let (count, source) = socket.recv_from(&mut buf).await.unwrap();
+                    assert_eq!(&buf[..count], b"query");
+                    socket.send_to(b"reply", source).await.unwrap();
+                    let reply = connection.read_datagram().await.unwrap();
+                    let reply = parse_udp_packet(&reply).unwrap();
+                    assert_eq!(reply.session_id, id);
+                    assert_eq!(reply.payload, b"reply");
+                    assert_eq!(reply.location.to_string(), socket.local_addr().unwrap().to_string());
+                }
+            }
+            let target = format!("blocked.test:{}", first.local_addr().unwrap().port());
+            let mut packet = vec![0, 0, 0, 1, 0, 99, 0, 1, target.len() as u8];
+            packet.extend_from_slice(target.as_bytes());
+            packet.extend_from_slice(b"blocked");
+            connection.send_datagram(packet.into()).unwrap();
+            let mut buf = [0; 32];
+            assert!(tokio::time::timeout(Duration::from_millis(100), first.recv(&mut buf)).await.is_err());
+            assert!(tokio::time::timeout(Duration::from_millis(100), second.recv(&mut buf)).await.is_err());
+            token.cancel();
+            task.await.unwrap();
+            connection.close(0u32.into(), b"done");
+        }).await.unwrap();
+    }
+
+    fn auth_request(uri: &str, method: &str, auth: Option<&[u8]>) -> http::Request<()> {
+        let mut request = http::Request::builder().uri(uri).method(method);
+        if let Some(auth) = auth {
+            request = request.header(
+                "hysteria-auth",
+                http::HeaderValue::from_bytes(auth).unwrap(),
+            );
+        }
+        request.body(()).unwrap()
+    }
+
+    #[test]
+    fn auth_requires_the_auth_endpoint_post_and_the_exact_password() {
+        let valid = auth_request("https://hysteria/auth", "POST", Some(b"secret"));
+        assert!(validate_auth_request(valid, "secret").is_ok());
+        for (uri, method, auth) in [
+            ("https://hysteria/auth", "POST", Some(&b"wrong"[..])),
+            ("https://hysteria/auth", "POST", Some(b"secre")),
+            ("https://hysteria/auth", "POST", Some(b"secret2")),
+            ("https://hysteria/auth", "POST", Some(b"")),
+            ("https://hysteria/auth", "POST", Some(b"secr\xc3\xa9t")),
+            ("https://hysteria/auth", "POST", None),
+            ("https://hysteria/auth", "GET", Some(b"secret")),
+            ("https://hysteria/other", "POST", Some(b"secret")),
+            ("https://example.com/auth", "POST", Some(b"secret")),
+        ] {
+            let request = auth_request(uri, method, auth);
+            assert!(
+                validate_auth_request(request, "secret").is_err(),
+                "{method} {uri} {auth:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn rejected_auth_gets_404_and_a_corrected_retry_is_accepted() {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let (server, client) = crate::quic_endpoint::test_endpoints();
+            let address = server.local_addr().unwrap();
+            let serving = tokio::spawn(async move {
+                let incoming = server.accept().await.unwrap();
+                process_connection(
+                    Arc::new(ClientProxySelector::new(Vec::new())),
+                    Arc::new(crate::resolver::NativeResolver::new()),
+                    "secret".into(),
+                    incoming.accept().unwrap(),
+                    true,
+                )
+                .await
+            });
+            let connection = client.connect(address, "localhost").unwrap().await.unwrap();
+            let (mut driver, mut sender) = h3::client::new(h3_quinn::Connection::new(connection))
+                .await
+                .unwrap();
+            let driving = tokio::spawn(async move {
+                let _ = futures::future::poll_fn(|cx| driver.poll_close(cx)).await;
+            });
+            for (password, status) in [("wrong", 404), ("secret", 233)] {
+                let mut stream = sender
+                    .send_request(auth_request(
+                        "https://hysteria/auth",
+                        "POST",
+                        Some(password.as_bytes()),
+                    ))
+                    .await
+                    .unwrap();
+                stream.finish().await.unwrap();
+                let response = stream.recv_response().await.unwrap();
+                assert_eq!(response.status().as_u16(), status, "{password}");
+                if status == 233 {
+                    assert_eq!(response.headers()["hysteria-udp"], "true");
+                }
+            }
+            assert!(!serving.is_finished());
+            driving.abort();
+        })
+        .await
+        .unwrap();
+    }
+}

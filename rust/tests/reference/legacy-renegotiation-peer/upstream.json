@@ -1,0 +1,22 @@
+{
+  "module": "github.com/metacubex/utls",
+  "version": "v1.8.7",
+  "source": "https://github.com/MetaCubeX/utls/tree/v1.8.7",
+  "files": {
+    "conn.go": {
+      "original": "e8027769d42706f263ef78d76ebd6e8a592299407a1f86b88b9ba5217bfe7dba",
+      "patched": "f5985f5c712ba9bce505c98c9e90389695379bb0aa7dc7a2daea0ba0f0f6d47d"
+    },
+    "handshake_server.go": {
+      "original": "21a257373df2bbed81022607f931d4b32b4843664dcadbb32ce7eb523ad11a04",
+      "patched": "2977e04df03356a85b4cfb8b078b37ffa746f0daf1d44b7e2b98cdd6fe3ebd3d"
+    },
+    "aerobox_renegotiation_fixture.go": {
+      "original": null,
+      "patched": "8487a32da50a7ad91cf3cca4263755011f8de66a774f5c4d772353edd025923a"
+    }
+  },
+  "test_only": true,
+  "license_sha256": "2d36597f7117c38b006835ae7f537487207d8ec407aa9d9980794b2030cbc067",
+  "patch_sha256": "823c2382d2085682e63dccfda583e7e2ba8564c6787cd739c5c3ce0d7f58c872"
+}

@@ -1,0 +1,166 @@
+---
+title: DNS configuration
+description: Choose resolvers, reusable groups, bootstrap, and proxy routing.
+---
+
+A server, WireGuard listener, or TUN entry can select an inline resolver or a
+named `dns_group`. Omitted or null `dns` inherits `global_settings.default_dns`
+when set, otherwise it uses the native system resolver; see
+[native DNS freshness](/dns/native/) for its cache behavior. Use
+[Fake DNS](/dns/fake/) only when synthetic address mapping is needed.
+
+An explicit `dns` object, including `dns: {}`, replaces the default; see
+[global settings](/config/global-settings/#default-dns) for precedence and scope.
+
+**Complete example:** [dns_tuning.yaml](/examples/dns_tuning/). Its proxy
+addresses and credentials need deployment-specific values.
+
+```yaml
+- dns_group: secure-dns
+  dns_servers:
+    - url: tls://1.1.1.1
+      server_name: cloudflare-dns.com
+      timeout_secs: 5
+
+- address: "127.0.0.1:1080"
+  protocol: {type: socks}
+  dns: {servers: secure-dns}
+```
+
+`dns.servers` and a group's `dns_servers` each accept one server or a list.
+`dns.server` and `dns_server` are singular aliases. A plain string is either a
+named group reference or a resolver URL. Resolver URLs support `system`,
+`udp://`, `tcp://`, `tls://` (DNS-over-TLS), `https://` (DNS-over-HTTPS), and
+`h3://` (DNS-over-HTTP/3). Default ports are 53, 53, 853, 443, and 443,
+respectively. A URL object accepts these options:
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `url` | Required | Resolver endpoint or `system` |
+| `server_name` | URL hostname | TLS name override for TLS/HTTPS/H3 |
+| `bootstrap_url` | System resolver | IP-literal DNS URL, `system`, or named DNS group for resolving endpoint/proxy hostnames |
+| `client_chain` / `client_chains` | Direct | Proxy chain(s) used to reach this DNS upstream |
+| `ip_strategy` | `ipv4_then_ipv6` | Address-family query order |
+| `timeout_secs` | 5 | Whole lookup timeout; `0` disables it |
+| `connect_timeout_secs` | 5 | Connection setup timeout |
+| `attempts` | 1 | Query retry attempts |
+| `native_cache_secs` | 0 | System-only application memoization window; see [native DNS](/dns/native/) |
+
+`ip_strategy` also accepts `ipv4_only`, `ipv6_only`, `ipv4_and_ipv6`, and
+`ipv6_then_ipv4`. Option objects reject unknown fields. A non-system upstream
+cannot set `native_cache_secs`, even to zero. `bootstrap_url` must not itself
+contain a hostname; named groups may be used for multi-step bootstrap, but
+cycles are rejected.
+
+TCP and TLS keep processing buffered replies after discarding responses for
+inactive queries. This does not add retries or extend configured deadlines.
+
+TCP, TLS, and HTTPS upstreams can use proxy chains. UDP and H3 upstreams are
+direct-only, except a direct chain can set an interface binding; `system` does
+not support a client chain. WireGuard-routed DNS requires a literal upstream
+IP and no `bootstrap_url`. See [remote rule sources](/routing/remote-sources/)
+for their stricter startup-bootstrap rules.
+
+`client_chain` and `client_chains` are exact aliases and use the
+[routing chain syntax](/routing/rules/#client-chains): `[a, b]` means sequential
+hops, while `[{chain: [a]}, {chain: [b]}]` means alternatives. Named client groups
+retain their whole-path choices and selection policies.
+
+**Migration:** DNS previously interpreted a bare list as alternatives. It now
+uses sequential hops, without a compatibility mode or warning. Use explicit
+chain wrappers or a named group to preserve alternative routes.
+
+## Transport Recovery
+
+DoH transport failures retire the failed connection, including active sockets and
+background drivers. Later queries can reconnect without restarting Shoes or
+requiring an interface change. Resolver replacement is coalesced; a late failure
+from an old connection cannot evict its replacement. Fresh connections use the
+current selector choice. Fake-IP mappings, capture ownership, and unrelated
+proxy transports are unchanged.
+
+A query that encounters a refreshable transport failure returns that error and
+retires its resolver generation. The refresh layer does not repeat the query or
+rebuild immediately. The next query lazily rebuilds the resolver; concurrent
+queries share that rebuild. Reconstruction failures reach that query and leave
+reconstruction for another query to attempt.
+
+Configured upstream attempts, cached-connection reconnects and transport fallbacks
+still share the original request deadline, including any lazy reconstruction.
+Connection setup still in progress is retained under its own setup deadline for
+later queries, without an extra same-query wait or resolver retirement. Short
+caller deadlines and canceled queries do not invalidate a shared handshake or an
+otherwise healthy connection.
+
+NXDOMAIN, NODATA, SERVFAIL, HTTP status failures, certificate/authentication
+failures, and local admission pressure do not trigger resolver replacement.
+Permanent errors remain visible. There is no direct-DNS fallback or security
+downgrade. A failed shared carrier needs its own transport recovery; XHTTP H2
+uses [receive-idle PING checks](/protocols/xhttp/#client). Broken application TCP
+sessions are not resumed and application traffic is not replayed.
+
+## Static Hosts
+
+Add `hosts` to a named DNS group or an inline `dns` object, including
+`global_settings.default_dns`. The map belongs to that resolver, not to the
+process or a particular outbound proxy.
+
+**Complete example:** [dns_static_hosts.yaml](/examples/dns_static_hosts/).
+
+```yaml
+- dns_group: alibaba-dns
+  hosts:
+    ga-bp1v2ogcl3ajd13hmjzrn.aliyunga0018.com:
+      - 47.238.137.75
+      - 47.238.193.242
+  dns_servers: https://1.1.1.1/dns-query
+
+- address: "0.0.0.0:1080"
+  protocol: {type: socks}
+  dns: {servers: alibaba-dns}
+```
+
+Each value accepts one IP or a nonempty IP list. Names are exact matches,
+case-insensitive, with an optional trailing dot. Use ASCII names or punycode;
+wildcards, aliases to other hostnames, empty lists, duplicate normalized names,
+and unspecified addresses (`0.0.0.0`, `::`) are rejected. Duplicate IPs are removed
+without changing their order. Addresses inside active or retained Fake DNS ranges
+or protected TUN endpoints are also rejected.
+TUN endpoints are protected when `dns_hijack` or `auto_route` is enabled, even
+without Fake DNS; `check` and `--dry-run` reject these collisions too.
+
+The map applies to upstream proxy endpoints, locally resolved destinations and
+routing lookups, and intercepted DNS queries using this resolver. Destinations
+sent as hostnames to a remote proxy are still resolved remotely. Configured proxy
+hostnames, TLS SNI, XHTTP Host, certificate checks, and credentials are unchanged.
+
+Static entries take precedence over system hosts, cached upstream results, and
+Fake DNS. Connection lookups return all configured IPs in order; upstream
+`ip_strategy` does not filter explicit hosts entries. Transports retain their
+existing candidate-selection and retry behavior, so multiple IPs do not imply
+uniform failover across all protocols. IP-dependent routing may retain only the
+first address for the connection, as before.
+
+For a mapped name, DNS A/AAAA queries return only the matching address family.
+A missing family returns an empty successful response (NOERROR/NODATA), without
+querying an upstream or allocating a fake IP. Replies use a 60-second TTL and
+do not claim DNSSEC authentication. Unmapped names and other query types, including
+HTTPS/SVCB, retain their existing handling and may query upstream DNS.
+
+Inline hosts can overlay a group (`dns: {servers: alibaba-dns, hosts: {...}}`).
+Group composition inherits hosts: local entries override referenced groups, and
+earlier references win among inherited entries. Adding an overlay to a Fake DNS
+group follows the existing composition requirement for an explicit `fake_ip`
+policy and creates a separate context. To share its pool, put `hosts` on the
+referenced group and reference it without an inline overlay.
+
+With no `servers`, an inline hosts map uses the cached native resolver for misses.
+An explicit `dns` object still replaces, rather than merges with,
+`global_settings.default_dns`. A DNS upstream's own hostname and its DNS proxy
+chain use the separate `bootstrap_url` policy; select a named hosts-bearing group
+there when static bootstrap is needed. Hosts do not replace bootstrap cycle checks
+or make an invalid upstream configuration valid.
+
+Reloading installs the new map for new work. Existing connections and application
+DNS caches may retain old addresses. Remove `hosts` and reload to restore normal
+resolution; no system hosts file or Hickory dependency changes are required.

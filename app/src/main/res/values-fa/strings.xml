@@ -374,7 +374,6 @@
     <string name="node_edit_reality_public_key">کلید عمومی Reality</string>
     <string name="node_edit_reality_short_id">شناسه کوتاه Reality</string>
     <string name="network_probe_not_tested">بررسی نشده</string>
-    <string name="network_probe_disabled">غیرفعال</string>
     <string name="network_probe_failed">پاسخی دریافت نشد؛ برای تلاش دوباره بزنید</string>
     <string name="settings_fake_dns_title">سازگاری دامنه (FakeIP)</string>
     <string name="settings_fake_dns_summary">انتخاب نشانی سایت توسط هستهٔ پراکسی؛ فقط در حالت‌های پراکسی</string>

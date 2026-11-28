@@ -374,7 +374,6 @@
     <string name="node_edit_reality_public_key">Reality public key</string>
     <string name="node_edit_reality_short_id">Reality short ID</string>
     <string name="network_probe_not_tested">Not tested</string>
-    <string name="network_probe_disabled">Disabled</string>
     <string name="network_probe_failed">No response; tap to retry</string>
     <string name="settings_fake_dns_title">Domain compatibility (FakeIP)</string>
     <string name="settings_fake_dns_summary">Let the proxy core select website addresses; applies in proxy modes</string>

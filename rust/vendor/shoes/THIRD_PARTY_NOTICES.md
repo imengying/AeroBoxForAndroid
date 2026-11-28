@@ -1,0 +1,154 @@
+# Dependency Notices
+
+The AeroBox Android fork retains this upstream notice bundle, including
+historical attributions for removed components. WireGuard/GotaTun, Sudoku and
+Snell are absent from the current source and dependency graph. Their retained
+license texts do not indicate that these components are linked into the app.
+
+## Historical Go math/rand Compatibility
+
+The removed `src/sudoku_mask/go_rng/` contained the cooked state constants from
+Go 1.27.3 `src/math/rand/rng.go`. Its Rust generator implemented Go's legacy
+random-source and shuffle contract for Xray-compatible password permutations.
+Source: https://github.com/golang/go/blob/go1.27.3/src/math/rand/rng.go
+
+```text
+Copyright 2009 The Go Authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## Dependency Bundle
+
+`licenses/dependencies.txt` preserves the upstream license texts and attributions
+for production and build dependencies across all target platforms. It is a
+historical superset of this fork's locked dependencies. Retain the notices and
+corresponding source information for dependencies included in a distribution,
+including the anytls-rs attribution below.
+
+Regenerate the bundle after changing Cargo.lock, using cargo-about 0.9.3:
+
+```sh
+cargo install --locked --features cli cargo-about@0.9.3
+python3 scripts/generate-release-notices.py
+cargo fetch --locked
+rustup component add rust-src --toolchain 1.100.0
+python3 scripts/test-release-notices.py
+```
+
+Generation requires network access for the checksummed upstream blake2b_simd
+license clarification. The generator rejects warnings, including failed
+clarifications, without replacing the existing bundle.
+
+`about.toml` records the license choices and verified clarifications. CI checks
+that regeneration is clean and that every production/build dependency appears.
+`scripts/check-release-notices.py <artifact>` checks the exact notice bytes in
+a release tarball. The binary release workflow (`.github/workflows/build.yml`)
+invokes it before uploading tarballs. Do not remove the bundle when redistributing.
+
+## Rust Standard Library
+
+Release builds use Rust 1.100.0. `licenses/rust-1.100.0-COPYRIGHT-library.html`
+reproduces the toolchain's standard-library copyright and dependency notices.
+`licenses/rust-1.100.0-sysroot-supplement.txt` supplies the exact vendored licenses
+for sysroot package versions missing from that upstream document, plus the
+in-tree `core::slice::memchr` attribution. The notice tests reconcile the matching
+`rust-src` lockfile against these files. MIPS builds compile
+this sysroot from the matching `rust-src` rather than using a prebuilt standard
+library. `licenses/rust-1.100.0-compiler-builtins.txt` additionally reproduces
+the compiler-builtins and bundled libm licenses and their source-file notices.
+These files are separate from the Cargo dependency bundle above.
+
+Source: https://github.com/rust-lang/rust/tree/1.100.0/library.
+
+## MIPS C Runtime
+
+The static MIPS executable includes musl 1.2.5 from the OpenWrt 25.12.6
+ath79 toolchain. `licenses/musl-1.2.5.txt` reproduces its `COPYRIGHT` and
+copyright, permission, and redistribution notice blocks from the upstream
+source files, including third-party math and sorting code. The source is
+available at https://musl.libc.org/releases/musl-1.2.5.tar.gz; OpenWrt's
+patches are at https://github.com/openwrt/openwrt/tree/v25.12.6/toolchain/musl/patches.
+
+This executable also links GCC 14.3.0 runtime and unwinder code under
+GPL-3.0-or-later WITH GCC-exception-3.1. The GCC Runtime Library Exception
+permits the combined executable to be distributed under its own terms:
+https://github.com/gcc-mirror/gcc/blob/b71f1de6e9cf7181a288c0f39f9b1ef6580cf5c8/COPYING.RUNTIME.
+
+## Historical WireGuard Source
+
+Upstream Unix builds, including Android and iOS libraries, linked the crates.io
+GotaTun 0.10.3 from upstream commit
+`c541472b40ec489ba7bdfd048512e89e556c7a3c`, an implementation of the WireGuard
+protocol. GotaTun is copyright Mullvad VPN AB
+and incorporates work copyright Cloudflare, Inc. Its source files are covered
+by the Mozilla Public License 2.0 and the notices reproduced in
+`licenses/MPL-2.0.txt` and `licenses/gotatun-CLOUDFLARE.txt`.
+
+The corresponding source for those historical builds is available at:
+
+- https://github.com/mullvad/gotatun/tree/c541472b40ec489ba7bdfd048512e89e556c7a3c
+- https://github.com/mullvad/gotatun/archive/c541472b40ec489ba7bdfd048512e89e556c7a3c.tar.gz
+
+Recipients may obtain, modify, and redistribute the covered source under the
+MPL 2.0. Shoes does not modify GotaTun's source. Shoes' own source remains under
+its existing MIT license. Distributors of modified GotaTun builds must also
+provide the corresponding modified covered source and retain these notices.
+Embedding a Shoes static or dynamic library does not remove these obligations.
+
+These source-availability details supplement the reproduced dependency licenses.
+
+## AnyTLS Source
+
+Portions of the AnyTLS implementation in `src/anytls/`, including the padding
+scheme, frame definitions, settings map and stream tests, are derived from
+anytls-rs (https://github.com/jxo-me/anytls-rs), which is distributed under the
+following license:
+
+```text
+MIT License
+
+Copyright (c) 2024 Mickey and AnyTLS Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

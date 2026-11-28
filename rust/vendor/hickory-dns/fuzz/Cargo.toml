@@ -1,0 +1,35 @@
+[package]
+name = "hickory-proto-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2021"
+rust-version = "1.88"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+hickory-proto = { path = "../crates/proto", features = ["std", "dnssec-aws-lc-rs"] }
+pretty_assertions = "1.4.1"
+
+[[bin]]
+name = "message"
+path = "fuzz_targets/message.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "preserve_rdata"
+path = "fuzz_targets/preserve_rdata.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "zone_file"
+path = "fuzz_targets/zone_file.rs"
+test = false
+doc = false
+bench = false

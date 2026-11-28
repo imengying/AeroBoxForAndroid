@@ -1,0 +1,20 @@
+user = "nobody"
+group = "nogroup"
+
+[[zones]]
+zone = "."
+zone_type = "External"
+
+[zones.stores]
+type = "forward"
+
+{% if use_dnssec %}
+[zones.stores.options]
+validate = true
+trust_anchor = "/etc/trusted-key.key"
+{% endif %}
+
+[[zones.stores.name_servers]]
+ip = "{{ resolver_ip }}"
+trust_negative_responses = true
+connections = [{ protocol = { type = "tcp" } }]

@@ -1,0 +1,59 @@
+[package]
+name = "aerobox-android"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+publish = false
+
+[workspace]
+resolver = "3"
+
+[lib]
+name = "aerobox"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+aerobox-config = { path = "../aerobox-config" }
+shoes = { path = "../../vendor/shoes", features = ["embedded-platform"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+log = { version = "0.4", features = ["std"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.22"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "io-util", "net"] }
+
+[patch.crates-io]
+h2 = { path = "../../vendor/h2" }
+tendns = { path = "../../vendor/tendns" }
+rustls = { path = "../../vendor/rustls/rustls" }
+blake3 = { path = "../../vendor/blake3" }
+h3 = { path = "../../vendor/h3/h3" }
+h3-quinn = { path = "../../vendor/h3/h3-quinn" }
+hickory-net = { path = "../../vendor/hickory-dns/crates/net" }
+hickory-proto = { path = "../../vendor/hickory-dns/crates/proto" }
+hickory-resolver = { path = "../../vendor/hickory-dns/crates/resolver" }
+nix = { path = "../../vendor/nix" }
+smoltcp = { path = "../../vendor/smoltcp" }
+quinn = { path = "../../vendor/quinn" }
+quinn-proto = { path = "../../vendor/quinn-proto" }
+rcgen = { path = "../../vendor/rcgen" }
+
+[profile.dev]
+# Keep local Android rebuilds small; use release for distributable optimized cores.
+debug = 0
+codegen-units = 64
+incremental = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+# Keep the large protocol crate's LLVM working set within the build host's
+# memory limit. Final thin LTO still optimizes across these partitions.
+[profile.release.package.shoes]
+codegen-units = 16
